@@ -1,0 +1,41 @@
+name: tzion-wp-reference
+services:
+  db:
+    image: mysql:8.4
+    command: --sql-mode=NO_ENGINE_SUBSTITUTION --max-allowed-packet=256M
+    environment:
+      MYSQL_DATABASE: wp
+      MYSQL_USER: wp
+      MYSQL_PASSWORD: wp
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./.data/db.sql:/docker-entrypoint-initdb.d/db.sql:ro
+      - dbdata:/var/lib/mysql
+  wordpress:
+    image: wordpress:php8.2-apache
+    depends_on: [db]
+    ports: ["8088:80"]
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wp
+      WORDPRESS_TABLE_PREFIX: wp_
+    volumes:
+      - wpcore:/var/www/html
+      - ./resign-legacy-widgets.php:/var/www/html/resign-legacy-widgets.php:ro
+  cli:
+    image: wordpress:cli-php8.2
+    user: "33:33"
+    depends_on: [db, wordpress]
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wp
+      WORDPRESS_DB_PASSWORD: wp
+      WORDPRESS_DB_NAME: wp
+      WORDPRESS_TABLE_PREFIX: wp_
+    volumes_from: [wordpress]
+    entrypoint: wp
+volumes:
+  dbdata:
+  wpcore:

@@ -1,0 +1,52 @@
+{
+  "name": "tzion-breslov-site",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <26"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "import:wordpress": "node scripts/import-wordpress.mjs",
+    "sync:youtube": "node scripts/sync-youtube.mjs",
+    "check:static-export": "node scripts/check-static-export.mjs",
+    "audit": "npm audit --audit-level=high",
+    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck:worker": "tsc -p tsconfig.worker.json",
+    "lint": "eslint .",
+    "test:worker": "vitest run --config vitest.worker.config.mts",
+    "test:visual": "playwright test",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply tzion-breslov-production --local",
+    "db:migrate:remote": "wrangler d1 migrations apply tzion-breslov-production --remote",
+    "check": "npm run typecheck && npm run typecheck:worker && npm run lint && npm run test:worker && npm run build && npm run check:static-export"
+  },
+  "dependencies": {
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.1.4",
+    "@cloudflare/workers-types": "^5.20260829.1",
+    "@eslint/js": "^10.0.1",
+    "@next/eslint-plugin-next": "^16.4.5",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^25.6.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "autoprefixer": "^10.5.0",
+    "cheerio": "^1.1.2",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "postcss": "^8.5.26",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.158.0"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tzion-breslov-api",
+  // "account_id" is intentionally omitted. Fill in the Tzion Breslov Cloudflare
+  // account ID here (or export CLOUDFLARE_ACCOUNT_ID) before any deploy or
+  // remote D1 command.
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-09-03",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "routes": [
+    {
+      "pattern": "api.tzionbreslov.com",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://tzionbreslov.com,https://www.tzionbreslov.com",
+    "PUBLIC_API_URL": "https://api.tzionbreslov.com",
+    "SUBSCRIPTION_CONFIRMATION_REDIRECT_URL": "https://tzionbreslov.com/",
+    "ORGANIZATION_NAME": "Tzion Breslov",
+    "TURNSTILE_EXPECTED_HOSTNAMES": "tzionbreslov.com,www.tzionbreslov.com"
+  },
+  // Install each with `npx wrangler secret put NAME`. Values never live in this file.
+  "secrets": {
+    "required": [
+      "RATE_LIMIT_SALT",
+      "TURNSTILE_SECRET_KEY",
+      "RESEND_TRANSACTIONAL_API_KEY",
+      "RESEND_CONTACTS_API_KEY",
+      "RESEND_FROM_EMAIL",
+      "CONTACT_TO_EMAIL",
+      "RESEND_NEWSLETTER_TOPIC_ID",
+      "RESEND_WEBHOOK_SECRET"
+    ]
+  },
+  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs and webhook rows.
+  "triggers": { "crons": ["17 3 * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tzion-breslov-production",
+      // Replace with the ID printed by `npx wrangler d1 create tzion-breslov-production`.
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "worker/migrations"
+    }
+  ]
+}

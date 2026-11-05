@@ -1,0 +1,232 @@
+{
+ "site": "https://tzionbreslov.com",
+ "routes": [
+  {
+   "path": "/",
+   "key": "index"
+  },
+  {
+   "path": "/about-us/",
+   "key": "about-us"
+  },
+  {
+   "path": "/author/esti-wolo/",
+   "key": "author__esti-wolo"
+  },
+  {
+   "path": "/author/esti-wolo/page/2/",
+   "key": "author__esti-wolo__page__2"
+  },
+  {
+   "path": "/category/uncategorized/",
+   "key": "category__uncategorized"
+  },
+  {
+   "path": "/category/uncategorized/page/2/",
+   "key": "category__uncategorized__page__2"
+  },
+  {
+   "path": "/contact/",
+   "key": "contact"
+  },
+  {
+   "path": "/donate/",
+   "key": "donate"
+  },
+  {
+   "path": "/parashas-beshalach-jan-15th-2022/",
+   "key": "parashas-beshalach-jan-15th-2022"
+  },
+  {
+   "path": "/parashas-bo-jan-7th-8th-2022/",
+   "key": "parashas-bo-jan-7th-8th-2022"
+  },
+  {
+   "path": "/parashas-mikeitz-dec-3rd-4th-2021/",
+   "key": "parashas-mikeitz-dec-3rd-4th-2021"
+  },
+  {
+   "path": "/parashas-mishpatim-jan-29nd-2022/",
+   "key": "parashas-mishpatim-jan-29nd-2022"
+  },
+  {
+   "path": "/parashas-shemos-dec-24th-25th-2021/",
+   "key": "parashas-shemos-dec-24th-25th-2021"
+  },
+  {
+   "path": "/parashas-terumah-feb-5th-29nd-2022/",
+   "key": "parashas-terumah-feb-5th-29nd-2022"
+  },
+  {
+   "path": "/parashas-tetzaveh-feb-12th-2022/",
+   "key": "parashas-tetzaveh-feb-12th-2022"
+  },
+  {
+   "path": "/parashas-vaeira-dec-31st-jan-1-2022/",
+   "key": "parashas-vaeira-dec-31st-jan-1-2022"
+  },
+  {
+   "path": "/parashas-vayechi-dec-17th-18th-2021/",
+   "key": "parashas-vayechi-dec-17th-18th-2021"
+  },
+  {
+   "path": "/parashas-vayeishev-nov-26th-27th-2021/",
+   "key": "parashas-vayeishev-nov-26th-27th-2021"
+  },
+  {
+   "path": "/parashas-vayeitzei-nov-12th-13th-2021/",
+   "key": "parashas-vayeitzei-nov-12th-13th-2021"
+  },
+  {
+   "path": "/parashas-vayigash-dec10th-11th-2021/",
+   "key": "parashas-vayigash-dec10th-11th-2021"
+  },
+  {
+   "path": "/parashas-vayishlach-nov-19th-20th-2021/",
+   "key": "parashas-vayishlach-nov-19th-20th-2021"
+  },
+  {
+   "path": "/parashas-yisro-jan-22nd-2022/",
+   "key": "parashas-yisro-jan-22nd-2022"
+  },
+  {
+   "path": "/parshas-toldos-nov-5-6-2021/",
+   "key": "parshas-toldos-nov-5-6-2021"
+  },
+  {
+   "path": "/parshat-chayei-sarah-oct-29-30-2021/",
+   "key": "parshat-chayei-sarah-oct-29-30-2021"
+  },
+  {
+   "path": "/parshat-lech-lecha-october-15-16-2021/",
+   "key": "parshat-lech-lecha-october-15-16-2021"
+  },
+  {
+   "path": "/parshat-noach-october-8-9-2021/",
+   "key": "parshat-noach-october-8-9-2021"
+  },
+  {
+   "path": "/resources/",
+   "key": "resources"
+  },
+  {
+   "path": "/resources/page/2/",
+   "key": "resources__page__2"
+  },
+  {
+   "path": "/resources/page/3/",
+   "key": "resources__page__3"
+  },
+  {
+   "path": "/video/video-1/",
+   "key": "video__video-1"
+  },
+  {
+   "path": "/video/video-10/",
+   "key": "video__video-10"
+  },
+  {
+   "path": "/video/video-11/",
+   "key": "video__video-11"
+  },
+  {
+   "path": "/video/video-12/",
+   "key": "video__video-12"
+  },
+  {
+   "path": "/video/video-13/",
+   "key": "video__video-13"
+  },
+  {
+   "path": "/video/video-14/",
+   "key": "video__video-14"
+  },
+  {
+   "path": "/video/video-15/",
+   "key": "video__video-15"
+  },
+  {
+   "path": "/video/video-16/",
+   "key": "video__video-16"
+  },
+  {
+   "path": "/video/video-17/",
+   "key": "video__video-17"
+  },
+  {
+   "path": "/video/video-18/",
+   "key": "video__video-18"
+  },
+  {
+   "path": "/video/video-19/",
+   "key": "video__video-19"
+  },
+  {
+   "path": "/video/video-2/",
+   "key": "video__video-2"
+  },
+  {
+   "path": "/video/video-20/",
+   "key": "video__video-20"
+  },
+  {
+   "path": "/video/video-21/",
+   "key": "video__video-21"
+  },
+  {
+   "path": "/video/video-22/",
+   "key": "video__video-22"
+  },
+  {
+   "path": "/video/video-23/",
+   "key": "video__video-23"
+  },
+  {
+   "path": "/video/video-24/",
+   "key": "video__video-24"
+  },
+  {
+   "path": "/video/video-25/",
+   "key": "video__video-25"
+  },
+  {
+   "path": "/video/video-26/",
+   "key": "video__video-26"
+  },
+  {
+   "path": "/video/video-27/",
+   "key": "video__video-27"
+  },
+  {
+   "path": "/video/video-3/",
+   "key": "video__video-3"
+  },
+  {
+   "path": "/video/video-4/",
+   "key": "video__video-4"
+  },
+  {
+   "path": "/video/video-5/",
+   "key": "video__video-5"
+  },
+  {
+   "path": "/video/video-6/",
+   "key": "video__video-6"
+  },
+  {
+   "path": "/video/video-7/",
+   "key": "video__video-7"
+  },
+  {
+   "path": "/video/video-8/",
+   "key": "video__video-8"
+  },
+  {
+   "path": "/video/video-9/",
+   "key": "video__video-9"
+  }
+ ],
+ "redirects": {
+  "/about/": "/about-us/"
+ }
+}
