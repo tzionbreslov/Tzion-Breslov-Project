@@ -103,15 +103,21 @@ function readDescription(value, title) {
 
 const UTC_NAMES = new Set(["utc", "etc/utc", "gmt", "etc/gmt", "z", "zulu", "etc/zulu", "universal", "etc/universal", "uct", "etc/uct"]);
 
-/** `candidate` as an IANA zone to show times in, or null (empty, unknown, or UTC). */
-function displayZone(candidate) {
+/** `candidate` as a zone that wall-clock times can be read in (UTC included), or null (empty or unknown). */
+function knownZone(candidate) {
   const name = typeof candidate === "string" ? candidate.trim() : "";
-  if (!name || UTC_NAMES.has(name.toLowerCase())) return null;
+  if (!name) return null;
   try {
     return new Intl.DateTimeFormat("en-US", { timeZone: name }).resolvedOptions().timeZone;
   } catch {
     return null;
   }
+}
+
+/** `candidate` as an IANA zone to show times in, or null (empty, unknown, or UTC). */
+function displayZone(candidate) {
+  const zone = knownZone(candidate);
+  return zone && !UTC_NAMES.has(zone.toLowerCase()) && !UTC_NAMES.has(candidate.trim().toLowerCase()) ? zone : null;
 }
 
 const wallClocks = new Map();
@@ -167,10 +173,13 @@ function stableEventId(uid, occurrence) {
 function recordFromOccurrence(master, uid, details, calendarZone) {
   const item = details.item;
   const start = details.startDate;
-  // A time's own zone (TZID) when it is a real place, else the calendar's.
-  const zone = displayZone(tzidOf(item, "dtstart")) ?? displayZone(tzidOf(master, "dtstart")) ?? calendarZone;
-  const startsAt = instantOf(start, zone);
-  let endsAt = instantOf(details.endDate ?? start, zone);
+  const tzid = tzidOf(item, "dtstart") ?? tzidOf(master, "dtstart");
+  // Shown in the time's own zone (TZID) when it is a real place, else the calendar's; a time
+  // the feed gives no definition for is read in its TZID (even UTC), else the calendar's zone.
+  const zone = displayZone(tzid) ?? calendarZone;
+  const wallZone = knownZone(tzid) ?? calendarZone;
+  const startsAt = instantOf(start, wallZone);
+  let endsAt = instantOf(details.endDate ?? start, wallZone);
   if (start.isDate && endsAt <= startsAt) endsAt = startsAt + DAY;
   if (endsAt < startsAt) endsAt = startsAt;
 
@@ -245,7 +254,7 @@ export function buildCalendarCatalog(
       continue;
     }
 
-    const wallZone = displayZone(tzidOf(event, "dtstart")) ?? calendarZone;
+    const wallZone = knownZone(tzidOf(event, "dtstart")) ?? calendarZone;
     const iterator = event.iterator();
     let steps = 0;
     for (let occurrence = iterator.next(); occurrence; occurrence = iterator.next()) {

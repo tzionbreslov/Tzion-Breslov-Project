@@ -147,6 +147,13 @@ test("a time with no zone at all is read in the calendar's time zone, not the bu
   assert.equal(event.timeZone, "Asia/Jerusalem");
 });
 
+test("a UTC zone the feed doesn't define is read as UTC, and shown in the calendar's zone", () => {
+  const { event } = one({ start: "DTSTART;TZID=Etc/UTC:20261110T173000", end: "DTEND;TZID=Etc/UTC:20261110T190000" });
+  assert.equal(event.startsAt, "2026-11-10T17:30:00.000Z");
+  assert.equal(event.endsAt, "2026-11-10T19:00:00.000Z");
+  assert.equal(event.timeZone, "Asia/Jerusalem");
+});
+
 test("titles and descriptions lose their HTML and decode its entities", () => {
   const { event } = one({
     summary: "Torah &amp; Tea",
