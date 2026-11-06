@@ -49,8 +49,12 @@
 
 ## Status
 
-- All 56 WordPress URLs + 404 + `/about/` redirect exported. Visual diff vs the WordPress reference: 0.00–0.02% on
-  every template at 1440px and 390px; Resources is 0.00% vs the live site (local WordPress feed cache is stale).
+- All 56 WordPress URLs + 404 + `/about/` redirect were exported. Visual diff vs the WordPress reference: 0.00–0.02% on
+  every template at 1440px and 390px; Resources was 0.00% vs the live site (local WordPress feed cache is stale).
+- Site structure, Task 4 (2026-11-06): the pages the owner asked to remove are gone — `/resources/` (+ pages 2, 3), the
+  27 `/video/video-N/` clips, the `/category/` and `/author/` archives and the `/about/` forwarding page serve the 404
+  page (edge redirects come on switch day). The site serves the 22 kept imported pages + 404, plus `/classes/` and
+  `/articles/` (+ page 2). Menus (Home · About · Resources ▾ Classes, Articles · Contact) come from `lib/navigation.mjs`.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
@@ -60,8 +64,10 @@
 - GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (daily rebuild 04:41 UTC);
   Actions limited to GitHub-owned actions, read-only token, outside-contributor workflows need approval; wiki/projects
   off; secret scanning + push protection, Dependabot alerts/updates, private vulnerability reporting on.
-- Instagram tab live with the profile + link; sync script, cache and tests ready — needs INSTAGRAM_ACCESS_TOKEN (secret)
-  and INSTAGRAM_USER_ID / INSTAGRAM_API_VERSION (variables): docs/instagram-setup.md.
+- Instagram switched off with the Resources page (owner, 2026-11-06): no tab and no link (the footer icon stays). The
+  sync script and tests stay dormant (`INSTAGRAM_ENABLED=false`; the deploy no longer syncs or caches the feed); turning
+  it back on needs INSTAGRAM_ACCESS_TOKEN (secret) and INSTAGRAM_USER_ID / INSTAGRAM_API_VERSION (variables):
+  docs/instagram-setup.md.
   The emailed confirmation link (GET) only redirects to the site (`?subscription=confirm#token=…`); the visitor's
   "Confirm my subscription" click POSTs the token (mail scanners can't confirm). Confirmation emails reply to
   `RESEND_REPLY_TO_EMAIL` (tzionbreslovproject@gmail.com) because tzionbreslov.org has no MX by choice.

@@ -1,5 +1,7 @@
 import { createElement, type ReactNode } from "react";
 import { readShared, type Attrs, type HeadItem, type PageContent, type ScriptItem } from "@/lib/content";
+import { stripRemovedUrls } from "@/config/site-structure.mjs";
+import { renderNavigation, rewriteLinks } from "@/lib/navigation.mjs";
 import { expandTokens } from "@/lib/youtube-feed";
 import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
 import { SITE_URL, toSiteUrl } from "@/lib/site-url";
@@ -8,6 +10,7 @@ import "@/app/enhancements.css";
 import "@/app/instagram.css";
 import "@/app/dialog.css";
 import "@/app/video-library.css";
+import "@/app/navigation.css";
 
 /**
  * Renders a WordPress-imported page as a full HTML document. The markup,
@@ -52,7 +55,7 @@ function headItem(item: HeadItem, i: number) {
     case "style":
       return <style key={key} id={item.id ?? undefined} dangerouslySetInnerHTML={{ __html: rebaseCss(readShared(item.ref)) }} />;
     case "jsonld":
-      return <script key={key} type="application/ld+json" className="yoast-schema-graph" dangerouslySetInnerHTML={{ __html: toSiteUrl(item.json) }} />;
+      return <script key={key} type="application/ld+json" className="yoast-schema-graph" dangerouslySetInnerHTML={{ __html: toSiteUrl(stripRemovedUrls(item.json)) }} />;
     case "script":
       return script(item, key);
   }
@@ -75,11 +78,14 @@ export function SiteDocument({ page, children }: { page: PageContent; children: 
 }
 
 export function SiteBody({ page }: { page: PageContent }) {
+  // The menus are rendered for this page (lib/navigation.mjs); the 404 page has
+  // no path and marks nothing as current.
+  const currentPath = page.path ?? "";
   const html = [
     page.skipLinks && readShared(page.skipLinks),
-    page.header && readShared(page.header),
-    expandTokens(page.main),
-    page.footer && readShared(page.footer),
+    page.header && renderNavigation(readShared(page.header), currentPath),
+    rewriteLinks(expandTokens(page.main)),
+    page.footer && renderNavigation(readShared(page.footer), currentPath),
     page.footerExtra
   ].filter(Boolean).join("");
   const rebased = rebaseHtml(html);

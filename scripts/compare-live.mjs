@@ -2,6 +2,7 @@
 // Compares visible text + image/link targets of the local WordPress reference with the live site.
 //   node scripts/compare-live.mjs [refBase] [liveBase]
 import { load } from "cheerio";
+import { isRemovedPath } from "../config/site-structure.mjs";
 const REF = process.argv[2] ?? "http://localhost:8088";
 const LIVE = process.argv[3] ?? "https://tzionbreslov.com";
 const sitemap = async (base) => {
@@ -20,7 +21,8 @@ const digest = (html, base) => {
   c.find("a").each((_, el) => tokens.push(`[a:${($(el).attr("href") ?? "").replace(base, "")}]`));
   return tokens;
 };
-const paths = [...new Set([...(await sitemap(LIVE)), "/articles/", "/resources/page/2/", "/resources/page/3/", "/category/uncategorized/page/2/", "/author/esti-wolo/page/2/", "/no-such-page/"])];
+// Only the pages this site still copies (the removed ones: config/site-structure.mjs).
+const paths = [...new Set([...(await sitemap(LIVE)), "/articles/", "/no-such-page/"])].filter((p) => !isRemovedPath(p));
 let bad = 0;
 for (const p of paths) {
   const get = async (b) => (await fetch(b + p, { headers: { "user-agent": "Mozilla/5.0" } })).text();

@@ -1,4 +1,9 @@
 {
+  "nav": {
+    "home": "Home",
+    "classes": "Classes",
+    "articles": "Articles"
+  },
   "articles": {
     "heading": "Articles",
     "title": "Articles",

@@ -6,7 +6,8 @@
 /** Third-party origins the site really uses (see README for why each exists). */
 const SOURCES = {
   fonts: { style: ["https://fonts.googleapis.com"], font: ["https://fonts.gstatic.com"] },
-  youtube: { img: ["https://i.ytimg.com"], frame: ["https://www.youtube.com", "https://www.youtube-nocookie.com"] },
+  // The Classes page's player only (privacy-enhanced, loaded on click); no plain YouTube embeds remain.
+  youtube: { img: ["https://i.ytimg.com"], frame: ["https://www.youtube-nocookie.com"] },
   turnstile: { script: ["https://challenges.cloudflare.com"], frame: ["https://challenges.cloudflare.com"], connect: ["https://challenges.cloudflare.com"] },
   formsApi: { connect: ["https://api.tzionbreslov.org"] }
 };

@@ -3,9 +3,11 @@ export type RouteIndex = { site: string; routes: Route[]; redirects: Record<stri
 
 export const NEW_ROUTES: Route[];
 export const REMOVED_PATHS: string[];
+export const REMOVED_SECTIONS: string[];
 export const LINK_REWRITES: Record<string, string>;
 export const REMOVED_SITEMAPS: string[];
 export const TEMPLATE_KEYS: string[];
 export const INSTAGRAM_ENABLED: boolean;
-export function isRemovedPath(path: string, removed?: string[]): boolean;
-export function siteRoutes(index: RouteIndex, opts?: { removed?: string[]; newRoutes?: Route[] }): RouteIndex;
+export function isRemovedPath(path: string, removed?: string[], sections?: string[]): boolean;
+export function stripRemovedUrls(json: string): string;
+export function siteRoutes(index: RouteIndex, opts?: { removed?: string[]; sections?: string[]; newRoutes?: Route[] }): RouteIndex;

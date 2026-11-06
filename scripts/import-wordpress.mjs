@@ -19,6 +19,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { load } from "cheerio";
+import { INSTAGRAM_ENABLED } from "../config/site-structure.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const argGolden = process.argv.indexOf("--golden");
@@ -41,8 +42,10 @@ const VENDOR = {
   "//cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/gsap.min.js": "/vendor/gsap/3.11.5/gsap.min.js",
   "//cdnjs.cloudflare.com/ajax/libs/gsap/3.11.5/ScrollTrigger.min.js": "/vendor/gsap/3.11.5/ScrollTrigger.min.js"
 };
-// WordPress 301s observed while crawling; emitted as static redirect pages.
-const REDIRECTS = { "/about/": "/about-us/" };
+// WordPress 301s observed while crawling, emitted as static redirect pages. The only
+// one, /about/ -> /about-us/, is a removed page now (config/site-structure.mjs): its
+// links point at /about-us/ and the edge redirects it after launch.
+const REDIRECTS = {};
 const FORM_ISLANDS = { 2: "signup", 3: "contact", 4: "donate" };
 
 const hash = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 12);
@@ -144,8 +147,10 @@ function processPostGrids($, islands) {
  * Owner-requested addition (2026-11-06, not on the WordPress site): a 4th
  * "Instagram" tab on the Resources tabs, rendered from content/instagram.json.
  * Spectra's tab script is index-based, so tab 3 just needs matching markup.
+ * Switched off (INSTAGRAM_ENABLED, config/site-structure.mjs); the code stays dormant.
  */
 function addInstagramTab($, islands) {
+  if (!INSTAGRAM_ENABLED) return;
   const tabs = $(".wp-block-uagb-tabs.uagb-block-a64ce816");
   if (!tabs.length) return;
   const nav = tabs.find("ul.uagb-tabs__panel");
