@@ -115,7 +115,8 @@ function rsvpPayload(overrides: Record<string, unknown> = {}) {
 
 type MockOptions = {
   contactsCreateStatus?: number;
-  emailStatus?: number;
+  /** Resend's answer to an email, or one per recipient. */
+  emailStatus?: number | ((to: string) => number);
   /** The events /events.json lists (default: defaultFeedEvents()). */
   feedEvents?: FeedEvent[];
   /** Answers /events.json instead (a failure, a redirect, a malformed body). */
@@ -142,7 +143,8 @@ function mockProviders(action: string, options: MockOptions = {}) {
       return Response.json({ success: true, hostname: "localhost", action });
     }
     if (url === "https://api.resend.com/emails") {
-      const status = options.emailStatus ?? 200;
+      const to = (body as { to?: string[] } | undefined)?.to?.[0] ?? "";
+      const status = typeof options.emailStatus === "function" ? options.emailStatus(to) : options.emailStatus ?? 200;
       return Response.json(status === 200 ? { id: "email-id" } : { message: "failure" }, { status });
     }
     if (url === "https://api.resend.com/contacts" && method === "POST") {
@@ -980,11 +982,9 @@ describe("POST /v1/rsvp", () => {
       ["not JSON", () => new Response("<!doctype html><p>Not found</p>", { headers: { "Content-Type": "application/json" } })],
       ["HTML content type", () => new Response(JSON.stringify(valid), { headers: { "Content-Type": "text/html" } })],
       ["no events list", () => Response.json({ syncedAt: null })],
-      ["a bad id", () => Response.json({ syncedAt: null, events: [feedEvent({ id: "x" })] })],
-      ["a bad start", () => Response.json({ syncedAt: null, events: [feedEvent({ startsAt: "soon" })] })],
-      ["allDay missing", () => Response.json({ syncedAt: null, events: [{ ...feedEvent(), allDay: undefined }] })],
-      ["a bad RSVP setting", () => Response.json({ syncedAt: null, events: [{ ...feedEvent(), rsvp: "maybe" }] })],
-      ["a limit of 0", () => Response.json({ syncedAt: null, events: [feedEvent({ limit: 0 })] })]
+      ["events not a list", () => Response.json({ syncedAt: null, events: { [EVENT_IDS.open]: feedEvent() } })],
+      ["not an object", () => Response.json(null)],
+      ["over 512 KB", () => new Response(JSON.stringify({ syncedAt: " ".repeat(600_000), events: [feedEvent()] }), { headers: { "Content-Type": "application/json" } })]
     ];
     for (const [label, feedResponse] of answers) {
       vi.restoreAllMocks();
@@ -1009,6 +1009,32 @@ describe("POST /v1/rsvp", () => {
     // Allowed (the stub doesn't answer it, so it is "unavailable", but it was asked).
     await expect(loadEventFeed({ ...env, EVENTS_FEED_URL: "http://localhost:3100/events.json" })).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE" });
     expect(outbound.calls.map((call) => [call.url, call.redirect])).toEqual([["http://localhost:3100/events.json", "manual"]]);
+  });
+
+  it("skips an invalid calendar event, logging only why, and keeps RSVPs open for the others", async () => {
+    const longTitle = feedEvent({ id: EVENT_IDS.limited, title: "Private: Ada's long title ".repeat(50) });
+    const broken = [
+      longTitle,
+      feedEvent({ id: "x" }),
+      feedEvent({ id: EVENT_IDS.off, startsAt: "soon" }),
+      { ...feedEvent({ id: EVENT_IDS.started }), allDay: undefined } as unknown as FeedEvent,
+      { ...feedEvent({ id: EVENT_IDS.unknown }), rsvp: "maybe" } as unknown as FeedEvent,
+      feedEvent({ id: "aaaaaaaaaaaaaaaaaaaaaaaa", limit: 0 }),
+      "not an event" as unknown as FeedEvent
+    ];
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const outbound = mockProviders("rsvp", { feedEvents: [...broken, feedEvent()] });
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env)).status).toBe(202);
+    const skippedOne = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited })), env);
+    expect(skippedOne.status).toBe(404);
+    expect((await errorBody(skippedOne)).error).toBe("EVENT_NOT_FOUND");
+    const availability = await (await fetchHandler(new Request("https://api.test/v1/rsvp/availability"), env)).json<{ events: Record<string, unknown> }>();
+    expect(Object.keys(availability.events)).toEqual([EVENT_IDS.open]);
+
+    const skipped = logs.mock.calls.map((args) => String(args[0])).filter((entry) => entry.includes("EVENTS_FEED_EVENT_SKIPPED"));
+    expect(skipped.map((entry) => JSON.parse(entry).reason)).toEqual(["bad title", "bad id", "bad time", "bad allDay", "bad rsvp", "bad limit", "not an object"]);
+    expect(skipped.join("\n")).not.toContain("Private");
+    expect(outbound.feed()).toHaveLength(1);
   });
 
   it("caches the feed for 60 seconds per isolate, and never caches a failure", async () => {
@@ -1070,6 +1096,18 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(0);
   });
 
+  it("does not let a failed bot challenge use up an email's RSVP quota (IP, Turnstile, then email)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ success: false }));
+    const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(response.status).toBe(400);
+    expect((await errorBody(response)).error).toBe("BOT_CHALLENGE_FAILED");
+    const limits = async (kind: string) => (await env.DB.prepare("SELECT COUNT(*) AS count FROM rate_limits WHERE key LIKE ?")
+      .bind(`rsvp:${kind}:%`).first<{ count: number }>())?.count;
+    expect(await limits("ip")).toBe(1);
+    expect(await limits("email")).toBe(0);
+    expect(await count("rsvps")).toBe(0);
+  });
+
   it("rate limits 30 RSVPs per IP and 6 per email in 10 minutes", async () => {
     mockProviders("rsvp");
     const email = uniqueEmail();
@@ -1086,13 +1124,14 @@ describe("POST /v1/rsvp", () => {
     expect(byIp).toEqual([...Array<number>(30).fill(202), 429]);
   });
 
-  it("gives the seat back when an email fails, so a retry with the same requestId books and mails it", async () => {
-    const failing = mockProviders("rsvp", { emailStatus: 500 });
+  it("gives the seats back when the guest's email fails, so a retry with the same requestId books and mails it", async () => {
     const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const failing = mockProviders("rsvp", { emailStatus: (to) => (to === payload.email ? 500 : 200) });
     const failed = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
     expect(failed.status).toBe(502);
     expect((await errorBody(failed)).error).toBe("UPSTREAM_FAILURE");
-    expect(failing.emails().length).toBeGreaterThan(0);
+    // The organizer never hears of an RSVP the guest wasn't told about.
+    expect(failing.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email]);
     expect(await count("rsvps")).toBe(0);
     failing.spy.mockRestore();
 
@@ -1103,6 +1142,34 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(2);
     expect(outbound.emails().map((call) => call.headers.get("idempotency-key")).sort())
       .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("keeps the booking the guest was told about when only the organizer's email fails", async () => {
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const outbound = mockProviders("rsvp", { emailStatus: (to) => (to === "team@example.test" ? 500 : 200) });
+    const first = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(first.status).toBe(202);
+    const { confirmationId } = await first.json<RsvpSuccess>();
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, "team@example.test"]);
+    expect((sentTo(outbound, payload.email)[0].body as SentEmail).text).toContain(`Confirmation ID: ${confirmationId}`);
+
+    // Logged with a code and the request id, never the visitor's details.
+    const logged = logs.mock.calls.map((args) => String(args[0]));
+    const line = logged.find((entry) => entry.includes("RSVP_ORGANIZER_EMAIL_FAILED"));
+    expect(line && JSON.parse(line)).toEqual({ code: "RSVP_ORGANIZER_EMAIL_FAILED", requestId: payload.requestId, error: "UPSTREAM_FAILURE" });
+    expect(logged.join("\n")).not.toMatch(/example\.test|Ada|Lovelace|Step-free/);
+
+    // A replay returns the same RSVP and sends nothing new; the seats stay taken.
+    const replay = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(replay.status).toBe(202);
+    await expect(replay.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(outbound.emails()).toHaveLength(2);
+    const another = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env);
+    expect(another.status).toBe(409);
+    expect((await errorBody(another)).error).toBe("EVENT_FULL");
   });
 
   it("drops bidi controls from the accessibility note, keeping its line breaks", async () => {

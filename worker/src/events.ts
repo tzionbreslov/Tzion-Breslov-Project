@@ -33,18 +33,34 @@ const unavailable = (reason: string) => new PublicError("EVENTS_UNAVAILABLE", `e
 
 const isTime = (value: unknown): value is string => typeof value === "string" && value.length <= 40 && Number.isFinite(Date.parse(value));
 
-function feedEvent(value: unknown): FeedEvent {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw unavailable("an event is not an object");
+/** One record of the feed, or why it can't take RSVPs. */
+function feedEvent(value: unknown): FeedEvent | string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "not an object";
   const record = value as Record<string, unknown>;
   const { id, title, startsAt, endsAt, timeZone, allDay, rsvp, limit } = record;
-  if (typeof id !== "string" || !EVENT_ID_PATTERN.test(id)) throw unavailable("bad id");
-  if (typeof title !== "string" || !title.trim() || title.length > 1000) throw unavailable("bad title");
-  if (!isTime(startsAt) || !isTime(endsAt)) throw unavailable("bad time");
-  if (typeof timeZone !== "string" || timeZone.length > 100) throw unavailable("bad time zone");
-  if (typeof allDay !== "boolean") throw unavailable("bad allDay");
-  if (rsvp !== "open" && rsvp !== "off") throw unavailable("bad rsvp");
-  if (limit !== null && !(typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 1)) throw unavailable("bad limit");
+  if (typeof id !== "string" || !EVENT_ID_PATTERN.test(id)) return "bad id";
+  if (typeof title !== "string" || !title.trim() || title.length > 1000) return "bad title";
+  if (!isTime(startsAt) || !isTime(endsAt)) return "bad time";
+  if (typeof timeZone !== "string" || timeZone.length > 100) return "bad time zone";
+  if (typeof allDay !== "boolean") return "bad allDay";
+  if (rsvp !== "open" && rsvp !== "off") return "bad rsvp";
+  if (limit !== null && !(typeof limit === "number" && Number.isSafeInteger(limit) && limit >= 1)) return "bad limit";
   return { id, title, startsAt, endsAt, timeZone, allDay, rsvp, limit };
+}
+
+/**
+ * The feed's events. One record that isn't valid (say, an over-long title) is
+ * left out and logged with the reason only (no calendar text), so the other
+ * events keep taking RSVPs; it can't be RSVPed to (EVENT_NOT_FOUND).
+ */
+function feedEvents(records: unknown[]): FeedEvent[] {
+  const events: FeedEvent[] = [];
+  records.forEach((record, index) => {
+    const event = feedEvent(record);
+    if (typeof event === "string") console.error(JSON.stringify({ code: "EVENTS_FEED_EVENT_SKIPPED", reason: event, index }));
+    else events.push(event);
+  });
+  return events;
 }
 
 async function fetchFeed(url: string): Promise<FeedEvent[]> {
@@ -71,14 +87,9 @@ async function fetchFeed(url: string): Promise<FeedEvent[]> {
   }
   const events = (body as { events?: unknown } | null)?.events;
   if (!Array.isArray(events)) throw unavailable("no events list");
-  return events.map(feedEvent);
+  return feedEvents(events);
 }
 
-/**
- * The events of EVENTS_FEED_URL, cached per isolate for 60 s (a failure is
- * never cached). Throws EVENTS_UNAVAILABLE unless the answer is a 200 with a
- * JSON body of the expected shape.
- */
 /** https only; plain http just for a local `npm run worker:dev` (localhost). */
 function feedUrl(env: Env) {
   const url = requireBinding(env, "EVENTS_FEED_URL");
@@ -93,6 +104,12 @@ function feedUrl(env: Env) {
   return url;
 }
 
+/**
+ * The events of EVENTS_FEED_URL, cached per isolate for 60 s (a failure is
+ * never cached). Throws EVENTS_UNAVAILABLE unless the answer is a 200 with a
+ * JSON document (at most 512 kB) that has an events list; an invalid event in
+ * the list is skipped (feedEvents).
+ */
 export async function loadEventFeed(env: Env, now = Date.now()): Promise<FeedEvent[]> {
   const url = feedUrl(env);
   if (cached && cached.url === url && now < cached.until) return cached.events;

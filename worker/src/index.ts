@@ -301,13 +301,15 @@ function oneLine(value: string) {
   return flat.length > 200 ? `${flat.slice(0, 199)}…` : flat;
 }
 
-async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string) {
+type Email = Parameters<typeof sendEmail>[1];
+
+/** The guest's "RSVP received" and the organizer's "New RSVP" (plain text). */
+function rsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string): { guest: Email; organizer: Email } {
   const organizationName = requireBinding(env, "ORGANIZATION_NAME");
   const title = oneLine(event.title);
   const when = formatEventWhen(event);
   const guests = String(input.guests);
-  // One after the other: an organizer email is never sent for an RSVP the guest wasn't told about.
-  await sendEmail(env, {
+  const guest: Email = {
     to: input.email,
     subject: `RSVP received: ${title}`,
     text: [
@@ -324,8 +326,8 @@ async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, conf
     ].join("\n"),
     replyTo: env.RESEND_REPLY_TO_EMAIL?.trim() || undefined,
     idempotencyKey: `rsvp-guest/${input.requestId}`
-  });
-  await sendEmail(env, {
+  };
+  const organizer: Email = {
     to: requireBinding(env, "CONTACT_TO_EMAIL"),
     subject: `New RSVP: ${title}`,
     text: [
@@ -345,7 +347,40 @@ async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, conf
     ].join("\n"),
     replyTo: input.email,
     idempotencyKey: `rsvp-organizer/${input.requestId}`
-  });
+  };
+  return { guest, organizer };
+}
+
+/**
+ * The guest first, then the organizer: the organizer never hears of an RSVP
+ * the guest wasn't told about.
+ * - The guest's email fails (or can't be built): the seats are given back and
+ *   the visitor gets the retryable error; a retry with the same requestId books
+ *   and mails again (Resend's idempotency keys stop a second copy).
+ * - Only the organizer's fails: the guest already holds "RSVP received" and its
+ *   confirmation id, so the booking stands. It is logged (a code and the
+ *   requestId, no personal data; the row is found by request_id) and the RSVP
+ *   succeeds, so a replay returns the same id and sends nothing new.
+ */
+async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string) {
+  let organizer: Email;
+  try {
+    const emails = rsvpEmails(env, input, event, confirmationId);
+    organizer = emails.organizer;
+    await sendEmail(env, emails.guest);
+  } catch (error) {
+    await cancelRsvp(env, confirmationId).catch(() => undefined);
+    throw error;
+  }
+  try {
+    await sendEmail(env, organizer);
+  } catch (error) {
+    console.error(JSON.stringify({
+      code: "RSVP_ORGANIZER_EMAIL_FAILED",
+      requestId: input.requestId,
+      error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
+    }));
+  }
 }
 
 /**
@@ -355,23 +390,14 @@ async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, conf
 async function handleRsvp(request: Request, env: Env, origin: string) {
   const input = validateRsvp(await readJson(request));
   await rateLimitValue(env, "rsvp", "ip", remoteIp(request), 30);
-  const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
+  // After the challenge, so a failed one can't use up someone's email quota (as contact and subscribe).
   await validateTurnstile(env, input.turnstileToken, remoteIp(request), input.requestId, TURNSTILE_ACTIONS.rsvp);
+  const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
   const reservation = await reserveRsvp(env, input, event, emailHash);
-  if (reservation.created) {
-    try {
-      await sendRsvpEmails(env, input, event, reservation.id);
-    } catch (error) {
-      // Give the seats back, so the visitor's retry (same requestId) books and mails it again;
-      // Resend's idempotency keys keep an email that did go out from going twice. The
-      // visitor hears about the email failure (retryable), whatever happens to this delete.
-      await cancelRsvp(env, reservation.id).catch(() => undefined);
-      throw error;
-    }
-  }
+  if (reservation.created) await sendRsvpEmails(env, input, event, reservation.id);
   return json({ ok: true, requestId: input.requestId, confirmationId: reservation.id } satisfies RsvpSuccessResponse, 202, origin);
 }
 
