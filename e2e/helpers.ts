@@ -2,8 +2,15 @@ import { expect, type Page } from "@playwright/test";
 import { CSP } from "../config/security-headers.mjs";
 
 // A pre-existing bug in the original theme, kept for fidelity: its number
-// counter throws on scroll on pages without `.numbers`.
-const KNOWN_THEME_ERROR = "/themes/tzionbreslov/js/global.js";
+// counter (isScrolledIntoView in global.js) throws on scroll on pages without
+// `.numbers`. Only that function is tolerated — any other error from global.js
+// (menu toggles, header scroll class, GSAP setup) still fails the test.
+const KNOWN_THEME_SCRIPT = "/themes/tzionbreslov/js/global.js";
+const KNOWN_THEME_FUNCTION = "isScrolledIntoView";
+const isKnownThemeError = (error: Error) => {
+  const stack = error.stack ?? "";
+  return stack.includes(KNOWN_THEME_SCRIPT) && stack.includes(KNOWN_THEME_FUNCTION);
+};
 
 // Chromium logs every CSP violation on the console, quoting the directive it
 // broke: `… violates the following Content Security Policy directive: "img-src 'self' …"`.
@@ -27,7 +34,7 @@ const recorded = new WeakMap<Page, string[]>();
 export function trackPageErrors(page: Page): () => Error[] {
   const errors: Error[] = [];
   page.on("pageerror", (error) => {
-    if (!(error.stack ?? "").includes(KNOWN_THEME_ERROR)) errors.push(error);
+    if (!isKnownThemeError(error)) errors.push(error);
   });
   const violations: string[] = [];
   recorded.set(page, violations);
