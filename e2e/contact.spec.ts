@@ -172,23 +172,59 @@ test("both map links show a keyboard focus ring", async ({ page }) => {
   await expectClean(page, errors);
 });
 
-test("on phones the map section never scrolls the page sideways, and everything stays inside its card", async ({ page }) => {
+// Phones, both sides of the theme's 600px breakpoint, landscape phones (640, 667), around the width where both
+// buttons first fit on one row (668 ± 1, measured), a tablet and desktop.
+const WIDTHS = [320, 360, 390, 412, 414, 600, 601, 640, 667, 668, 669, 768, 1024, 1440];
+
+test("at every width the buttons are spaced and centred in the card, nothing scrolls sideways, and \"Bet Shemesh\" stays on one line", async ({ page }) => {
   const errors = trackPageErrors(page);
   await stubMap(page);
   await openContact(page);
-  for (const width of [320, 360, 390, 412]) {
+  for (const width of WIDTHS) {
     await page.setViewportSize({ width, height: 800 });
-    const fit = await section(page).evaluate((map) => {
+    const fit = await section(page).evaluate(async (map) => {
+      // The theme's buttons transition every property (.25s): measure the layout they settle in.
+      map.getBoundingClientRect();
+      await Promise.all(map.getAnimations({ subtree: true }).map((animation) => animation.finished));
       const card = map.querySelector(".tz-map__card")!.getBoundingClientRect();
       const inner = [...map.querySelectorAll("h2, .tz-map__frame, a")].map((el) => el.getBoundingClientRect());
+      const [first, second] =[...map.querySelectorAll(".tz-map__links a")].map((el) => el.getBoundingClientRect());
+      const middle = (left: number, right: number) => (left + right) / 2;
+      const cardMiddle = middle(card.left, card.right);
+      const oneRow = Math.abs(first.top - second.top) < 1;
+      // The heading's words "Bet" and "Shemesh" share a line.
+      const title = map.querySelector("h2")!.firstChild as Text;
+      const lineOf = (word: string) => {
+        const range = document.createRange();
+        const at = title.data.indexOf(word);
+        range.setStart(title, at);
+        range.setEnd(title, at + word.length);
+        return Math.round(range.getClientRects()[0].top);
+      };
       return {
-        scroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
-        inside: inner.every((box) => box.left >= card.left && box.right <= card.right),
-        cardInView: card.left >= 0 && card.right <= document.documentElement.clientWidth
+        layout: {
+          scroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+          inside: inner.every((box) => box.left >= card.left && box.right <= card.right),
+          cardInView: card.left >= 0 && card.right <= document.documentElement.clientWidth,
+          betShemeshTogether: lineOf("Bet") === lineOf("Shemesh")
+        },
+        oneRow,
+        // Side by side: the space between them; stacked: the space between the rows.
+        gap: oneRow ? second.left - first.right : second.top - first.bottom,
+        // Side by side: the pair; stacked: each pill.
+        offCentre: oneRow
+          ? Math.abs(middle(first.left, second.right) - cardMiddle)
+          : Math.max(Math.abs(middle(first.left, first.right) - cardMiddle), Math.abs(middle(second.left, second.right) - cardMiddle))
       };
     });
-    expect(fit, `${width}px`).toEqual({ scroll: true, inside: true, cardInView: true });
-    await expect(mapFrame(page), `${width}px`).toHaveCSS("height", "300px");
+    expect(fit.layout, `${width}px`).toEqual({ scroll: true, inside: true, cardInView: true, betShemeshTogether: true });
+    // Never touching (the theme's .5em = 9px), and centred to the pixel.
+    expect(fit.gap, `${width}px: gap between the buttons`).toBeGreaterThanOrEqual(8);
+    expect(fit.offCentre, `${width}px: buttons off-centre by`).toBeLessThanOrEqual(1);
+    // Stacked on phones, side by side from tablets up.
+    if (width <= 600) expect(fit.oneRow, `${width}px: stacked`).toBe(false);
+    if (width >= 768) expect(fit.oneRow, `${width}px: one row`).toBe(true);
+    await expect(mapFrame(page), `${width}px`).toHaveCSS("height", width <= 600 ? "300px" : "420px");
   }
   await expectClean(page, errors);
 });

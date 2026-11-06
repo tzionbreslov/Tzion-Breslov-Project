@@ -21,7 +21,8 @@
   border-radius: 30px 30px 0 30px;
   box-shadow: 3px 5px 15px #00000029;
 }
-.tz-map .tz-map__title { margin: 0; }
+/* Balanced lines on phones: "Find us in / Bet Shemesh", never "Find us in Bet / Shemesh". */
+.tz-map .tz-map__title { margin: 0; text-wrap: balance; }
 
 /* The map keeps its full height before it loads (nothing below it moves),
  * with the card's corners. */
@@ -35,8 +36,16 @@
   border: 0; border-radius: 30px 30px 0 30px;
 }
 
-/* The theme's buttons, centred. */
-.tz-map .tz-map__links { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; margin: 0; }
+/* The theme's buttons, centred. The theme zeroes flex gaps (.wp-block-buttons
+ * {gap:0!important}, for Safari 13) and spaces buttons with a margin on the
+ * second one only, so pills that wrap to a second row (601–667px) would touch
+ * and sit off-centre. Space them with the theme's .5em as a gap instead, in
+ * both directions, at every width. */
+.tz-map .tz-map__links {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; margin: 0;
+  gap: .5em !important;
+}
+.tz-map .tz-map__links .wp-block-button + .wp-block-button { margin: 0; }
 /* The theme's outline style is a placeholder (has-REPLACE-color): here it is
  * dark blue, and fills on hover as the theme intends. */
 .tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link {
