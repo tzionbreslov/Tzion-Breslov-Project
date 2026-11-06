@@ -31,5 +31,11 @@ export function enhancePostGrids(root: Document = document) {
     }
   };
   root.addEventListener("click", onClick);
-  return () => root.removeEventListener("click", onClick);
+  // Marks the grids as live, so tests can wait for it (a click before this navigates instead).
+  const grids = [...root.querySelectorAll<HTMLElement>("[data-tz-post-grid]")];
+  grids.forEach((grid) => grid.setAttribute("data-tz-post-grid", "ready"));
+  return () => {
+    root.removeEventListener("click", onClick);
+    grids.forEach((grid) => grid.setAttribute("data-tz-post-grid", ""));
+  };
 }

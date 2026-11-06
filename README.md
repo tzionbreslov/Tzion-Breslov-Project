@@ -19,8 +19,10 @@ WordPress backup (.wpress, private, not in git)
 - `content/fragments/`, `content/styles/`, `content/scripts/` — shared header/footer HTML and de-duplicated inline CSS/JS.
 - `public/wp-content`, `public/wp-includes` — only the images, CSS and JS the pages actually reference.
 - `config/site-structure.mjs` — the site's structure on top of the import: pages composed in code (`NEW_ROUTES`, keys
-  `tz:…`), imported pages that are removed (`REMOVED_PATHS`) and link rewrites. Next, the sitemaps and every check
-  script take their route list from its `siteRoutes()`, so a re-import can't bring a removed page back.
+  `tz:…`), imported pages that are removed (`REMOVED_PATHS`) and link rewrites. Next (`lib/content.ts`), the export and
+  CSP checks and the browser smoke test take their route list from its `siteRoutes()`, so a re-import can't bring a
+  removed page back; the wording check skips `isRemovedPath()` pages, and `page-sitemap.xml` gains the `NEW_ROUTES`.
+  `visual-diff.mjs` and `compare-live.mjs` keep their own fixed page lists.
 - `lib/pages/` — the composed pages (today `/articles/` + `/articles/page/2/`), built from Tzion's own markup:
   `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
