@@ -19,6 +19,9 @@
  * server-side before length checks. Success responses are HTTP 202
  * (HTTP 200 for `POST /v1/subscribe/confirm`, which finishes synchronously).
  *
+ * One public GET: `/v1/rsvp/availability` (no body, no preflight), see
+ * {@link RsvpAvailabilityResponse}.
+ *
  * Errors are `{ ok: false, error: ApiErrorCode, correlationId, field? }` with
  * the HTTP status shown in {@link API_ERROR_STATUS}. `field` is only present on
  * `INVALID_INPUT` and names the first offending request field.
@@ -35,7 +38,11 @@ export const API_PATHS = {
    * - `POST` with {@link SubscribeConfirmRequest} is sent by the site when the
    *   visitor presses "Confirm my subscription"; it performs the opt-in.
    */
-  subscribeConfirm: "/v1/subscribe/confirm"
+  subscribeConfirm: "/v1/subscribe/confirm",
+  /** `POST` {@link RsvpRequest}: an RSVP to one event of the site's /events.json. */
+  rsvp: "/v1/rsvp",
+  /** `GET`: which open events are full ({@link RsvpAvailabilityResponse}). Counts only. */
+  rsvpAvailability: "/v1/rsvp/availability"
 } as const;
 
 /**
@@ -44,8 +51,19 @@ export const API_PATHS = {
  */
 export const TURNSTILE_ACTIONS = {
   contact: "contact",
-  subscribe: "subscribe"
+  subscribe: "subscribe",
+  rsvp: "rsvp"
 } as const;
+
+/**
+ * The email lists a signup can opt in to: the newsletter and the "Event
+ * announcements" (Resend topics RESEND_NEWSLETTER_TOPIC_ID / RESEND_EVENTS_TOPIC_ID).
+ */
+export const SUBSCRIBE_TOPICS = ["newsletter", "events"] as const;
+export type SubscribeTopic = (typeof SUBSCRIBE_TOPICS)[number];
+
+/** An event's id in the site's /events.json (24 lowercase hex characters). */
+export const EVENT_ID_PATTERN = /^[0-9a-f]{24}$/;
 
 /** Exact JSON property names of the security envelope. */
 export const ENVELOPE_FIELDS = {
@@ -73,7 +91,13 @@ export const FIELD_LIMITS = {
   phone: { max: 40 },
   address: { max: 300 },
   message: { min: 2, max: 5000 },
-  turnstileToken: { min: 1, max: 2048 }
+  turnstileToken: { min: 1, max: 2048 },
+  /** RSVP: the guest's name. */
+  name: { min: 2, max: 100 },
+  /** RSVP: optional accessibility or dietary needs (line breaks allowed). */
+  accessibility: { max: 1000 },
+  /** RSVP: how many people come, the guest included (a whole number). */
+  guests: { min: 1, max: 12 }
 } as const;
 
 /** Server-side phone pattern (applied only when phone is non-empty). */
@@ -143,14 +167,40 @@ export type ContactRequest = SecurityEnvelope & {
 
 /**
  * `POST /v1/subscribe` (Turnstile action "subscribe").
- * Email-only newsletter signup with double opt-in: the Worker emails a
- * single-use link valid for 24 hours. Opening it lands on the site
- * (`?subscription=confirm#token=…`), and the contact is added to the Resend
- * "newsletter" topic only when the visitor then presses "Confirm my
- * subscription" (`POST /v1/subscribe/confirm`).
+ * Email signup with double opt-in: the Worker emails a single-use link valid
+ * for 24 hours. Opening it lands on the site (`?subscription=confirm#token=…`),
+ * and the contact is added to the chosen Resend topics only when the visitor
+ * then presses "Confirm my subscription" (`POST /v1/subscribe/confirm`).
  */
 export type SubscribeRequest = SecurityEnvelope & {
   email: string;
+  /**
+   * The lists to join (duplicates ignored). Missing (or null) means
+   * `["newsletter"]`, so the footer form sends none; an empty list or an
+   * unknown topic is `INVALID_INPUT` field `topics`.
+   */
+  topics?: SubscribeTopic[];
+};
+
+/**
+ * `POST /v1/rsvp` (Turnstile action "rsvp"). Errors besides the usual ones:
+ * `EVENT_NOT_FOUND` (not in /events.json, or "No RSVP"), `EVENT_CLOSED` (it has
+ * started), `EVENT_FULL` (its "RSVP limit" can't take `guests` more),
+ * `EVENTS_UNAVAILABLE` (the Worker can't read /events.json; retry later).
+ * Resending the same `requestId` returns the first RSVP's confirmation.
+ */
+export type RsvpRequest = SecurityEnvelope & {
+  /** {@link EVENT_ID_PATTERN}: `data-event-id` of the event's card. */
+  eventId: string;
+  /** 2-100 characters, one line. */
+  name: string;
+  email: string;
+  /** A whole number (JSON number) from 1 to 12. */
+  guests: number;
+  /** Optional, up to 1000 characters; line breaks allowed. */
+  accessibility?: string;
+  /** The consent checkbox; anything else is `INVALID_INPUT` field `consent`. */
+  consent: "granted";
 };
 
 /**
@@ -181,6 +231,24 @@ export type SubscribeConfirmSuccessResponse = {
   ok: true;
 };
 
+/** HTTP 202. The guest and the organizer are emailed (once per requestId). */
+export type RsvpSuccessResponse = {
+  ok: true;
+  requestId: string;
+  /** Also in the guest's "RSVP received" email. */
+  confirmationId: string;
+};
+
+/**
+ * `GET /v1/rsvp/availability`, HTTP 200, `Cache-Control: public, max-age=60`.
+ * One entry per event of /events.json that takes RSVPs; `remaining` is null
+ * when the event has no limit. Counts only, never who has replied.
+ */
+export type RsvpAvailabilityResponse = {
+  ok: true;
+  events: Record<string, { full: boolean; remaining: number | null }>;
+};
+
 /** HTTP status for each error code the Worker can return. */
 export const API_ERROR_STATUS = {
   /** A field failed validation; see `field`. */
@@ -198,9 +266,15 @@ export const API_ERROR_STATUS = {
   /** Preflight asked for a method/header other than POST + Content-Type. */
   CORS_REQUEST_REJECTED: 403,
   NOT_FOUND: 404,
+  /** RSVP: the event isn't in /events.json, or takes no RSVPs ("No RSVP"). */
+  EVENT_NOT_FOUND: 404,
+  /** RSVP: the event has started. */
+  EVENT_CLOSED: 409,
+  /** RSVP: the event's limit can't take this many more guests. */
+  EVENT_FULL: 409,
   /** Same requestId is still being processed; retry shortly. */
   REQUEST_IN_PROGRESS: 409,
-  /** requestId already used on a different endpoint or with a different email; generate a new one. */
+  /** requestId already used on a different endpoint, or with a different email or event; generate a new one. */
   REQUEST_ID_CONFLICT: 409,
   REQUEST_TOO_LARGE: 413,
   UNSUPPORTED_CONTENT_TYPE: 415,
@@ -211,6 +285,8 @@ export const API_ERROR_STATUS = {
   UPSTREAM_FAILURE: 502,
   /** Worker misconfigured (missing binding/secret). */
   SERVICE_NOT_CONFIGURED: 503,
+  /** RSVP: the Worker can't read the site's /events.json just now; retry later. */
+  EVENTS_UNAVAILABLE: 503,
   /** Resend webhook endpoint only. */
   INVALID_WEBHOOK: 400,
   /** Resend webhook endpoint only. */
@@ -223,6 +299,7 @@ export type ApiErrorCode = keyof typeof API_ERROR_STATUS;
 export type ApiInputField =
   | Exclude<keyof ContactRequest, "website">
   | Exclude<keyof SubscribeRequest, "website">
+  | Exclude<keyof RsvpRequest, "website">
   | keyof SubscribeConfirmRequest;
 
 export type ApiErrorResponse = {
@@ -237,3 +314,4 @@ export type ApiErrorResponse = {
 export type ContactResponse = ContactSuccessResponse | ApiErrorResponse;
 export type SubscribeResponse = SubscribeSuccessResponse | ApiErrorResponse;
 export type SubscribeConfirmResponse = SubscribeConfirmSuccessResponse | ApiErrorResponse;
+export type RsvpResponse = RsvpSuccessResponse | ApiErrorResponse;

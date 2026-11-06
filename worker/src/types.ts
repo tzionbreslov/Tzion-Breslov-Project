@@ -16,7 +16,13 @@ export interface Env {
   RESEND_REPLY_TO_EMAIL?: string;
   CONTACT_TO_EMAIL: string;
   RESEND_NEWSLETTER_TOPIC_ID: string;
+  /** The "Event announcements" Resend topic (scripts/setup-resend.mjs). */
+  RESEND_EVENTS_TOPIC_ID: string;
   RESEND_WEBHOOK_SECRET: string;
+  /** The site's published events (`https://tzionbreslov.org/events.json`): which events take RSVPs. */
+  EVENTS_FEED_URL: string;
+  /** Days after an event's start that its RSVPs are deleted by the daily cleanup ("90"). */
+  RSVP_RETENTION_DAYS: string;
 }
 
 export class PublicError extends Error {

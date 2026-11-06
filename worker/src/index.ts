@@ -7,12 +7,16 @@ import {
   TURNSTILE_ACTIONS,
   type ApiErrorResponse,
   type ContactSuccessResponse,
+  type RsvpAvailabilityResponse,
+  type RsvpSuccessResponse,
   type SubscribeConfirmSuccessResponse,
   type SubscribeSuccessResponse,
   type SubscriptionQueryStatus
 } from "../../lib/api-contract";
+import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "./crypto";
 import {
+  cancelRsvp,
   claimRequest,
   cleanExpiredData,
   createSubscriptionConfirmation,
@@ -20,16 +24,27 @@ import {
   findSubscriptionConfirmation,
   finishRequest,
   markSubscriptionConfirmationUsed,
+  reserveRsvp,
+  rsvpGuestTotals,
   storeWebhookEvent
 } from "./database";
-import { sendEmail, subscribeToNewsletter, validateTurnstile } from "./providers";
+import { findRsvpEvent, loadEventFeed, type FeedEvent } from "./events";
+import { sendEmail, subscribeToTopics, validateTurnstile } from "./providers";
 import { PublicError, requireBinding, type Env } from "./types";
-import { readJson, validateContact, validateSubscription, validateSubscriptionConfirmation } from "./validation";
+import {
+  readJson,
+  subscribeTopics,
+  validateContact,
+  validateRsvp,
+  validateSubscription,
+  validateSubscriptionConfirmation,
+  type RsvpInput
+} from "./validation";
 
 type JsonObject = Record<string, unknown>;
 type ExecutionContextLike = Pick<ExecutionContext, "waitUntil">;
 
-const publicPostRoutes = new Set<string>([API_PATHS.contact, API_PATHS.subscribe, API_PATHS.subscribeConfirm]);
+const publicPostRoutes = new Set<string>([API_PATHS.contact, API_PATHS.subscribe, API_PATHS.subscribeConfirm, API_PATHS.rsvp]);
 
 function allowedOrigins(env: Env) {
   return new Set(env.ALLOWED_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean));
@@ -261,10 +276,124 @@ async function handleSubscriptionConfirmation(request: Request, env: Env, origin
   if (!confirmation) throw new PublicError("INVALID_CONFIRMATION");
   // Opt in first, then mark used: if Resend fails, the same token still works on retry.
   if (!confirmation.used_at) {
-    await subscribeToNewsletter(env, confirmation.email);
+    await subscribeToTopics(env, confirmation.email, storedTopics(confirmation.topics_json));
     await markSubscriptionConfirmationUsed(env, confirmation.id);
   }
   return json({ ok: true } satisfies SubscribeConfirmSuccessResponse, 200, origin);
+}
+
+/** The lists stored with a pending signup; anything unreadable is the newsletter (the only list before 0002). */
+function storedTopics(topicsJson: string) {
+  try {
+    return subscribeTopics(JSON.parse(topicsJson));
+  } catch {
+    return subscribeTopics(undefined);
+  }
+}
+
+/**
+ * Calendar text in an email subject or a "Label: value" line: one line, no
+ * control or bidi characters, at most 200 characters.
+ */
+function oneLine(value: string) {
+  // eslint-disable-next-line no-control-regex
+  const flat = value.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+/gu, " ").replace(/\s+/g, " ").trim();
+  return flat.length > 200 ? `${flat.slice(0, 199)}…` : flat;
+}
+
+async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string) {
+  const organizationName = requireBinding(env, "ORGANIZATION_NAME");
+  const title = oneLine(event.title);
+  const when = formatEventWhen(event);
+  const guests = String(input.guests);
+  // One after the other: an organizer email is never sent for an RSVP the guest wasn't told about.
+  await sendEmail(env, {
+    to: input.email,
+    subject: `RSVP received: ${title}`,
+    text: [
+      `Hello ${input.name},`,
+      "",
+      `Thank you for your RSVP to ${organizationName}. We look forward to seeing you.`,
+      "",
+      `Event: ${title}`,
+      `When: ${when}`,
+      `Guests: ${guests}`,
+      `Confirmation ID: ${confirmationId}`,
+      "",
+      "If your plans change, reply to this email."
+    ].join("\n"),
+    replyTo: env.RESEND_REPLY_TO_EMAIL?.trim() || undefined,
+    idempotencyKey: `rsvp-guest/${input.requestId}`
+  });
+  await sendEmail(env, {
+    to: requireBinding(env, "CONTACT_TO_EMAIL"),
+    subject: `New RSVP: ${title}`,
+    text: [
+      `New RSVP for ${organizationName}`,
+      "",
+      `Event: ${title}`,
+      `When: ${when}`,
+      `Name: ${input.name}`,
+      `Email: ${input.email}`,
+      `Guests: ${guests}`,
+      "",
+      "Accessibility or dietary needs:",
+      input.accessibility || "None given",
+      "",
+      `Confirmation ID: ${confirmationId}`,
+      `Request ID: ${input.requestId}`
+    ].join("\n"),
+    replyTo: input.email,
+    idempotencyKey: `rsvp-organizer/${input.requestId}`
+  });
+}
+
+/**
+ * `POST /v1/rsvp`. Never touches request_log (its route CHECK is live in
+ * production): rsvps.request_id is the idempotency key.
+ */
+async function handleRsvp(request: Request, env: Env, origin: string) {
+  const input = validateRsvp(await readJson(request));
+  await rateLimitValue(env, "rsvp", "ip", remoteIp(request), 30);
+  const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
+  await validateTurnstile(env, input.turnstileToken, remoteIp(request), input.requestId, TURNSTILE_ACTIONS.rsvp);
+  const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
+  if (!event) throw new PublicError("EVENT_NOT_FOUND");
+  if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
+  const reservation = await reserveRsvp(env, input, event, emailHash);
+  if (reservation.created) {
+    try {
+      await sendRsvpEmails(env, input, event, reservation.id);
+    } catch (error) {
+      // Give the seats back, so the visitor's retry (same requestId) books and mails it again;
+      // Resend's idempotency keys keep an email that did go out from going twice. The
+      // visitor hears about the email failure (retryable), whatever happens to this delete.
+      await cancelRsvp(env, reservation.id).catch(() => undefined);
+      throw error;
+    }
+  }
+  return json({ ok: true, requestId: input.requestId, confirmationId: reservation.id } satisfies RsvpSuccessResponse, 202, origin);
+}
+
+/**
+ * `GET /v1/rsvp/availability`: for each event that takes RSVPs, whether it is
+ * full and how many places remain (null = no limit). Counts only. Readable
+ * cross-origin by the site's origins only; cacheable for 60 s.
+ */
+async function handleRsvpAvailability(request: Request, env: Env) {
+  const requested = request.headers.get("origin") ?? "";
+  const origin = requested && allowedOrigins(env).has(requested) ? requested : "";
+  const open = (await loadEventFeed(env)).filter((event) => event.rsvp === "open");
+  const totals = await rsvpGuestTotals(env, open.filter((event) => event.limit !== null).map((event) => event.id));
+  const events: RsvpAvailabilityResponse["events"] = {};
+  for (const event of open) {
+    const remaining = event.limit === null ? null : Math.max(0, event.limit - (totals.get(event.id) ?? 0));
+    events[event.id] = { full: remaining === 0, remaining };
+  }
+  const headers = responseHeaders(origin);
+  headers.set("Cache-Control", "public, max-age=60");
+  headers.set("Vary", "Origin");
+  return new Response(JSON.stringify({ ok: true, events } satisfies RsvpAvailabilityResponse), { status: 200, headers });
 }
 
 async function readWebhookBody(request: Request) {
@@ -314,6 +443,7 @@ async function route(request: Request, env: Env) {
   if (request.method === "GET" && url.pathname === API_PATHS.subscribeConfirm) {
     return handleSubscriptionConfirmationLink(request, env);
   }
+  if (request.method === "GET" && url.pathname === API_PATHS.rsvpAvailability) return handleRsvpAvailability(request, env);
   if (request.method === "POST" && url.pathname === "/webhooks/resend") return handleResendWebhook(request, env);
 
   if (request.method === "POST" && publicPostRoutes.has(url.pathname)) {
@@ -321,6 +451,7 @@ async function route(request: Request, env: Env) {
     if (url.pathname === API_PATHS.contact) return handleContact(request, env, origin);
     if (url.pathname === API_PATHS.subscribe) return handleSubscription(request, env, origin);
     if (url.pathname === API_PATHS.subscribeConfirm) return handleSubscriptionConfirmation(request, env, origin);
+    if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin);
   }
 
   throw new PublicError("NOT_FOUND");

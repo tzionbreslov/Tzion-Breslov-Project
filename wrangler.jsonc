@@ -24,7 +24,13 @@
     // Optional, not a secret: Reply-To on the subscription confirmation email. tzionbreslov.org
     // has no MX (by choice), so without it a subscriber's reply would sit deferred for days
     // before bouncing. Blank/absent = no Reply-To. Contact notifications reply to the visitor.
-    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com"
+    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com",
+    // The site's own list of upcoming events (scripts/write-site-files.mjs): which events take
+    // RSVPs, when they start and their limit. Fetched without following redirects, so until
+    // switch day (.org still 302s to .com) RSVPs answer EVENTS_UNAVAILABLE.
+    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json",
+    // RSVPs are deleted this many days after their event started (daily cleanup cron).
+    "RSVP_RETENTION_DAYS": "90"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
   // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget
@@ -38,10 +44,12 @@
       "RESEND_FROM_EMAIL",
       "CONTACT_TO_EMAIL",
       "RESEND_NEWSLETTER_TOPIC_ID",
+      // The "Event announcements" topic (scripts/setup-resend.mjs); install before the next deploy.
+      "RESEND_EVENTS_TOPIC_ID",
       "RESEND_WEBHOOK_SECRET"
     ]
   },
-  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs and webhook rows.
+  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {

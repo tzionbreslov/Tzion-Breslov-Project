@@ -1,11 +1,59 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
+import { reserveRsvp } from "../src/database";
+import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
 import worker, { fetchHandler } from "../src/index";
+import type { RsvpInput } from "../src/validation";
 
 const origin = "https://site.test";
 
-type OutboundCall = { url: string; method: string; body: unknown; headers: Headers };
+type OutboundCall = { url: string; method: string; body: unknown; headers: Headers; redirect?: string };
+
+// The site's /events.json as the Worker reads it (vitest binding EVENTS_FEED_URL).
+const FEED_URL = "https://site.test/events.json";
+const HOUR = 3_600_000;
+const EVENT_IDS = {
+  open: "0123456789abcdef01234567",
+  limited: "89abcdef0123456789abcdef",
+  off: "fedcba9876543210fedcba98",
+  started: "00112233445566778899aabb",
+  unknown: "ffffffffffffffffffffffff"
+} as const;
+
+function feedEvent(overrides: Partial<FeedEvent> = {}): FeedEvent {
+  const start = Date.now() + 24 * HOUR;
+  return {
+    id: EVENT_IDS.open,
+    title: "Weekly class",
+    startsAt: new Date(start).toISOString(),
+    endsAt: new Date(start + 2 * HOUR).toISOString(),
+    timeZone: "Asia/Jerusalem",
+    allDay: false,
+    rsvp: "open",
+    limit: null,
+    ...overrides
+  };
+}
+
+/** An open event tomorrow, one limited to 3 people, one with "No RSVP", and one that started an hour ago. */
+function defaultFeedEvents() {
+  return [
+    feedEvent(),
+    feedEvent({ id: EVENT_IDS.limited, title: "Shabbaton", limit: 3 }),
+    feedEvent({ id: EVENT_IDS.off, title: "Talk at another venue", rsvp: "off" }),
+    feedEvent({
+      id: EVENT_IDS.started,
+      title: "Morning class",
+      startsAt: new Date(Date.now() - HOUR).toISOString(),
+      endsAt: new Date(Date.now() + HOUR).toISOString()
+    })
+  ];
+}
+
+/** How rsvps.event_starts_at stores a start, comparable with SQLite's datetime('now', …). */
+const sqliteTime = (iso: string) => new Date(iso).toISOString().slice(0, 19).replace("T", " ");
 
 function publicRequest(path: string, body: Record<string, unknown>, ip = "203.0.113.10", requestOrigin = origin) {
   return new Request(`https://api.test${path}`, {
@@ -53,18 +101,43 @@ function subscribePayload(overrides: Record<string, unknown> = {}) {
   return envelope({ email: uniqueEmail(), ...overrides });
 }
 
+function rsvpPayload(overrides: Record<string, unknown> = {}) {
+  return envelope({
+    eventId: EVENT_IDS.open,
+    name: "Ada Lovelace",
+    email: uniqueEmail(),
+    guests: 2,
+    accessibility: "Step-free access, please.\nNo nuts.",
+    consent: "granted",
+    ...overrides
+  });
+}
+
+type MockOptions = {
+  contactsCreateStatus?: number;
+  emailStatus?: number;
+  /** The events /events.json lists (default: defaultFeedEvents()). */
+  feedEvents?: FeedEvent[];
+  /** Answers /events.json instead (a failure, a redirect, a malformed body). */
+  feedResponse?: () => Response;
+};
+
 /**
- * Stubs Turnstile siteverify and the Resend API on globalThis.fetch.
- * `action` is what Turnstile reports the token was issued for.
+ * Stubs Turnstile siteverify, the Resend API and the site's /events.json on
+ * globalThis.fetch. `action` is what Turnstile reports the token was issued for.
  */
-function mockProviders(action: string, options: { contactsCreateStatus?: number; emailStatus?: number } = {}) {
+function mockProviders(action: string, options: MockOptions = {}) {
   const calls: OutboundCall[] = [];
+  const feedEvents = options.feedEvents ?? defaultFeedEvents();
   const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
     const rawBody = init?.body;
     const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
-    calls.push({ url, method, body, headers: new Headers(init?.headers) });
+    calls.push({ url, method, body, headers: new Headers(init?.headers), redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined) });
+    if (url === FEED_URL) {
+      return options.feedResponse ? options.feedResponse() : Response.json({ syncedAt: new Date().toISOString(), events: feedEvents });
+    }
     if (url.includes("/turnstile/v0/siteverify")) {
       return Response.json({ success: true, hostname: "localhost", action });
     }
@@ -84,9 +157,11 @@ function mockProviders(action: string, options: { contactsCreateStatus?: number;
   return {
     spy,
     calls,
+    feedEvents,
     emails: () => calls.filter((call) => call.url === "https://api.resend.com/emails"),
     contacts: () => calls.filter((call) => call.url.startsWith("https://api.resend.com/contacts")),
-    turnstile: () => calls.filter((call) => call.url.includes("/turnstile/"))
+    turnstile: () => calls.filter((call) => call.url.includes("/turnstile/")),
+    feed: () => calls.filter((call) => call.url === FEED_URL)
   };
 }
 
@@ -101,11 +176,14 @@ async function count(table: string) {
 
 beforeEach(async () => {
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM rsvps"),
     env.DB.prepare("DELETE FROM subscription_confirmations"),
     env.DB.prepare("DELETE FROM request_log"),
     env.DB.prepare("DELETE FROM rate_limits"),
     env.DB.prepare("DELETE FROM webhook_events")
   ]);
+  // The feed is cached per isolate: every test reads its own.
+  resetEventFeedCache();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -125,7 +203,7 @@ describe("HTTP boundary", () => {
 
   it("rejects public requests from unknown or missing origins without CORS headers", async () => {
     const outbound = mockProviders("contact");
-    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp"]) {
       const response = await fetchHandler(publicRequest(path, contactPayload(), "203.0.113.10", "https://attacker.test"), env);
       expect(response.status).toBe(403);
       expect(response.headers.get("access-control-allow-origin")).toBeNull();
@@ -148,12 +226,19 @@ describe("HTTP boundary", () => {
     }), env);
     expect(preflight.status).toBe(403);
     expect(preflight.headers.get("access-control-allow-origin")).toBeNull();
+    const rsvpPreflight = await fetchHandler(new Request("https://api.test/v1/rsvp", {
+      method: "OPTIONS",
+      headers: { Origin: "https://attacker.test", "Access-Control-Request-Method": "POST", "Access-Control-Request-Headers": "content-type" }
+    }), env);
+    expect(rsvpPreflight.status).toBe(403);
+    expect(rsvpPreflight.headers.get("access-control-allow-origin")).toBeNull();
     expect(outbound.calls).toHaveLength(0);
     expect(await count("request_log")).toBe(0);
+    expect(await count("rsvps")).toBe(0);
   });
 
   it("answers a constrained CORS preflight for allowed origins", async () => {
-    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp"]) {
       const response = await fetchHandler(new Request(`https://api.test${path}`, {
         method: "OPTIONS",
         headers: {
@@ -178,16 +263,11 @@ describe("HTTP boundary", () => {
     expect(extraHeader.status).toBe(403);
   });
 
-  it("keeps removed RSVP and payment routes closed", async () => {
-    const rsvp = await fetchHandler(publicRequest("/v1/rsvp", envelope({ email: uniqueEmail(), eventId: "x", guests: 1 })), env);
-    expect(rsvp.status).toBe(404);
-    const rsvpPreflight = await fetchHandler(new Request("https://api.test/v1/rsvp", {
-      method: "OPTIONS",
-      headers: { Origin: origin, "Access-Control-Request-Method": "POST" }
-    }), env);
-    expect(rsvpPreflight.status).toBe(404);
+  it("keeps payment routes closed, and the availability GET the only other RSVP method", async () => {
     expect((await fetchHandler(publicRequest("/v1/checkout", {}), env)).status).toBe(404);
     expect((await fetchHandler(new Request("https://api.test/webhooks/stripe", { method: "POST", body: "{}" }), env)).status).toBe(404);
+    expect((await fetchHandler(new Request("https://api.test/v1/rsvp", { headers: { Origin: origin } }), env)).status).toBe(404);
+    expect((await fetchHandler(publicRequest("/v1/rsvp/availability", {}), env)).status).toBe(404);
   });
 
   it("rejects JSON lookalike content types", async () => {
@@ -642,12 +722,447 @@ describe("newsletter double opt-in", () => {
     expect(outbound.calls).toHaveLength(0);
   });
 
-  it("ignores legacy fields such as name, topics, consent and locale", async () => {
+  it("opts a body without topics (the footer form) into the newsletter only, ignoring legacy fields", async () => {
     const outbound = mockProviders("subscribe");
-    const payload = subscribePayload({ name: "Ignored", topics: ["events"], consent: "nope", locale: "he" });
+    const payload = subscribePayload({ name: "Ignored", consent: "nope", locale: "he" });
     const { token } = await subscribeAndGetConfirmationUrl(outbound, payload);
+    const row = await env.DB.prepare("SELECT topics_json FROM subscription_confirmations WHERE request_id = ?")
+      .bind(payload.requestId).first<{ topics_json: string }>();
+    expect(row?.topics_json).toBe('["newsletter"]');
     await fetchHandler(confirmRequest(token), env);
+    expect(outbound.contacts()).toHaveLength(1);
     expect(outbound.contacts()[0].body).toEqual(newsletterContact(payload.email));
+  });
+
+  it("opts in to only the lists chosen: events alone carries only topic_events", async () => {
+    const outbound = mockProviders("subscribe");
+    const payload = subscribePayload({ topics: ["events"] });
+    const { token } = await subscribeAndGetConfirmationUrl(outbound, payload);
+    const row = await env.DB.prepare("SELECT topics_json FROM subscription_confirmations WHERE request_id = ?")
+      .bind(payload.requestId).first<{ topics_json: string }>();
+    expect(row?.topics_json).toBe('["events"]');
+    expect(outbound.contacts()).toHaveLength(0);
+
+    const confirmed = await fetchHandler(confirmRequest(token), env);
+    expect(confirmed.status).toBe(200);
+    expect(outbound.contacts()).toHaveLength(1);
+    expect(outbound.contacts()[0].body).toEqual({
+      email: payload.email,
+      unsubscribed: false,
+      topics: [{ id: "topic_events", subscription: "opt_in" }]
+    });
+  });
+
+  it("opts in to both lists once each, also when the Resend contact already exists", async () => {
+    const outbound = mockProviders("subscribe", { contactsCreateStatus: 409 });
+    const payload = subscribePayload({ topics: ["events", "newsletter", "events"] });
+    const { token } = await subscribeAndGetConfirmationUrl(outbound, payload);
+    expect((await fetchHandler(confirmRequest(token), env)).status).toBe(200);
+    const [create, patch] = outbound.contacts();
+    const both = [{ id: "topic_newsletter", subscription: "opt_in" }, { id: "topic_events", subscription: "opt_in" }];
+    expect(create.body).toEqual({ email: payload.email, unsubscribed: false, topics: both });
+    expect(patch.method).toBe("PATCH");
+    expect(patch.body).toEqual({ topics: both });
+  });
+
+  it("confirms a newsletter-only signup even before RESEND_EVENTS_TOPIC_ID is installed", async () => {
+    const outbound = mockProviders("subscribe");
+    const unconfigured = { ...env, RESEND_EVENTS_TOPIC_ID: "" };
+    const payload = subscribePayload();
+    const response = await fetchHandler(publicRequest("/v1/subscribe", payload), unconfigured);
+    expect(response.status).toBe(202);
+    const sent = outbound.emails()[0].body as { text: string };
+    const token = sent.text.match(/token=([0-9a-f]{64})/)?.[1] as string;
+    expect((await fetchHandler(confirmRequest(token), unconfigured)).status).toBe(200);
+    expect(outbound.contacts()[0].body).toEqual(newsletterContact(payload.email));
+  });
+
+  it("rejects empty, unknown and non-list topics before any provider call", async () => {
+    const outbound = mockProviders("subscribe");
+    for (const topics of [[], ["spam"], ["events", "spam"], "events", [1], {}, ""]) {
+      const response = await fetchHandler(publicRequest("/v1/subscribe", subscribePayload({ topics })), env);
+      expect(response.status, JSON.stringify(topics)).toBe(400);
+      const body = await errorBody(response);
+      expect(body.error).toBe("INVALID_INPUT");
+      expect(body.field).toBe("topics");
+    }
+    expect(outbound.calls).toHaveLength(0);
+    expect(await count("subscription_confirmations")).toBe(0);
+  });
+});
+
+type SentEmail = { from: string; to: string[]; subject: string; text: string; reply_to?: string };
+type RsvpRow = {
+  id: string;
+  request_id: string;
+  event_id: string;
+  event_starts_at: string;
+  name: string;
+  email: string;
+  email_hash: string;
+  guests: number;
+  accessibility: string | null;
+  created_at: number;
+};
+type RsvpSuccess = { ok: true; requestId: string; confirmationId: string };
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+async function rsvpRow(requestId: string) {
+  return env.DB.prepare("SELECT * FROM rsvps WHERE request_id = ?").bind(requestId).first<RsvpRow>();
+}
+
+async function guestsFor(eventId: string) {
+  const row = await env.DB.prepare("SELECT COALESCE(SUM(guests), 0) AS guests FROM rsvps WHERE event_id = ?").bind(eventId).first<{ guests: number }>();
+  return row?.guests ?? -1;
+}
+
+function sentTo(outbound: ReturnType<typeof mockProviders>, address: string) {
+  return outbound.emails().filter((call) => (call.body as SentEmail).to[0] === address);
+}
+
+describe("POST /v1/rsvp", () => {
+  it("records an RSVP to an open event and emails the guest and the organizer", async () => {
+    const outbound = mockProviders("rsvp");
+    const payload = rsvpPayload();
+    const response = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, RESEND_REPLY_TO_EMAIL: "replies@example.test" });
+    expect(response.status).toBe(202);
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    const body = await response.json<RsvpSuccess>();
+    expect(body).toEqual({ ok: true, requestId: payload.requestId, confirmationId: expect.stringMatching(UUID) });
+
+    // One row, never in request_log (its route CHECK only allows contact and subscribe).
+    expect(await count("rsvps")).toBe(1);
+    expect(await count("request_log")).toBe(0);
+    const event = outbound.feedEvents[0];
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({
+      id: body.confirmationId,
+      event_id: EVENT_IDS.open,
+      event_starts_at: sqliteTime(event.startsAt),
+      name: "Ada Lovelace",
+      email: payload.email,
+      guests: 2,
+      accessibility: "Step-free access, please.\nNo nuts."
+    });
+    expect(row?.email_hash).toMatch(/^[0-9a-f]{64}$/);
+
+    // The feed is read from exactly EVENTS_FEED_URL, never following a redirect.
+    expect(outbound.feed()).toHaveLength(1);
+    expect(outbound.feed()[0]).toMatchObject({ method: "GET", redirect: "manual" });
+    expect(outbound.turnstile()).toHaveLength(1);
+    expect((outbound.turnstile()[0].body as FormData).get("idempotency_key")).toBe(payload.requestId);
+
+    const when = formatEventWhen(event);
+    expect(when).toContain("(Israel time)");
+    expect(outbound.emails()).toHaveLength(2);
+    const [guest] = sentTo(outbound, payload.email);
+    const guestEmail = guest.body as SentEmail;
+    expect(guestEmail.from).toBe("Test Organization <no-reply@example.test>");
+    expect(guestEmail.subject).toBe("RSVP received: Weekly class");
+    expect(guestEmail.reply_to).toBe("replies@example.test");
+    for (const fragment of ["Hello Ada Lovelace,", "Event: Weekly class", `When: ${when}`, "Guests: 2", `Confirmation ID: ${body.confirmationId}`]) {
+      expect(guestEmail.text).toContain(fragment);
+    }
+    expect(guest.headers.get("idempotency-key")).toBe(`rsvp-guest/${payload.requestId}`);
+    expect(guest.headers.get("authorization")).toBe("Bearer test-transactional-key");
+
+    const [organizer] = sentTo(outbound, "team@example.test");
+    const organizerEmail = organizer.body as SentEmail;
+    expect(organizerEmail.subject).toBe("New RSVP: Weekly class");
+    expect(organizerEmail.reply_to).toBe(payload.email);
+    for (const fragment of [
+      "Event: Weekly class",
+      `When: ${when}`,
+      "Name: Ada Lovelace",
+      `Email: ${payload.email}`,
+      "Guests: 2",
+      "Step-free access, please.\nNo nuts.",
+      `Confirmation ID: ${body.confirmationId}`
+    ]) {
+      expect(organizerEmail.text).toContain(fragment);
+    }
+    expect(organizer.headers.get("idempotency-key")).toBe(`rsvp-organizer/${payload.requestId}`);
+  });
+
+  it("returns the same confirmation for a repeated requestId: still one row, no new emails", async () => {
+    const outbound = mockProviders("rsvp");
+    const payload = rsvpPayload();
+    const first = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+    const again = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(again.status).toBe(202);
+    await expect(again.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId: first.confirmationId });
+    expect(await count("rsvps")).toBe(1);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("refuses a reused requestId for another event or email", async () => {
+    const outbound = mockProviders("rsvp");
+    const payload = rsvpPayload();
+    expect((await fetchHandler(publicRequest("/v1/rsvp", payload), env)).status).toBe(202);
+    for (const changed of [{ ...payload, eventId: EVENT_IDS.limited }, { ...payload, email: uniqueEmail() }]) {
+      const response = await fetchHandler(publicRequest("/v1/rsvp", changed), env);
+      expect(response.status).toBe(409);
+      expect((await errorBody(response)).error).toBe("REQUEST_ID_CONFLICT");
+    }
+    expect(await count("rsvps")).toBe(1);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("caps attendance at the event's limit: 2 + 2 against 3 is full, 2 + 1 fits", async () => {
+    const outbound = mockProviders("rsvp");
+    const statuses: number[] = [];
+    for (const guests of [2, 2, 1, 1]) {
+      const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests })), env);
+      statuses.push(response.status);
+      if (response.status === 409) expect((await errorBody(response)).error).toBe("EVENT_FULL");
+    }
+    expect(statuses).toEqual([202, 409, 202, 409]);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect(outbound.emails()).toHaveLength(4);
+  });
+
+  it("lets exactly one of two simultaneous 2-guest RSVPs into a 3-person event", async () => {
+    const outbound = mockProviders("rsvp");
+    const responses = await Promise.all([
+      fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 2 }), "203.0.113.21"), env),
+      fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 2 }), "203.0.113.22"), env)
+    ]);
+    expect(responses.map((response) => response.status).sort()).toEqual([202, 409]);
+    const refused = responses.find((response) => response.status === 409)!;
+    expect((await errorBody(refused)).error).toBe("EVENT_FULL");
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(2);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("reserves in one statement: six simultaneous 1-guest reservations fill a 3-person event exactly", async () => {
+    const event = feedEvent({ id: EVENT_IDS.limited, limit: 3 });
+    const input = (n: number) => ({
+      requestId: crypto.randomUUID(),
+      name: `Guest ${n}`,
+      email: `guest-${n}@example.test`,
+      guests: 1,
+      accessibility: ""
+    }) as RsvpInput;
+    const results = await Promise.all(Array.from({ length: 6 }, (_, n) =>
+      reserveRsvp(env, input(n), event, `hash-${n}`).then((value) => value.created, (error: { code?: string }) => error.code)));
+    expect(results.filter((value) => value === true)).toHaveLength(3);
+    expect(results.filter((value) => value === "EVENT_FULL")).toHaveLength(3);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+  });
+
+  it("closes RSVPs once the event has started", async () => {
+    const outbound = mockProviders("rsvp");
+    const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.started })), env);
+    expect(response.status).toBe(409);
+    expect((await errorBody(response)).error).toBe("EVENT_CLOSED");
+    expect(await count("rsvps")).toBe(0);
+    expect(outbound.emails()).toHaveLength(0);
+  });
+
+  it("answers 404 EVENT_NOT_FOUND for a \"No RSVP\" event and for an id the feed doesn't list", async () => {
+    const outbound = mockProviders("rsvp");
+    for (const eventId of [EVENT_IDS.off, EVENT_IDS.unknown]) {
+      const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId })), env);
+      expect(response.status, eventId).toBe(404);
+      expect((await errorBody(response)).error).toBe("EVENT_NOT_FOUND");
+    }
+    expect(await count("rsvps")).toBe(0);
+    expect(outbound.emails()).toHaveLength(0);
+  });
+
+  it("answers 503 EVENTS_UNAVAILABLE when the feed fails, redirects or is malformed", async () => {
+    const valid = { syncedAt: null, events: defaultFeedEvents() };
+    const answers: Array<[string, () => Response]> = [
+      ["500", () => new Response("oops", { status: 500 })],
+      ["302 (tzionbreslov.org still redirects to .com)", () => new Response(null, { status: 302, headers: { Location: "https://tzionbreslov.com/events.json" } })],
+      ["not JSON", () => new Response("<!doctype html><p>Not found</p>", { headers: { "Content-Type": "application/json" } })],
+      ["HTML content type", () => new Response(JSON.stringify(valid), { headers: { "Content-Type": "text/html" } })],
+      ["no events list", () => Response.json({ syncedAt: null })],
+      ["a bad id", () => Response.json({ syncedAt: null, events: [feedEvent({ id: "x" })] })],
+      ["a bad start", () => Response.json({ syncedAt: null, events: [feedEvent({ startsAt: "soon" })] })],
+      ["allDay missing", () => Response.json({ syncedAt: null, events: [{ ...feedEvent(), allDay: undefined }] })],
+      ["a bad RSVP setting", () => Response.json({ syncedAt: null, events: [{ ...feedEvent(), rsvp: "maybe" }] })],
+      ["a limit of 0", () => Response.json({ syncedAt: null, events: [feedEvent({ limit: 0 })] })]
+    ];
+    for (const [label, feedResponse] of answers) {
+      vi.restoreAllMocks();
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      resetEventFeedCache();
+      const outbound = mockProviders("rsvp", { feedResponse });
+      const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+      expect(response.status, label).toBe(503);
+      expect((await errorBody(response)).error, label).toBe("EVENTS_UNAVAILABLE");
+      expect(outbound.feed()[0]?.redirect, label).toBe("manual");
+      expect(outbound.emails(), label).toHaveLength(0);
+    }
+    expect(await count("rsvps")).toBe(0);
+  });
+
+  it("reads the feed only over https (plain http just for localhost)", async () => {
+    const outbound = mockProviders("rsvp");
+    for (const url of ["http://tzionbreslov.org/events.json", "ftp://site.test/events.json", "not a url"]) {
+      await expect(loadEventFeed({ ...env, EVENTS_FEED_URL: url })).rejects.toMatchObject({ code: "SERVICE_NOT_CONFIGURED" });
+    }
+    expect(outbound.calls).toHaveLength(0);
+    // Allowed (the stub doesn't answer it, so it is "unavailable", but it was asked).
+    await expect(loadEventFeed({ ...env, EVENTS_FEED_URL: "http://localhost:3100/events.json" })).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE" });
+    expect(outbound.calls.map((call) => [call.url, call.redirect])).toEqual([["http://localhost:3100/events.json", "manual"]]);
+  });
+
+  it("caches the feed for 60 seconds per isolate, and never caches a failure", async () => {
+    let status = 500;
+    const outbound = mockProviders("rsvp", {
+      feedResponse: () => status === 200 ? Response.json({ syncedAt: null, events: defaultFeedEvents() }) : new Response("", { status })
+    });
+    const now = Date.now();
+    await expect(loadEventFeed(env, now)).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE" });
+    status = 200;
+    expect(await loadEventFeed(env, now)).toHaveLength(4);
+    expect(await loadEventFeed(env, now + 59_000)).toHaveLength(4);
+    expect(outbound.feed()).toHaveLength(2);
+    expect(await loadEventFeed(env, now + 61_000)).toHaveLength(4);
+    expect(outbound.feed()).toHaveLength(3);
+    expect(outbound.feed().every((call) => call.url === FEED_URL && call.redirect === "manual")).toBe(true);
+  });
+
+  it("rejects bad guests, a missing consent, and bad name, email, notes or event id with a field hint", async () => {
+    const outbound = mockProviders("rsvp");
+    const cases: Array<[Record<string, unknown>, string]> = [
+      [{ guests: 0 }, "guests"],
+      [{ guests: 13 }, "guests"],
+      [{ guests: "2.5" }, "guests"],
+      [{ guests: 2.5 }, "guests"],
+      [{ guests: "2" }, "guests"],
+      [{ guests: undefined }, "guests"],
+      [{ consent: undefined }, "consent"],
+      [{ consent: "yes" }, "consent"],
+      [{ consent: true }, "consent"],
+      [{ name: "A" }, "name"],
+      [{ name: "x".repeat(101) }, "name"],
+      [{ name: "Ada\nBcc: attacker@example.test" }, "name"],
+      [{ email: "nope" }, "email"],
+      [{ accessibility: "x".repeat(1001) }, "accessibility"],
+      [{ eventId: "x" }, "eventId"],
+      [{ eventId: EVENT_IDS.open.toUpperCase() }, "eventId"],
+      [{ eventId: undefined }, "eventId"]
+    ];
+    for (const [overrides, field] of cases) {
+      const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload(overrides)), env);
+      expect(response.status, JSON.stringify(overrides).slice(0, 80)).toBe(400);
+      const body = await errorBody(response);
+      expect(body.error).toBe("INVALID_INPUT");
+      expect(body.field).toBe(field);
+    }
+    expect(outbound.calls).toHaveLength(0);
+    expect(await count("rsvps")).toBe(0);
+    expect(await count("rate_limits")).toBe(0);
+  });
+
+  it("rejects a Turnstile token issued for another form before reading the feed", async () => {
+    const outbound = mockProviders("subscribe");
+    const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(response.status).toBe(400);
+    expect((await errorBody(response)).error).toBe("BOT_CHALLENGE_FAILED");
+    expect(outbound.feed()).toHaveLength(0);
+    expect(outbound.emails()).toHaveLength(0);
+    expect(await count("rsvps")).toBe(0);
+  });
+
+  it("rate limits 30 RSVPs per IP and 6 per email in 10 minutes", async () => {
+    mockProviders("rsvp");
+    const email = uniqueEmail();
+    const byEmail: number[] = [];
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      byEmail.push((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ email, guests: 1 }), `198.51.100.${attempt + 1}`), env)).status);
+    }
+    expect(byEmail).toEqual([...Array<number>(6).fill(202), 429]);
+
+    const byIp: number[] = [];
+    for (let attempt = 0; attempt < 31; attempt += 1) {
+      byIp.push((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ guests: 1 }), "192.0.2.50"), env)).status);
+    }
+    expect(byIp).toEqual([...Array<number>(30).fill(202), 429]);
+  });
+
+  it("gives the seat back when an email fails, so a retry with the same requestId books and mails it", async () => {
+    const failing = mockProviders("rsvp", { emailStatus: 500 });
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const failed = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(failed.status).toBe(502);
+    expect((await errorBody(failed)).error).toBe("UPSTREAM_FAILURE");
+    expect(failing.emails().length).toBeGreaterThan(0);
+    expect(await count("rsvps")).toBe(0);
+    failing.spy.mockRestore();
+
+    const outbound = mockProviders("rsvp");
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(retried.status).toBe(202);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect(outbound.emails()).toHaveLength(2);
+    expect(outbound.emails().map((call) => call.headers.get("idempotency-key")).sort())
+      .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("keeps the calendar's title to one line in the email subjects", async () => {
+    const outbound = mockProviders("rsvp", { feedEvents: [feedEvent({ title: "Class\r\nBcc: attacker@example.test\u202e\tnight" })] });
+    const payload = rsvpPayload();
+    expect((await fetchHandler(publicRequest("/v1/rsvp", payload), env)).status).toBe(202);
+    const subjects = outbound.emails().map((call) => (call.body as SentEmail).subject).sort();
+    expect(subjects).toEqual(["New RSVP: Class Bcc: attacker@example.test night", "RSVP received: Class Bcc: attacker@example.test night"]);
+    for (const call of outbound.emails()) {
+      const sent = call.body as SentEmail;
+      expect(sent.to).toHaveLength(1);
+      expect(sent.text).not.toMatch(/Class\r?\nBcc/);
+    }
+  });
+});
+
+describe("GET /v1/rsvp/availability", () => {
+  function availability(requestOrigin?: string) {
+    return fetchHandler(new Request("https://api.test/v1/rsvp/availability", { headers: requestOrigin ? { Origin: requestOrigin } : {} }), env);
+  }
+
+  it("reports full and remaining for every open event, counts only, with CORS for allowed origins only", async () => {
+    mockProviders("rsvp");
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 2 })), env)).status).toBe(202);
+
+    const response = await availability(origin);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(response.headers.get("vary")).toBe("Origin");
+    const text = await response.text();
+    expect(JSON.parse(text)).toEqual({
+      ok: true,
+      events: {
+        [EVENT_IDS.open]: { full: false, remaining: null },
+        [EVENT_IDS.limited]: { full: false, remaining: 1 },
+        [EVENT_IDS.started]: { full: false, remaining: null }
+      }
+    });
+    expect(text).not.toMatch(/@|Ada|Lovelace|example\.test/);
+
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env)).status).toBe(202);
+    const full = await (await availability(origin)).json<{ events: Record<string, unknown> }>();
+    expect(full.events[EVENT_IDS.limited]).toEqual({ full: true, remaining: 0 });
+
+    for (const other of ["https://attacker.test", undefined]) {
+      const response = await availability(other);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("access-control-allow-origin")).toBeNull();
+      expect(response.headers.get("vary")).toBe("Origin");
+    }
+  });
+
+  it("answers 503 EVENTS_UNAVAILABLE, not cacheable, when the feed can't be read", async () => {
+    mockProviders("rsvp", { feedResponse: () => new Response("", { status: 302, headers: { Location: "https://tzionbreslov.com/" } }) });
+    const response = await availability(origin);
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    expect((await errorBody(response)).error).toBe("EVENTS_UNAVAILABLE");
   });
 });
 
@@ -712,5 +1227,19 @@ describe("scheduled cleanup", () => {
     for (const table of ["rate_limits", "request_log", "subscription_confirmations", "webhook_events"]) {
       expect(await count(table), table).toBe(0);
     }
+  });
+
+  it("deletes RSVPs RSVP_RETENTION_DAYS (90) after their event started, and keeps younger ones", async () => {
+    // Stored as the Worker stores an event's start: SQLite's "YYYY-MM-DD HH:MM:SS" (UTC).
+    const insert = (id: string, start: string) => env.DB.prepare(
+      `INSERT INTO rsvps (id, request_id, event_id, event_starts_at, name, email, email_hash, guests, accessibility, created_at)
+       VALUES (?, ?, ?, datetime('now', ?), 'Ada', 'ada@example.test', 'hash', 1, NULL, ?)`
+    ).bind(id, `request-${id}`, EVENT_IDS.open, start, Date.now());
+    await env.DB.batch([insert("started-91-days-ago", "-91 days"), insert("started-89-days-ago", "-89 days"), insert("upcoming", "+1 days")]);
+    const pending: Promise<unknown>[] = [];
+    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+    const { results } = await env.DB.prepare("SELECT id FROM rsvps ORDER BY id").all<{ id: string }>();
+    expect(results.map((row) => row.id)).toEqual(["started-89-days-ago", "upcoming"]);
   });
 });
