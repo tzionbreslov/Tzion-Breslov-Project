@@ -43,7 +43,8 @@ test("Videos opens first, newest first, under the channel header", async ({ page
   await openClasses(page);
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1#tz-vl-title")).toHaveText("Classes");
-  await expect(page.locator(".tz-vl__meta")).toHaveText(`@tzionbreslovproject · ${VIDEOS.length + SHORTS.length} videos`);
+  // A no-break space ties the "·" to the handle.
+  expect(await page.locator(".tz-vl__meta").textContent()).toBe(`@tzionbreslovproject\u00a0· ${VIDEOS.length + SHORTS.length} videos`);
   await expect(button(page, "Videos")).toHaveAttribute("aria-pressed", "true");
   await expect(button(page, "Shorts")).toHaveAttribute("aria-pressed", "false");
   await expect(button(page, "Latest")).toHaveAttribute("aria-pressed", "true");
@@ -52,6 +53,18 @@ test("Videos opens first, newest first, under the channel header", async ({ page
   const videos = await cards(page, "video");
   expect(videos).toHaveLength(VIDEOS.length);
   for (let i = 1; i < videos.length; i++) expect(videos[i].time).toBeLessThanOrEqual(videos[i - 1].time);
+
+  // On phones the handle never breaks, and a wrapped line starts with the count, not a bare "·".
+  for (const width of [320, 360, 390, 414]) {
+    await page.setViewportSize({ width, height: 800 });
+    const meta = await page.locator(".tz-vl__meta").evaluate((node) => {
+      const handle = node.querySelector("strong")!.getClientRects();
+      const count = node.querySelector(".tz-vl__count")!.getBoundingClientRect();
+      return { handleLines: handle.length, handleTop: handle[0].top, countTop: count.top, countLeft: count.left, left: node.getBoundingClientRect().left };
+    });
+    expect(meta.handleLines, `handle lines at ${width}px`).toBe(1);
+    if (meta.countTop > meta.handleTop + 1) expect(Math.round(meta.countLeft), `count starts its line at ${width}px`).toBe(Math.round(meta.left));
+  }
   await expectClean(page, errors);
 });
 
@@ -175,6 +188,17 @@ test("a card plays its video in the dialog; Escape, the close button and the bac
   await expect(iframe).toHaveAttribute("src", `https://www.youtube-nocookie.com/embed/${first.id}?autoplay=1&playsinline=1&rel=0`);
   await expect(iframe).toHaveAttribute("title", first.title);
   expect(await page.evaluate(() => document.documentElement.classList.contains("tz-dialog-open"))).toBe(true);
+
+  // Nothing in the player box to scroll (a scrollbar would show wherever scrollbars take up room).
+  const viewport = page.viewportSize();
+  const sizes = [{ width: 1440, height: 900 }, { width: 1024, height: 600 }, { width: 844, height: 390 }, { width: 390, height: 844 }];
+  for (const size of [viewport, ...sizes]) {
+    if (size) await page.setViewportSize(size);
+    const box = await dialog.evaluate((node) => ({ sh: node.scrollHeight, ch: node.clientHeight, sw: node.scrollWidth, cw: node.clientWidth }));
+    expect(box.sh, `player scroll height at ${size?.width}x${size?.height}`).toBeLessThanOrEqual(box.ch);
+    expect(box.sw, `player scroll width at ${size?.width}x${size?.height}`).toBeLessThanOrEqual(box.cw);
+  }
+  if (viewport) await page.setViewportSize(viewport);
 
   // Focus starts on the close button and Tab never leaves the dialog.
   const close = dialog.getByRole("button", { name: "Close video player" });

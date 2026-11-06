@@ -28,8 +28,10 @@ html.tz-dialog-open { overflow: hidden; }
 .tz-dialog[data-state="open"] { animation: tz-dialog-in .48s cubic-bezier(.16, 1, .3, 1) both; }
 .tz-dialog[data-state="closed"] { animation: tz-dialog-out .22s ease both; }
 
-/* Tab wraps around through these (they hand focus on at once). */
-.tz-dialog .tz-dialog__guard { position: fixed; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; outline: none; }
+/* Tab wraps around through these (they hand focus on at once). Pinned to the box's top
+ * corner: at their static position the last one would hang 1px below the content and
+ * make the box scroll. */
+.tz-dialog .tz-dialog__guard { position: fixed; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; outline: none; }
 
 /* Close: a 42px circle that turns turquoise. */
 .tz-dialog .tz-dialog__close {

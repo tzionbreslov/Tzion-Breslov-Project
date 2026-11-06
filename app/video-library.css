@@ -179,6 +179,12 @@
   /* Keeps "Visit our YouTube channel" on one line down to 360px. */
   .tz-vl .tz-vl__channel { padding: 10px 16px; font-size: 12px; letter-spacing: .4px; }
 }
+@media (max-width: 374px) {
+  /* Too narrow for the handle beside the logo (it would break mid-word): the line goes under both. */
+  .tz-vl .tz-vl__avatar { grid-row: 1; }
+  .tz-vl .tz-vl__title { align-self: center; }
+  .tz-vl .tz-vl__meta { grid-column: 1 / -1; margin-top: 14px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tz-vl .tz-vl__thumb img, .tz-vl .tz-vl__play, .tz-vl .tz-vl__channel,

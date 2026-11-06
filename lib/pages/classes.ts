@@ -70,7 +70,8 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
     `<span class="tz-vl__avatar"><img src="${LOGO}" alt="" width="215" height="216"></span>` +
     `<div class="tz-vl__intro">` +
     `<h1 id="tz-vl-title" class="tz-vl__title">${esc(text.heading)}</h1>` +
-    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong> <span class="tz-vl__count">· ${count}</span></p>` +
+    // The "·" stays with the handle (no-break space), so a wrapped line starts with the count.
+    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong>&nbsp;· <span class="tz-vl__count">${count}</span></p>` +
     `<a class="tz-vl__channel" href="${CHANNEL_URL}" target="_blank" rel="noopener noreferrer">${esc(text.channel)}${EXTERNAL}</a>` +
     `</div></div>` +
     `<div class="tz-vl__bar">` +
