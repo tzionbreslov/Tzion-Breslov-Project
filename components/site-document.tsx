@@ -5,6 +5,7 @@ import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
 import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
 import "@/app/enhancements.css";
+import "@/app/instagram.css";
 
 /**
  * Renders a WordPress-imported page as a full HTML document. The markup,

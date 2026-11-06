@@ -140,6 +140,22 @@ function processPostGrids($, islands) {
   });
 }
 
+/**
+ * Owner-requested addition (2026-11-06, not on the WordPress site): a 4th
+ * "Instagram" tab on the Resources tabs, rendered from content/instagram.json.
+ * Spectra's tab script is index-based, so tab 3 just needs matching markup.
+ */
+function addInstagramTab($, islands) {
+  const tabs = $(".wp-block-uagb-tabs.uagb-block-a64ce816");
+  if (!tabs.length) return;
+  const nav = tabs.find("ul.uagb-tabs__panel");
+  const body = tabs.find(".uagb-tabs__body-wrap");
+  const index = nav.children("li.uagb-tab").length;
+  nav.append(`<li class="uagb-tab " role="none"><a href="#uagb-tabs__tab${index}" class="uagb-tabs-list uagb-tabs__icon-position-left" data-tab="${index}" role="tab">Instagram</a></li>`);
+  body.append(`<div class="wp-block-uagb-tabs-child uagb-tabs__body-container uagb-inner-tab-${index}" aria-labelledby="uagb-tabs__tab${index}"><!--tz:instagram-feed--></div>`);
+  islands.add("instagram-feed");
+}
+
 function processPage(file) {
   const route = routeOf(file);
   const $ = load(fs.readFileSync(file, "utf8"));
@@ -178,6 +194,7 @@ function processPage(file) {
   processForms($, islands);
   processYoutube($, islands);
   processPostGrids($, islands);
+  addInstagramTab($, islands);
   $("noscript").each((_, el) => { if (/gform|sby_/.test($(el).html() ?? "")) $(el).remove(); });
 
   const container = $(".site-container");
@@ -332,7 +349,16 @@ async function main() {
     const { route, page } = processPage(file);
     fs.writeFileSync(path.join(contentDir, "pages", `${route.key}.json`), `${JSON.stringify(page, null, 1)}\n`);
     if (route.path) routes.push({ path: route.path, key: route.key });
-    collectAssets(JSON.stringify(page).replaceAll("\\/", "/"), assets);
+    // Head tags and JSON-LD keep absolute production URLs (og:image, schema logo…);
+    // they must exist on our own host once the site URL is switched, so collect
+    // them as root-relative paths too.
+    const own = (s) => s.replaceAll(`${PRODUCTION}/`, "/").replaceAll("http://tzionbreslov.com/", "/");
+    collectAssets(own(JSON.stringify(page).replaceAll("\\/", "/")), assets);
+    for (const h of page.head) {
+      if (h.t === "meta" || h.t === "link") for (const v of Object.values(h.attrs)) collectAssets(own(String(v)), assets);
+      // Parsing drops Yoast's \/ escaping, which the stringified page keeps.
+      else if (h.t === "jsonld") collectAssets(own(JSON.stringify(JSON.parse(h.json))), assets);
+    }
   }
   for (const kind of ["fragments", "styles", "scripts"]) {
     for (const f of fs.readdirSync(path.join(contentDir, kind))) collectAssets(fs.readFileSync(path.join(contentDir, kind, f), "utf8").replaceAll("\\/", "/"), assets);

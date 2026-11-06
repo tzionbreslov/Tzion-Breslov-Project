@@ -1,4 +1,5 @@
 import { readShared } from "./content";
+import { renderInstagramFeed } from "./instagram-feed";
 
 /**
  * Renders the Resources page YouTube grid with the same markup the
@@ -64,5 +65,8 @@ export function renderYoutubeFeed() {
 
 /** Expands build-time tokens left in imported HTML. */
 export function expandTokens(html: string) {
-  return html.includes("<!--tz:youtube-feed-->") ? html.replace("<!--tz:youtube-feed-->", renderYoutubeFeed()) : html;
+  let out = html;
+  if (out.includes("<!--tz:youtube-feed-->")) out = out.replace("<!--tz:youtube-feed-->", renderYoutubeFeed());
+  if (out.includes("<!--tz:instagram-feed-->")) out = out.replace("<!--tz:instagram-feed-->", renderInstagramFeed());
+  return out;
 }

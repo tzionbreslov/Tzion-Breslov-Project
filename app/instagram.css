@@ -1,0 +1,137 @@
+/*
+ * Instagram tab on Resources — an owner-requested addition (the WordPress
+ * site never had it). The grid mirrors the YouTube tab beside it; the preview
+ * sets captions like a page of teaching. Theme root font-size is 10px, so
+ * sizes are in px.
+ */
+.tz-ig,
+.tz-igv__panel {
+  --ig-blue: var(--wp--preset--color--dark-blue, #1e61a1);
+  --ig-turq: var(--wp--preset--color--turquoise, #70b9bc);
+  --ig-paper: var(--wp--preset--color--light-blue, #f2f9ff);
+  --ig-ink: #10283f;
+}
+
+.tz-ig { font-family: Montserrat, sans-serif; padding: 8px; }
+.tz-ig__profile { display: flex; align-items: center; gap: 14px; padding: 0 8px 18px; }
+.tz-ig__avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--ig-turq); }
+.tz-ig__who { display: flex; flex-direction: column; min-width: 0; }
+.tz-ig__name { font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 600; line-height: 1.15; color: #000; }
+.tz-ig__handle { font-size: 15px; color: var(--ig-blue); text-decoration: none; }
+.tz-ig__handle:hover, .tz-ig__handle:focus-visible { text-decoration: underline; }
+
+.tz-ig__follow,
+.tz-igv__cta {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 11px 26px; border-radius: 30px; text-decoration: none; white-space: nowrap;
+  font: 700 13px/1 Montserrat, sans-serif; letter-spacing: .04em; text-transform: uppercase;
+  background: var(--ig-turq); color: #fff; box-shadow: 0 4px 12px rgb(16 40 63 / .18);
+}
+.tz-ig__follow { margin-left: auto; }
+.tz-ig__follow:hover, .tz-igv__cta:hover { background: var(--ig-blue); color: #fff; }
+.tz-ig__follow:focus-visible, .tz-igv__cta:focus-visible { outline: 3px solid var(--ig-blue); outline-offset: 3px; }
+
+/* The theme styles every content list (disc bullets, left margin); undo it here. */
+.tz-ig ul.tz-ig__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0 8px; list-style: none; }
+.tz-ig ul.tz-ig__grid > li.tz-ig__item { margin: 0; padding: 0; list-style: none; }
+.tz-ig ul.tz-ig__grid > li.tz-ig__item::marker { content: none; }
+.tz-ig__item.tz-more { display: none; }
+.tz-ig__tile { position: relative; display: block; aspect-ratio: 1; overflow: hidden; background: var(--ig-paper); }
+.tz-ig__tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s ease; }
+.tz-ig__badge { position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; filter: drop-shadow(0 1px 2px rgb(0 0 0 / .45)); }
+.tz-ig__badge svg { width: 100%; height: 100%; fill: #fff; }
+.tz-ig__badge--reel svg rect { fill: none; stroke: #fff; stroke-width: 2.2; }
+.tz-ig__wash {
+  position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 18px;
+  background: linear-gradient(to top, rgb(16 40 63 / .88), rgb(30 97 161 / .35) 55%, transparent);
+  opacity: 0; transition: opacity .25s ease;
+}
+.tz-ig__excerpt { color: #fff; font: 500 14px/1.45 Montserrat, sans-serif; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.tz-ig__tile:hover .tz-ig__wash, .tz-ig__tile:focus-visible .tz-ig__wash { opacity: 1; }
+.tz-ig__tile:hover img, .tz-ig__tile:focus-visible img { transform: scale(1.03); }
+.tz-ig__tile:focus-visible { outline: 3px solid var(--ig-blue); outline-offset: 3px; }
+
+.tz-ig__more { display: flex; flex-direction: column; align-items: center; padding: 24px 8px 4px; }
+.tz-ig__load {
+  padding: 11px 26px; border: 2px solid var(--ig-blue); border-radius: 30px; background: transparent; color: var(--ig-blue);
+  font: 700 13px/1 Montserrat, sans-serif; letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+}
+.tz-ig__load:hover, .tz-ig__load:focus-visible { background: var(--ig-blue); color: #fff; outline: none; }
+.tz-ig__status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.tz-ig__empty { margin: 6px 8px 0; padding: 28px; background: var(--ig-paper); font-family: Newsreader, Georgia, serif; font-size: 22px; line-height: 1.5; color: var(--ig-ink); }
+.tz-ig__empty a { color: var(--ig-blue); }
+
+/* Preview: photo/carousel on deep blue, caption on a light-blue page. */
+html.tz-igv-open { overflow: hidden; }
+.tz-igv { position: fixed; inset: 0; z-index: 100000; display: grid; place-items: center; padding: 32px; background: rgb(12 33 54 / .86); }
+.tz-igv.is-animated .tz-igv__panel { animation: tz-igv-in .28s cubic-bezier(.2, .8, .2, 1); }
+@keyframes tz-igv-in { from { opacity: 0; transform: translateY(10px) scale(.985); } to { opacity: 1; transform: none; } }
+.tz-igv__panel {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 400px;
+  width: min(1120px, 100%); height: min(760px, calc(100vh - 64px)); overflow: hidden;
+  background: var(--ig-paper); box-shadow: 0 30px 80px rgb(0 0 0 / .45);
+}
+.tz-igv__media { position: relative; min-height: 0; background: #0c2136; }
+.tz-igv__track { position: absolute; inset: 0; touch-action: pan-y; }
+.tz-igv__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .3s ease; }
+.tz-igv__img.is-current { opacity: 1; }
+.tz-igv__nav {
+  position: absolute; top: 50%; translate: 0 -50%; width: 44px; height: 44px; border: 0; border-radius: 50%;
+  background: rgb(255 255 255 / .92); cursor: pointer; display: grid; place-items: center; box-shadow: 0 2px 10px rgb(0 0 0 / .3);
+}
+.tz-igv__nav svg, .tz-igv__close svg { width: 20px; height: 20px; fill: none; stroke: var(--ig-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tz-igv__nav--prev { left: 14px; }
+.tz-igv__nav--next { right: 14px; }
+.tz-igv__nav:focus-visible, .tz-igv__close:focus-visible, .tz-igv__play:focus-visible { outline: 3px solid var(--ig-turq); outline-offset: 2px; }
+.tz-igv__count {
+  position: absolute; left: 50%; bottom: 14px; translate: -50% 0; margin: 0; padding: 5px 12px; border-radius: 20px;
+  background: rgb(12 33 54 / .7); color: #fff; font: 600 13px/1.2 Montserrat, sans-serif;
+}
+.tz-igv__play {
+  position: absolute; inset: 0; margin: auto; width: 84px; height: 84px; border-radius: 50%;
+  background: rgb(255 255 255 / .9); display: grid; place-items: center; box-shadow: 0 6px 24px rgb(0 0 0 / .35);
+}
+.tz-igv__play svg { width: 34px; height: 34px; fill: var(--ig-blue); margin-left: 5px; }
+.tz-igv__text { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; border-left: 1px solid rgb(30 97 161 / .12); }
+.tz-igv__head { display: flex; align-items: center; gap: 12px; padding: 22px 64px 18px 28px; border-bottom: 1px solid rgb(30 97 161 / .12); }
+.tz-igv__avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.tz-igv__who { display: flex; flex-direction: column; }
+.tz-igv__name { margin: 0; font-family: Newsreader, Georgia, serif; font-size: 20px; font-weight: 600; line-height: 1.2; color: #000; }
+.tz-igv__date { font: 500 13px/1.4 Montserrat, sans-serif; color: var(--ig-blue); }
+.tz-igv__caption {
+  overflow-y: auto; overscroll-behavior: contain; padding: 26px 28px 30px;
+  font-family: Newsreader, Georgia, serif; font-size: 19px; line-height: 1.65; color: var(--ig-ink);
+}
+.tz-igv__caption:focus-visible { outline: 2px solid var(--ig-blue); outline-offset: -4px; }
+.tz-igv__caption p { margin: 0 0 1em; font-size: inherit; line-height: inherit; }
+.tz-igv__caption p:last-child { margin-bottom: 0; }
+.tz-igv__tag { color: var(--ig-blue); }
+.tz-igv__nocaption { font-style: italic; color: rgb(16 40 63 / .7); }
+.tz-igv__foot { padding: 18px 28px 24px; border-top: 1px solid rgb(30 97 161 / .12); }
+.tz-igv__cta { width: 100%; padding: 15px 26px; font-size: 14px; }
+.tz-igv__close {
+  position: absolute; top: 14px; right: 14px; z-index: 2; width: 40px; height: 40px; border: 0; border-radius: 50%;
+  background: #fff; cursor: pointer; display: grid; place-items: center; box-shadow: 0 2px 10px rgb(0 0 0 / .18);
+}
+
+@media (max-width: 900px) {
+  .tz-ig ul.tz-ig__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .tz-ig__profile { flex-wrap: wrap; }
+  .tz-ig__follow { margin-left: 0; width: 100%; }
+  .tz-igv { padding: 0; place-items: stretch; }
+  .tz-igv__panel { grid-template-columns: 1fr; grid-template-rows: minmax(0, 55vh) minmax(0, 1fr); width: 100%; height: 100%; }
+  .tz-igv__text { border-left: 0; }
+  .tz-igv__head { padding: 16px 64px 14px 20px; }
+  .tz-igv__caption { padding: 18px 20px 22px; font-size: 18px; }
+  .tz-igv__foot { padding: 14px 20px calc(16px + env(safe-area-inset-bottom)); }
+  .tz-igv__close { top: 12px; right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-ig__tile img, .tz-ig__wash, .tz-igv__img { transition: none; }
+  .tz-ig__tile:hover img, .tz-ig__tile:focus-visible img { transform: none; }
+}
+
+/* The theme pads every <button>; these controls are fixed-size circles. */
+.tz-igv button.tz-igv__nav,
+.tz-igv button.tz-igv__close { padding: 0; min-width: 0; min-height: 0; line-height: 0; letter-spacing: 0; text-transform: none; }

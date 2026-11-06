@@ -1,0 +1,179 @@
+{
+  "username": "tzionbreslovproject",
+  "name": "R David Kalmus",
+  "profileUrl": "https://www.instagram.com/tzionbreslovproject/",
+  "avatar": "/media/instagram/avatar.jpg",
+  "perPage": 9,
+  "syncedAt": "fixture",
+  "posts": [
+    {
+      "id": "s1",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "Work at not needing approval from anyone, and you will be free to be who you really are.\n\n— Rebbe Nachman of Breslov\n\n#breslov #rebbenachman #joy",
+      "timestamp": "2026-10-30T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/07/PHOTO-2023-06-27-19-08-13-1.png",
+          "width": 1066,
+          "height": 1287
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "carousel",
+      "caption": "Last night's class: \"Rise Above the Impossible.\" Thank you to everyone who joined us in Beit Shemesh and online.\nThe full recording is on our YouTube channel — link in bio.\n\n#tzionbreslov #torah",
+      "timestamp": "2026-10-27T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/R_Kalmus_lecture_screen_1_1.png",
+          "width": 930,
+          "height": 1044
+        },
+        {
+          "src": "/wp-content/uploads/2023/06/hero2.png",
+          "width": 1920,
+          "height": 802
+        },
+        {
+          "src": "/wp-content/uploads/2023/06/Group-200.png",
+          "width": 1019,
+          "height": 1064
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "reel",
+      "caption": "Unlimited. A two-minute reminder that HaShem is with you, always. 🔥",
+      "timestamp": "2026-10-24T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/clouds-in-the-sky-1.png",
+          "width": 1920,
+          "height": 739
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "There is nothing more liberating than joy!",
+      "timestamp": "2026-10-21T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/eagle-in-the-sky.png",
+          "width": 1920,
+          "height": 802
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "A new path never before traveled. It's a very old path. And yet, it's completely new.",
+      "timestamp": "2026-10-18T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/homepage-hero.png",
+          "width": 1659,
+          "height": 929
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "carousel",
+      "caption": "Shabbos in Tzion. @tzionbreslovproject",
+      "timestamp": "2026-10-15T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/Group-277.png",
+          "width": 680,
+          "height": 710
+        },
+        {
+          "src": "/wp-content/uploads/2023/06/Group-250.png",
+          "width": 101,
+          "height": 101
+        }
+      ]
+    },
+    {
+      "id": "s7",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "",
+      "timestamp": "2026-10-12T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/clouds-and-sky.png",
+          "width": 1920,
+          "height": 1628
+        }
+      ]
+    },
+    {
+      "id": "s8",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "Climb, but hold on.",
+      "timestamp": "2026-10-09T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/Group-251.png",
+          "width": 106,
+          "height": 82
+        }
+      ]
+    },
+    {
+      "id": "s9",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "Joy is the key.",
+      "timestamp": "2026-10-06T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/Group-252.png",
+          "width": 117,
+          "height": 122
+        }
+      ]
+    },
+    {
+      "id": "s10",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "image",
+      "caption": "Rip sadness into joy.",
+      "timestamp": "2026-10-03T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/Group-216.png",
+          "width": 106,
+          "height": 106
+        }
+      ]
+    },
+    {
+      "id": "s11",
+      "permalink": "https://www.instagram.com/tzionbreslovproject/",
+      "type": "reel",
+      "caption": "Why we need Rebbe Nachman.",
+      "timestamp": "2026-09-30T12:00:00.000Z",
+      "media": [
+        {
+          "src": "/wp-content/uploads/2023/06/Group-217.png",
+          "width": 119,
+          "height": 100
+        }
+      ]
+    }
+  ]
+}
