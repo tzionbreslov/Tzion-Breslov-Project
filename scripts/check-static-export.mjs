@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { siteRoutes } from "../config/site-structure.mjs";
 import { IMPORTED_ORIGIN, resolveSiteUrl } from "../config/site-url.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +24,7 @@ if (!fs.existsSync(out)) {
   process.exit(1);
 }
 
-const { routes, redirects } = JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8"));
+const { routes, redirects } = siteRoutes(JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8")));
 const htmlFor = (route) => path.join(out, route, "index.html");
 
 for (const file of ["404.html", ".nojekyll", "robots.txt", "sitemap_index.xml", "page-sitemap.xml", "post-sitemap.xml", "video-sitemap.xml"]) {

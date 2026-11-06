@@ -1,10 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { cache } from "react";
+import { siteRoutes, type RouteIndex } from "@/config/site-structure.mjs";
+import { buildPage } from "@/lib/pages/registry";
 
 /**
  * Build-time access to the content imported from WordPress
- * (see scripts/import-wordpress.mjs). Server-only.
+ * (see scripts/import-wordpress.mjs), plus the pages composed in code
+ * (lib/pages, keys starting with "tz:"). Which routes exist is decided by
+ * config/site-structure.mjs. Server-only.
  */
 
 export type Attrs = Record<string, string>;
@@ -36,19 +40,14 @@ export type PageContent = {
   islands: Island[];
 };
 
-type RouteIndex = {
-  site: string;
-  routes: Array<{ path: string; key: string }>;
-  redirects: Record<string, string>;
-};
-
 const contentDir = path.join(process.cwd(), "content");
 
 export const readShared = cache((ref: string) => fs.readFileSync(path.join(contentDir, ref), "utf8"));
 
-export const routeIndex = cache((): RouteIndex => JSON.parse(readShared("routes.json")));
+export const routeIndex = cache((): RouteIndex => siteRoutes(JSON.parse(readShared("routes.json"))));
 
-export const loadPage = cache((key: string): PageContent => JSON.parse(readShared(`pages/${key}.json`)));
+export const loadPage = cache((key: string): PageContent =>
+  key.startsWith("tz:") ? buildPage(key) : JSON.parse(readShared(`pages/${key}.json`)));
 
 /** "/video/video-1/" <-> ["video", "video-1"] */
 export function slugToPath(slug: string[] | undefined) {

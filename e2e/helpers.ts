@@ -1,5 +1,5 @@
 import { expect, type Page } from "@playwright/test";
-import { CSP } from "../config/security-headers.mjs";
+import { violatesOurPolicy } from "../scripts/lib/csp-console.mjs";
 
 // A pre-existing bug in the original theme, kept for fidelity: its number
 // counter (isScrolledIntoView in global.js) throws on scroll on pages without
@@ -12,19 +12,8 @@ const isKnownThemeError = (error: Error) => {
   return stack.includes(KNOWN_THEME_SCRIPT) && stack.includes(KNOWN_THEME_FUNCTION);
 };
 
-// Chromium logs every CSP violation on the console, quoting the directive it
-// broke: `… violates the following Content Security Policy directive: "img-src 'self' …"`.
-// Embedded third-party frames (e.g. the YouTube player, which has its own
-// report-only policy) log violations of *their* policies to the same console,
-// so only messages quoting one of our directives count. A CSP message whose
-// directive can't be read counts too, so nothing is ever silently dropped.
-const OUR_DIRECTIVES = new Set<string>((CSP as string).split(";").map((directive) => directive.trim()));
-const QUOTED_DIRECTIVE = /Content Security Policy directive[^"]*"([^"]*)"/;
-const violatesOurPolicy = (text: string) => {
-  if (!/Content Security Policy/i.test(text)) return false;
-  const directive = QUOTED_DIRECTIVE.exec(text)?.[1];
-  return directive === undefined || OUR_DIRECTIVES.has(directive);
-};
+// Which console messages are violations of our CSP (and not, say, the YouTube
+// player's own report-only policy): scripts/lib/csp-console.mjs.
 
 // page.consoleMessages() keeps only the last 200 messages, and a YouTube embed
 // alone can log ~200, so a tracked page records our violations as they happen.
@@ -54,7 +43,7 @@ export async function cspViolations(page: Page): Promise<string[]> {
   }
   // Untracked page: fall back to the console's (capped) history.
   const messages = await page.consoleMessages({ filter: "all" });
-  return messages.map((message) => message.text()).filter(violatesOurPolicy);
+  return messages.map((message) => message.text()).filter((text) => violatesOurPolicy(text));
 }
 
 /** No page errors and no CSP violations. Every spec calls this at the end. */

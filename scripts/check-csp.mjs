@@ -19,9 +19,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 import { CSP } from "../config/security-headers.mjs";
+import { siteRoutes } from "../config/site-structure.mjs";
+import { violatesOurPolicy } from "./lib/csp-console.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const { routes } = JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8"));
+const { routes } = siteRoutes(JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8")));
 const liveBase = process.argv[2]?.replace(/\/+$/, "");
 
 let BASE = liveBase;
@@ -55,6 +57,9 @@ const reportOnly = first.headers.get("content-security-policy-report-only");
 if (!liveBase && enforced !== CSP) throw new Error("local server is not sending the CSP from config/security-headers.mjs");
 if (liveBase && !enforced && !reportOnly) throw new Error(`${liveBase} sends no Content-Security-Policy(-Report-Only) header`);
 console.log(`checking ${BASE} (${enforced ? "enforced" : "report-only"} CSP)`);
+// The policy actually served decides which console reports are ours (embedded
+// frames such as the YouTube player log violations of their own policies).
+const servedPolicy = [enforced, reportOnly].filter(Boolean).join("; ");
 
 const violations = [];
 const browser = await chromium.launch();
@@ -66,7 +71,10 @@ await context.addInitScript(() => {
 });
 const page = await context.newPage();
 page.on("console", (msg) => {
-  if (/Content Security Policy|Refused to/i.test(msg.text())) violations.push(`[console ${page.url()}] ${msg.text().slice(0, 300)}`);
+  const text = msg.text();
+  // Our CSP, plus anything else the headers made the browser refuse (nosniff, X-Frame-Options).
+  const refused = /Content Security Policy/i.test(text) ? violatesOurPolicy(text, servedPolicy) : /Refused to/i.test(text);
+  if (refused) violations.push(`[console ${page.url()}] ${text.slice(0, 300)}`);
 });
 
 const visit = async (url, interact) => {

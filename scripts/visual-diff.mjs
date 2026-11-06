@@ -22,7 +22,7 @@ const MASK_NAV = args.includes("--mask-nav");
 const pageArgs = args.filter((arg) => !arg.startsWith("--"));
 const NAV_SELECTORS = "header.site-header, .mobile-menu-wrap, #genesis-footer-widgets";
 const PAGES = pageArgs.length ? pageArgs : [
-  "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/",
+  "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/", "/articles/",
   "/parshat-noach-october-8-9-2021/", "/video/video-1/", "/category/uncategorized/",
   "/author/esti-wolo/", "/no-such-page/"
 ];

@@ -18,12 +18,20 @@ WordPress backup (.wpress, private, not in git)
 - `content/pages/*.json` — one file per URL: head tags, body classes, page HTML, scripts.
 - `content/fragments/`, `content/styles/`, `content/scripts/` — shared header/footer HTML and de-duplicated inline CSS/JS.
 - `public/wp-content`, `public/wp-includes` — only the images, CSS and JS the pages actually reference.
+- `config/site-structure.mjs` — the site's structure on top of the import: pages composed in code (`NEW_ROUTES`, keys
+  `tz:…`), imported pages that are removed (`REMOVED_PATHS`) and link rewrites. Next, the sitemaps and every check
+  script take their route list from its `siteRoutes()`, so a re-import can't bring a removed page back.
+- `lib/pages/` — the composed pages (today `/articles/` + `/articles/page/2/`), built from Tzion's own markup:
+  `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+  `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
+  description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. Their new English text lives
+  only in `content/copy/en.json`.
 - `app/[[...slug]]` — one catch-all route renders every page; `app/global-not-found.tsx` is the 404.
 - The original theme scripts (jQuery, GSAP animations, Spectra blocks, slick carousel) still run unchanged.
   React only adds the interactive pieces in `components/enhancers.tsx`:
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
   - Resources YouTube grid (lightbox, Load More) → `lib/client/youtube.ts`, data in `content/youtube.json`
-  - Resources post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
+  - Resources and Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), Yoast's sitemaps and `robots.txt` are
@@ -36,7 +44,7 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run dev` | Next dev server at http://localhost:3000 |
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
-| `npm run check` | Typecheck, lint, Worker tests, build, export check |
+| `npm run check` | Typecheck (site + Worker), lint, unit tests (`scripts/**/*.test.mjs`), Worker tests, build, export check, wording check against checkpoint-001, browser tests (Playwright on `out/` with the enforced CSP) |
 | `npm run sync:instagram` | Pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
