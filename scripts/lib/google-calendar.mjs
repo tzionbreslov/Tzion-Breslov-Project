@@ -73,11 +73,16 @@ const NO_RSVP = /^\s*no\s+rsvp\s*[.!]?\s*$/i;
 const RSVP_LIMIT = /^\s*rsvp\s+limit\s*:\s*(\d+)\s*[.!]?\s*$/i;
 /** Any line that starts like a limit, so a limit that isn't a number is reported, not shown. */
 const RSVP_LIMIT_LINE = /^\s*rsvp\s+limit\s*:/i;
+/** "RSVP limit" without its colon ("RSVP limit 40"): shown as written, but reported. */
+const RSVP_LIMIT_WORDS = /^\s*rsvp\s+limit\b/i;
+const LIMIT_EXAMPLE = 'Write it on a line of its own like "RSVP limit: 40".';
 
 /**
  * The description's markers, read from the whole text, and the text without
  * them, shortened. A limit must be a whole number of at least 1; anything else
- * on a "RSVP limit:" line means no limit, and a warning for the owner.
+ * on a "RSVP limit:" line means no limit, and a warning for the owner. A line
+ * that starts with "RSVP limit" but has no colon stays in the text, also with
+ * a warning.
  */
 function readDescription(value, title) {
   let rsvp = "open";
@@ -90,8 +95,11 @@ function readDescription(value, title) {
     } else if (RSVP_LIMIT_LINE.test(line)) {
       const count = Number(line.match(RSVP_LIMIT)?.[1] ?? Number.NaN);
       if (Number.isSafeInteger(count) && count >= 1) limit ??= count;
-      else warnings.push(`"${title}": "${line}" is not an RSVP limit of 1 or more, so the event has no limit. Write it like "RSVP limit: 40".`);
+      else warnings.push(`"${title}": "${line}" is not an RSVP limit of 1 or more, so the event has no limit. ${LIMIT_EXAMPLE}`);
     } else {
+      if (RSVP_LIMIT_WORDS.test(line)) {
+        warnings.push(`"${title}": "${line}" is shown on the page as written and sets no limit (it has no colon). ${LIMIT_EXAMPLE}`);
+      }
       kept.push(line);
     }
   }

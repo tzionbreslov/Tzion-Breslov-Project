@@ -13,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRemovedPath, NEW_ROUTES, REMOVED_SITEMAPS } from "../config/site-structure.mjs";
 import { resolveSiteUrl, rewriteOrigin } from "../config/site-url.mjs";
-import { upcomingEvents } from "../lib/events.mjs";
+import { publishedEvents } from "../lib/events.mjs";
 import { readGallery } from "./lib/gallery.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -56,9 +56,8 @@ fs.writeFileSync(path.join(root, "content", "gallery.generated.json"), `${JSON.s
 console.log(`gallery: ${gallery.length} photos`);
 
 // The events the Events page lists, as /events.json: what the forms Worker needs to
-// take RSVPs (which events exist, when they start, their RSVP setting and limit).
+// take RSVPs (which events exist, when they are, their RSVP setting and limit).
 const { syncedAt, events } = JSON.parse(fs.readFileSync(path.join(root, "content", "events.json"), "utf8"));
-const published = upcomingEvents(events).map(({ id, title, startsAt, endsAt, timeZone, rsvp, limit }) =>
-  ({ id, title, startsAt, endsAt, timeZone, rsvp, limit }));
+const published = publishedEvents(events);
 fs.writeFileSync(path.join(publicDir, "events.json"), `${JSON.stringify({ syncedAt, events: published }, null, 2)}\n`);
 console.log(`events: ${published.length} upcoming`);

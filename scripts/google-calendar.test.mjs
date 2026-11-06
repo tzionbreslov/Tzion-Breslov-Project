@@ -208,6 +208,17 @@ test('"RSVP limit: 0" or a limit that is not a number means no limit, with a war
   }
 });
 
+test('a line that starts like "RSVP limit" without its colon is shown as written, with a warning', () => {
+  const { event, warnings } = one({ summary: "Melave Malka", description: ["Come early", "RSVP limit 40"].join("\n") });
+  assert.equal(event.limit, null);
+  assert.equal(event.summary, ["Come early", "RSVP limit 40"].join("\n"));
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Melave Malka/);
+  assert.match(warnings[0], /RSVP limit 40/);
+  // Another word is not a marker.
+  assert.deepEqual(one({ description: "RSVP limited to members" }).warnings, []);
+});
+
 test("a weekly class with a bad limit warns once, not once per date", () => {
   const { warnings } = buildCalendarCatalog(calendar([vevent({ description: "RSVP limit: none", extra: ["RRULE:FREQ=WEEKLY;COUNT=5"] })]), { now: NOW });
   assert.equal(warnings.length, 1);

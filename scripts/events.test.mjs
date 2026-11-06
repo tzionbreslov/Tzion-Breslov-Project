@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { load } from "cheerio";
 import copy from "../content/copy/en.json" with { type: "json" };
-import { formatEventWhen, renderEventsList, upcomingEvents } from "../lib/events.mjs";
+import { formatEventWhen, publishedEvents, renderEventsList, upcomingEvents } from "../lib/events.mjs";
 
 /** An event record as scripts/lib/google-calendar.mjs writes it. */
 const record = (fields = {}) => ({
@@ -115,6 +115,21 @@ test("events that have ended are left out (a cached list can be a day old)", () 
     record({ id: "later", startsAt: "2026-11-09T17:30:00.000Z", endsAt: "2026-11-09T19:00:00.000Z" })
   ];
   assert.deepEqual(upcomingEvents(events, new Date("2026-11-08T19:00:00.000Z")).map((event) => event.id), ["running", "later"]);
+});
+
+// /events.json (scripts/write-site-files.mjs) is what the forms Worker reads, and formats
+// with formatEventWhen for its emails: a record there must read exactly as on the page.
+test("/events.json's records format exactly as the page's cards, all-day events included", () => {
+  const allDay = record({ id: "day", allDay: true, timeZone: "UTC", startsAt: "2026-11-09T00:00:00.000Z", endsAt: "2026-11-10T00:00:00.000Z", summary: "Hi", location: "Hall" });
+  const timed = record({ id: "timed", startsAt: "2026-11-15T17:30:00.000Z", endsAt: "2026-11-15T19:00:00.000Z", limit: 40 });
+  const published = publishedEvents([allDay, timed], new Date("2026-11-01T00:00:00.000Z"));
+  assert.deepEqual(published.map((event) => Object.keys(event).sort()), Array(2).fill(["allDay", "endsAt", "id", "limit", "rsvp", "startsAt", "timeZone", "title"]));
+  assert.equal(formatEventWhen(published[0]), "Monday, November 9, 2026");
+  assert.equal(formatEventWhen(published[0]), formatEventWhen(allDay));
+  assert.equal(formatEventWhen(published[1]), formatEventWhen(timed));
+  assert.equal(published[1].limit, 40);
+  // Like the page, it leaves out what has ended.
+  assert.deepEqual(publishedEvents([allDay, timed], new Date("2026-11-10T00:00:00.000Z")).map((event) => event.id), ["timed"]);
 });
 
 // Global constraint: build-time data is never committed. The deploy restores the

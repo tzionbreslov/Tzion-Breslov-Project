@@ -94,7 +94,7 @@ photos are placeholders from the old site (`scripts/convert-gallery-placeholders
 
 Source: the channel's public RSS feed,
 `https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).
-The deploy workflow refreshes it at build time and runs twice a day (07:00 and 21:00 Israel time), so new uploads
+The deploy workflow refreshes it at build time and runs twice a day (around 07:00 and 21:00 Israel time), so new uploads
 appear within half a day without a commit. Videos that scroll out of the feed's 15-entry window only stay listed if they
 are in the committed `content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
 intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
@@ -102,7 +102,7 @@ intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps 
 ## Events (Google Calendar)
 
 The Events page lists the upcoming events of one public Google Calendar, "Tzion Breslov Events": whoever manages
-events only uses the calendar. Every deploy (and the rebuilds at 07:00 and 21:00 Israel time) reads its public iCal
+events only uses the calendar. Every deploy (and the rebuilds around 07:00 and 21:00 Israel time) reads its public iCal
 address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/events.json`, carried between deploys in
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also

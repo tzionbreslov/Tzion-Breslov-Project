@@ -170,13 +170,19 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
-  // From 1280px to 1920px (app/navigation.css narrows the items' padding below 1920px): the six
-  // items on one line, the logo in the middle of the page, and at least 12px between the menu
-  // and the logo, and between the logo and the buttons. Measured with real scrollbars (headless
-  // Chromium hides them; a 15px one moves the page's centre), at rest on each page (its current
-  // item bold), and on /events/ also with the Resources panel open over the hero, which makes
-  // Resources bold too: the widest the menu gets (on /classes/ Resources is bold already).
+  // From 1280px to 1920px (app/navigation.css: below 1920px the items take 17px text and 8px a
+  // side, 6px below 1340px; from 1920px the theme's 18px and 15px): the six items on one line,
+  // the logo in the middle of the page, and at least 12px between the menu and the logo, and
+  // between the logo and the buttons. Measured with real scrollbars (headless Chromium hides
+  // them; a 15px one moves the page's centre), at rest on each page (its current item bold),
+  // and on /events/ also with the Resources panel open over the hero, which makes Resources
+  // bold too: the widest the menu gets (on /classes/ Resources is bold already).
   const FIT_WIDTHS = [1280, 1300, 1339, 1340, 1366, 1440, 1536, 1600, 1680, 1850, 1910, 1919, 1920];
+  /** The top-level items' text size and side padding at `width` (Ruling R22). */
+  const itemStyle = (width: number) =>
+    width < 1340 ? { fontSize: "17px", padding: "6px" }
+      : width < 1920 ? { fontSize: "17px", padding: "8px" }
+        : { fontSize: "18px", padding: "15px" };
   for (const path of ["/", "/events/", "/classes/"]) {
     test(`on ${path} the menu fits beside the centred logo from 1280px to 1920px, with real scrollbars`, async ({ playwright, browserName, baseURL }) => {
       test.slow();
@@ -190,7 +196,10 @@ test.describe("desktop menu", () => {
           const box = (element: Element) => element.getBoundingClientRect();
           const items = [...document.querySelectorAll("#menu-main-menu-links > li")];
           const title = box(document.querySelector(".title-area")!);
+          const styles = [...document.querySelectorAll("#menu-main-menu-links > li > a, #menu-main-menu-links > li > button")].map((item) => getComputedStyle(item));
           return {
+            fontSizes: [...new Set(styles.map((style) => style.fontSize))],
+            paddings: [...new Set(styles.flatMap((style) => [style.paddingLeft, style.paddingRight]))],
             scrollbar: window.innerWidth - document.documentElement.clientWidth,
             tops: items.map((item) => Math.round(box(item).top)),
             lastRight: Math.max(...items.map((item) => box(item).right)),
@@ -212,6 +221,9 @@ test.describe("desktop menu", () => {
             }
             const layout = await measure();
             expect(layout.scrollbar, `a real scrollbar on ${at}`).toBeGreaterThan(0);
+            const { fontSize, padding } = itemStyle(width);
+            expect(layout.fontSizes, `text size on ${at}`).toEqual([fontSize]);
+            expect(layout.paddings, `side padding on ${at}`).toEqual([padding]);
             expect(layout.tops, at).toHaveLength(6);
             expect(new Set(layout.tops).size, `one line on ${at}`).toBe(1);
             expect(Math.abs(layout.titleCentre - layout.pageCentre), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);

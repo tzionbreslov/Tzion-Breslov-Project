@@ -30,8 +30,9 @@
 - 2026-11-06 — Site structure design approved (docs/superpowers/specs/2026-11-06-site-structure-design.md); phase 1 =
   everything except translations, which come last.
 - 2026-11-06 — Dependabot: TypeScript 7 ignored (typescript-eslint 8 supports TS < 7 only); revisit later.
-- 2026-11-06 — Calendar refresh only twice daily, morning and night (owner): the deploy rebuilds at 07:00 and 21:00
-  Israel time (the times are the spec's call), replacing the daily 04:41 UTC rebuild. Events come from one public
+- 2026-11-06 — Calendar refresh only twice daily, morning and night (owner): the deploy rebuilds around 07:00 and 21:00
+  Israel time (cron 07:05 and 21:05 Asia/Jerusalem, off the hour; the times are the spec's call), replacing the
+  daily 04:41 UTC rebuild. Events come from one public
   Google Calendar (`GOOGLE_CALENDAR_ICAL_URL`, a repository variable the owner sets: docs/EVENT_CALENDAR.md).
 
 ## Cloudflare state (2026-11-06)
@@ -70,15 +71,15 @@
   Calendar, read at every deploy into `content/events.json` (Actions cache, never committed; git keeps the empty
   default, so until `GOOGLE_CALENDAR_ICAL_URL` is set it says "No events are currently scheduled"), and publishes them
   as `/events.json` for the Worker's RSVPs (Task 8). "No RSVP" / "RSVP limit: 40" lines in a description set an
-  event's RSVPs. With six menu items the desktop menu links have 4px side padding below 1340px and 6px from 1340 to
-  1919px (15px from 1920px, as before), font unchanged, so the logo stays centred with ≥12px around it.
+  event's RSVPs. With six menu items the desktop menu links have 17px text and 8px side padding from 1340 to 1919px,
+  6px below 1340px (18px and 15px from 1920px, as before), so the logo stays centred with ≥12px around it.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
   signature). A real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
 - Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
   (default opt-out); webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677; send-only key 82913060-a568-4518-8a2b-bef4f36255f5.
-- GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds at 07:00 and 21:00 Israel time);
+- GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds around 07:00 and 21:00 Israel time);
   Actions limited to GitHub-owned actions, read-only token, outside-contributor workflows need approval; wiki/projects
   off; secret scanning + push protection, Dependabot alerts/updates, private vulnerability reporting on.
 - Instagram switched off with the Resources page (owner, 2026-11-06): no tab and no link (the footer icon stays). The

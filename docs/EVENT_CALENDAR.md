@@ -4,7 +4,8 @@ The website's Events page (`/events/`) lists the upcoming events of one dedicate
 setup below, whoever manages events only uses that calendar: create, edit, repeat, cancel or delete an event there. No
 one needs to touch the website, GitHub or Cloudflare for an event.
 
-The site reads the calendar when it is rebuilt: **every day at 07:00 and 21:00 Israel time**. To publish a change right
+The site reads the calendar when it is rebuilt: **every day around 07:00 and 21:00 Israel time** (GitHub can start
+these a little late). To publish a change right
 away, open the repository's **Actions** tab → **Deploy GitHub Pages** → **Run workflow**.
 
 ## One-time owner setup
@@ -42,7 +43,8 @@ currently scheduled".
   - `No RSVP` — no RSVP button for this event (for example a talk at another venue).
   - `RSVP limit: 40` — at most 40 people in total; the page shows when the event is full. The limit must be a whole
     number of 1 or more; anything else (`RSVP limit: 0`, `RSVP limit: forty`) means no limit, and the deploy shows a
-    warning naming the event.
+    warning naming the event. Without its colon (`RSVP limit 40`) the line is not a marker: it stays on the card as
+    written, sets no limit, and the deploy warns too.
 - **Repeating classes:** every date takes its own RSVPs. Changing one date ("This event") keeps that date's RSVPs, and
   so does moving a one-off event. Changing the time of the whole series, or "This and following events", starts those
   dates afresh.
@@ -68,6 +70,6 @@ by itself, re-enable **Deploy GitHub Pages** in the Actions tab (or run it once 
   unreachable calendar instead.
 - `lib/pages/events.ts` renders the page with `lib/events.mjs` (cards, dates, the empty state), leaving out events that
   ended since the last sync. `scripts/write-site-files.mjs` publishes the same events as `/events.json`
-  (`id, title, startsAt, endsAt, timeZone, rsvp, limit`) for the forms Worker's RSVPs.
+  (`id, title, startsAt, endsAt, timeZone, allDay, rsvp, limit`, via `publishedEvents`) for the forms Worker's RSVPs.
 - To try a real calendar locally: `GOOGLE_CALENDAR_ICAL_URL=<public address> npm run sync:events && npm run build`,
   then `git checkout content/events.json`.

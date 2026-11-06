@@ -6,11 +6,12 @@ on:
       - main
   workflow_dispatch:
   # Twice-daily rebuild, morning and night in Israel (owner's choice), so calendar events
-  # and new YouTube uploads appear without anyone committing.
+  # and new YouTube uploads appear without anyone committing. A few minutes past the hour:
+  # GitHub delays (and may drop) scheduled runs most at the start of an hour.
   schedule:
-    - cron: "0 7 * * *"
+    - cron: "5 7 * * *"
       timezone: "Asia/Jerusalem"
-    - cron: "0 21 * * *"
+    - cron: "5 21 * * *"
       timezone: "Asia/Jerusalem"
 
 concurrency:
@@ -81,7 +82,7 @@ jobs:
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: content/events.json
-          key: events-${{ github.run_id }}
+          key: events-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: events-
 
       # Without the variable it skips with a notice; if Google is unreachable it warns.
@@ -95,7 +96,7 @@ jobs:
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: content/events.json
-          key: events-${{ github.run_id }}
+          key: events-${{ github.run_id }}-${{ github.run_attempt }}
 
       # base_path is "/Tzion-Breslov-Project" on the github.io URL and "" once
       # the custom domain is set in the Pages settings.
