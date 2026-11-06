@@ -3,10 +3,18 @@ import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { expectClean, trackPageErrors } from "./helpers";
 
-// The placeholder photos and their alt text, in gallery order (public/media/gallery/gallery.json).
-type Entry = { alt: string; order: number };
-const manifest = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "public", "media", "gallery", "gallery.json"), "utf8")) as { files: Record<string, Entry> };
-const PHOTOS = Object.entries(manifest.files).sort(([, a], [, b]) => a.order - b.order).map(([file, { alt }]) => ({ file, alt }));
+// The photos the page renders, in gallery order: the list the build makes from
+// public/media/gallery (scripts/write-site-files.mjs), so adding or removing a
+// photo there never breaks these tests.
+type Photo = { src: string; width: number; height: number; alt: string };
+const GALLERY_DIR = path.join(__dirname, "..", "public", "media", "gallery");
+const GENERATED = path.join(__dirname, "..", "content", "gallery.generated.json");
+if (!fs.existsSync(GENERATED)) throw new Error("content/gallery.generated.json is missing: run `npm run build` first");
+const PHOTOS = (JSON.parse(fs.readFileSync(GENERATED, "utf8")) as { images: Photo[] }).images;
+const N = PHOTOS.length;
+// The tallest and the widest photo (1-based), by shape.
+const byRatio = [...PHOTOS.keys()].sort((a, b) => PHOTOS[a].width / PHOTOS[a].height - PHOTOS[b].width / PHOTOS[b].height);
+const TALLEST_AND_WIDEST = [...new Set([byRatio[0], byRatio[byRatio.length - 1]])].map((i) => i + 1);
 
 const items = (page: Page) => page.locator("a.tz-gallery__item");
 const viewer = (page: Page) => page.getByRole("dialog");
@@ -24,9 +32,9 @@ async function openGallery(page: Page) {
 /** The viewer shows photo `n` (1-based): its image, its caption and the counter. */
 async function expectPhoto(page: Page, n: number) {
   const photo = PHOTOS[n - 1];
-  await expect(counter(page)).toHaveText(`${n} of ${PHOTOS.length}`);
+  await expect(counter(page)).toHaveText(`${n} of ${N}`);
   await expect(shownImage(page)).toHaveAttribute("alt", photo.alt);
-  await expect(shownImage(page)).toHaveAttribute("src", `/media/gallery/${photo.file}`);
+  await expect(shownImage(page)).toHaveAttribute("src", photo.src);
   await expect(viewer(page).locator(".tz-gallery-viewer__caption")).toHaveText(photo.alt);
 }
 
@@ -43,7 +51,7 @@ async function drag(page: Page, dx: number) {
 
 const decoded = (image: Locator) => image.evaluate((img: HTMLImageElement) => img.decode().then(() => img.naturalWidth));
 
-test("/gallery/ opens with its own hero (hero2.png, \"Gallery\", no Resources subtitle), then the seven photos", async ({ page }) => {
+test("/gallery/ opens with its own hero (hero2.png, \"Gallery\", no Resources subtitle), then every photo in the folder", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGallery(page);
   await expect(page).toHaveTitle("Gallery - Tzion Breslov");
@@ -63,19 +71,22 @@ test("/gallery/ opens with its own hero (hero2.png, \"Gallery\", no Resources su
   await expect(page.getByText("More purpose, passion and positivity")).toHaveCount(0);
   expect(await page.content()).not.toContain("resources.png");
 
-  // Each photo is a link to its own file, around an image with its size and alt text, loaded lazily.
-  expect(PHOTOS).toHaveLength(7);
-  await expect(items(page)).toHaveCount(PHOTOS.length);
-  for (const [i, { file, alt }] of PHOTOS.entries()) {
+  // Every photo file in the folder is listed (the 7 placeholders today), each a link to its own file,
+  // around an image with its size and alt text, loaded lazily.
+  const files = fs.readdirSync(GALLERY_DIR).filter((name) => !name.startsWith(".") && /\.(?:webp|jpe?g|png)$/i.test(name));
+  expect(N).toBe(files.length);
+  expect(N).toBeGreaterThan(0);
+  await expect(items(page)).toHaveCount(N);
+  for (const [i, { src, width, height, alt }] of PHOTOS.entries()) {
     const item = items(page).nth(i);
-    await expect(item).toHaveAttribute("href", `/media/gallery/${file}`);
+    await expect(item).toHaveAttribute("href", src);
     await expect(item).toHaveAccessibleName(alt);
     const img = item.locator("img");
-    await expect(img).toHaveAttribute("src", `/media/gallery/${file}`);
+    await expect(img).toHaveAttribute("src", src);
     await expect(img).toHaveAttribute("alt", alt);
     await expect(img).toHaveAttribute("loading", "lazy");
-    await expect(img).toHaveAttribute("width", /^\d+$/);
-    await expect(img).toHaveAttribute("height", /^\d+$/);
+    await expect(img).toHaveAttribute("width", String(width));
+    await expect(img).toHaveAttribute("height", String(height));
   }
   // The grid is above the footer, after the hero.
   const heroBox = (await hero.boundingBox())!;
@@ -88,7 +99,7 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
   const errors = trackPageErrors(page);
   await openGallery(page);
-  for (const [width, columns] of [[1440, 3], [1024, 3], [1023, 2], [600, 2], [599, 1], [390, 1]] as const) {
+  for (const [width, columns] of [[1440, 3], [1024, 3], [1023, 2], [600, 2], [599, 1], [412, 1], [390, 1]] as const) {
     await page.setViewportSize({ width, height: 900 });
     const layout = await items(page).evaluateAll(async (links) => Promise.all(links.map(async (link) => {
       const img = link.querySelector("img")!;
@@ -108,11 +119,18 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
     }
     if (columns > 1) expect(Math.round(layout[1].left - layout[0].right), `gap at ${width}px`).toBe(24);
     else expect(Math.round(layout[1].y - (layout[0].y + layout[0].h)), `gap at ${width}px`).toBe(24);
+    if (columns === 1) {
+      // On phones a photo is as wide as the theme's content box: no inset of our own on top of the theme's.
+      const content = await page.locator(".entry-content").evaluate((node) => node.getBoundingClientRect());
+      expect(Math.abs(layout[0].left - content.left), `photo left edge at ${width}px`).toBeLessThan(0.5);
+      expect(Math.abs(layout[0].w - content.width), `photo width at ${width}px`).toBeLessThan(0.5);
+    }
   }
   await expectClean(page, errors);
 });
 
-test("the first photo opens in the viewer; arrows, buttons and swipes move through all seven, wrapping around", async ({ page }) => {
+test("the first photo opens in the viewer; arrows, buttons and swipes move through them all, wrapping around", async ({ page }) => {
+  test.skip(N < 2, "needs two photos to move between");
   const errors = trackPageErrors(page);
   await openGallery(page);
   const first = items(page).first();
@@ -129,7 +147,7 @@ test("the first photo opens in the viewer; arrows, buttons and swipes move throu
   await page.keyboard.press("ArrowLeft");
   await expectPhoto(page, 1);
   await page.keyboard.press("ArrowLeft");
-  await expectPhoto(page, 7);
+  await expectPhoto(page, N);
   await page.keyboard.press("ArrowRight");
   await expectPhoto(page, 1);
 
@@ -137,7 +155,7 @@ test("the first photo opens in the viewer; arrows, buttons and swipes move throu
   await expectPhoto(page, 2);
   await button(page, "Previous photo").click();
   await button(page, "Previous photo").click();
-  await expectPhoto(page, 7);
+  await expectPhoto(page, N);
   await button(page, "Next photo").click();
   await expectPhoto(page, 1);
 
@@ -160,12 +178,13 @@ test("the first photo opens in the viewer; arrows, buttons and swipes move throu
   await expect(first).toBeFocused();
   expect(await page.evaluate(() => document.documentElement.classList.contains("tz-dialog-open"))).toBe(false);
 
-  // The close button closes it too, and so does a click on the backdrop.
-  await items(page).nth(2).click();
-  await expectPhoto(page, 3);
+  // The close button closes it too (focus back on the photo that opened it), and so does a click on the backdrop.
+  const last = items(page).nth(N - 1);
+  await last.click();
+  await expectPhoto(page, N);
   await button(page, "Close").click();
   await expect(page.locator(".tz-dialog")).toHaveCount(0);
-  await expect(items(page).nth(2)).toBeFocused();
+  await expect(last).toBeFocused();
   await first.click();
   await expect(viewer(page)).toBeVisible();
   await page.mouse.click(3, 3);
@@ -178,6 +197,7 @@ test("the first photo opens in the viewer; arrows, buttons and swipes move throu
 
 test("a touch swipe moves to the next and previous photo", async ({ page, isMobile }) => {
   test.skip(!isMobile, "real touch input (the phone project)");
+  test.skip(N < 2, "needs two photos to move between");
   const errors = trackPageErrors(page);
   await openGallery(page);
   await items(page).first().click();
@@ -202,8 +222,8 @@ test("a touch swipe moves to the next and previous photo", async ({ page, isMobi
 test("the viewer never scrolls and shows the whole photo, at desktop and phone sizes", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openGallery(page);
-  // The tallest placeholder (the portrait) and a wide one.
-  for (const n of [4, 5]) {
+  // The tallest and the widest photo.
+  for (const n of TALLEST_AND_WIDEST) {
     await items(page).nth(n - 1).click();
     await expectPhoto(page, n);
     expect(await decoded(shownImage(page))).toBeGreaterThan(0);
@@ -234,6 +254,7 @@ test("the viewer never scrolls and shows the whole photo, at desktop and phone s
 });
 
 test("photos crossfade over .3s, and change at once with reduced motion", async ({ page }) => {
+  test.skip(N < 2, "needs two photos to move between");
   const errors = trackPageErrors(page);
   await openGallery(page);
   await items(page).first().click();
@@ -280,18 +301,18 @@ test.describe("without JavaScript", () => {
     const errors = trackPageErrors(page);
     const response = await page.goto("/gallery/");
     expect(response?.status()).toBe(200);
-    await expect(items(page)).toHaveCount(PHOTOS.length);
-    for (const [i, { file }] of PHOTOS.entries()) {
+    await expect(items(page)).toHaveCount(N);
+    for (const [i, { src }] of PHOTOS.entries()) {
       const item = items(page).nth(i);
-      await expect(item).toHaveAttribute("href", `/media/gallery/${file}`);
+      await expect(item).toHaveAttribute("href", src);
       await item.scrollIntoViewIfNeeded();
       await expect(item).toBeVisible();
-      const image = await page.request.get(`/media/gallery/${file}`);
+      const image = await page.request.get(src);
       expect(image.status()).toBe(200);
-      expect(image.headers()["content-type"]).toBe("image/webp");
+      expect(image.headers()["content-type"]).toMatch(/^image\//);
     }
     await items(page).first().click();
-    await page.waitForURL(`**/media/gallery/${PHOTOS[0].file}`);
+    await page.waitForURL((url) => url.pathname === PHOTOS[0].src);
     await expectClean(page, errors);
   });
 });

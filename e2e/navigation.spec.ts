@@ -187,6 +187,8 @@ test.describe("desktop menu", () => {
             menuRight: box("#menu-main-menu-links").right,
             titleLeft: title.left,
             titleCentre: title.left + title.width / 2,
+            // The page's own width: without a vertical scrollbar's, where scrollbars take up room.
+            pageCentre: document.documentElement.clientWidth / 2,
             buttonsLeft: box("#menu-main-menu-buttons").left
           };
         });
@@ -197,7 +199,7 @@ test.describe("desktop menu", () => {
         expect(layout.lastRight, at).toBeLessThanOrEqual(layout.titleLeft);
         expect(layout.lastRight, at).toBeLessThan(layout.buttonsLeft);
         // The logo stays in the middle of the header, as on checkpoint-001: the menu never pushes it aside.
-        expect(Math.abs(layout.titleCentre - width / 2), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);
+        expect(Math.abs(layout.titleCentre - layout.pageCentre), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);
       }
     }
     await expectClean(page, errors);
