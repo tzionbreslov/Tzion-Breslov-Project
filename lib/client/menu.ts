@@ -2,10 +2,12 @@
  * The menus' dropdowns (rendered by lib/navigation.mjs as li.tz-menu-parent >
  * button.tz-submenu-toggle + ul.tz-sub-menu), in the desktop and the mobile
  * menu. The button opens and closes its panel by mouse, touch and keyboard; in
- * the desktop menu a mouse also opens it by hovering. Escape, a click or tap
- * outside, or focus moving out closes it. Once this runs it owns the open
- * state (aria-expanded); before that, or without JS, app/navigation.css opens
- * the desktop panel on :hover and :focus-within.
+ * the desktop menu a mouse also opens it by hovering, and leaving closes it
+ * unless the panel was pinned by a mouse click or by focus moving into it.
+ * Escape, a click or tap outside, or focus moving out closes it. Once this runs
+ * it owns the open state (aria-expanded), taking over whatever was showing;
+ * before that, or without JS, app/navigation.css opens the desktop panel on
+ * :hover and :focus-within.
  */
 
 const PARENT = ".tz-menu-parent";
@@ -29,10 +31,15 @@ export function enhanceMenus(root: Document = document): () => void {
   };
 
   for (const parent of parents) {
-    listen(toggleOf(parent), "click", () => {
-      // A click on a panel the mouse just opened keeps it open (and pins it).
-      if (hovered.has(parent)) hovered.delete(parent);
+    listen<MouseEvent>(toggleOf(parent), "click", (event) => {
+      // A mouse click on a panel the mouse just opened keeps it open (and pins it);
+      // Enter/Space (a click with detail 0) always toggles.
+      if (hovered.has(parent) && event.detail > 0) hovered.delete(parent);
       else setOpen(parent, !isOpen(parent));
+    });
+    listen<FocusEvent>(parent, "focusin", (event) => {
+      // Focus inside the panel pins it, so the mouse leaving never hides the focused link.
+      if (event.target !== toggleOf(parent)) hovered.delete(parent);
     });
     listen<FocusEvent>(parent, "focusout", (event) => {
       if (event.relatedTarget instanceof Node && !parent.contains(event.relatedTarget)) setOpen(parent, false);
@@ -47,6 +54,12 @@ export function enhanceMenus(root: Document = document): () => void {
       listen<PointerEvent>(parent, "pointerleave", (event) => {
         if (event.pointerType === "mouse" && hovered.has(parent)) setOpen(parent, false);
       });
+      // Until now CSS showed the panel on :hover / :focus-within; keep it open where it was showing.
+      if (parent.matches(":focus-within")) setOpen(parent, true);
+      else if (parent.matches(":hover")) {
+        setOpen(parent, true);
+        hovered.add(parent);
+      }
     }
     parent.dataset.tzMenu = "ready";
   }

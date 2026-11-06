@@ -91,6 +91,8 @@ for (const file of walk(out)) {
   // Videos play only in the Classes page's own player (youtube-nocookie, on click).
   if (html.includes("youtube.com/embed")) fail(`${rel} still embeds a plain YouTube player`);
   for (const ref of removedRefs(html)) fail(`${rel} links to the removed page ${ref}`);
+  // The broken-reference check below never sees a bare "/" (the Home links); with a base path it must carry it.
+  if (base && /\b(?:href|src)="\/"/.test(html)) fail(`${rel} links to "/" without the base path ${base}`);
   const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
   if (canonical && !canonical.startsWith(PRODUCTION)) fail(`${rel} canonical is ${canonical}`);
   const refs = [...html.matchAll(/\b(?:href|src)="(\/[^"/][^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));

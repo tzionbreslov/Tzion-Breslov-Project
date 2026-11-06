@@ -77,9 +77,35 @@ test("the mobile menu reads Home, About, Resources, Classes, Articles, Contact, 
 test("the footer Quick Links read Home, About, Resources, Classes, Articles, Contact, Donate, Taste a Class", () => {
   const $ = page("/");
   assert.deepEqual(labels($, "#menu-mobile-menu-1", "a, .tz-menu-group-label"), ["Home", "About", "Resources", "Classes", "Articles", "Contact", "Donate", "Taste a Class"]);
-  // Resources is a heading over its two pages here, not a link or a button.
-  assert.equal($("#menu-mobile-menu-1 .tz-menu-group > .tz-menu-group-label").text(), "Resources");
+  // Resources is a heading over its two pages here, not a link or a button, and it names their list.
+  const label = $("#menu-mobile-menu-1 .tz-menu-group > .tz-menu-group-label");
+  assert.equal(label.text(), "Resources");
+  assert.equal(label.attr("id"), "tz-group-resources");
+  assert.equal($("#menu-mobile-menu-1 .tz-menu-group > ul.tz-sub-menu").attr("aria-labelledby"), "tz-group-resources");
   assert.equal($("#menu-mobile-menu-1 button").length, 0);
+});
+
+test("a fragment whose menu or header button has moved fails loudly, naming the marker", () => {
+  const change = (html, from, to) => {
+    assert.ok(html.includes(from), from);
+    return html.replace(from, to);
+  };
+  const cases = [
+    [RESOURCES_HEADER, '<ul id="menu-main-menu-links"', '<ul id="menu-main"'],
+    [RESOURCES_HEADER, '<ul id="menu-mobile-menu"', '<ul id="menu-mobile"'],
+    [RESOURCES_HEADER, '<li id="menu-item-504" class="', '<li class="'],
+    [RESOURCES_HEADER, '<li id="menu-item-11" class="nav-button', '<li id="menu-item-11" data-x="1" class="nav-button'],
+    [RESOURCES_FOOTER, '<ul id="menu-mobile-menu-1"', '<ul id="menu-footer"']
+  ];
+  for (const [html, from, to] of cases) {
+    const marker = from.startsWith("<ul") ? from : `<li id="${from.match(/menu-item-\d+/)[0]}" class="…"><a …>`;
+    assert.throws(() => renderNavigation(change(html, from, to), "/"), { message: `navigation: marker not found: ${marker}` }, from);
+    assert.throws(() => renderNavigation(change(html, from, to), "", ORIGINAL_NAV), { message: `navigation: marker not found: ${marker}` }, from);
+  }
+  assert.throws(() => renderNavigation(RESOURCES_HEADER.replace("</ul></nav></div></header>", '</ul></nav><ul id="menu-mobile-menu"></ul></div></header>'), "/"),
+    { message: 'navigation: marker not unique: <ul id="menu-mobile-menu"' });
+  assert.throws(() => renderNavigation("<div>no menu here</div>", "/"),
+    { message: 'navigation: marker not found: <header class="site-header" or id="genesis-footer-widgets"' });
 });
 
 test("the header buttons still read Taste A Class and Donate, and only their current marking changes", () => {

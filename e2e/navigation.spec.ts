@@ -78,6 +78,74 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
+  test("a panel the mouse opened stays open while keyboard focus is inside it", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/");
+    await menusReady(page);
+    await desktopToggle(page).hover();
+    await expect(desktopPanel(page)).toBeVisible();
+    await desktopToggle(page).focus();
+    await page.keyboard.press("Tab");
+    const classes = panelLink(desktopPanel(page), "Classes");
+    await expect(classes).toBeFocused();
+    await page.mouse.move(700, 600);
+    // Give a wrongly closing panel the time to close.
+    await page.waitForTimeout(300);
+    await expect(desktopPanel(page)).toBeVisible();
+    await expect(desktopToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(classes).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(desktopPanel(page)).toBeHidden();
+    await expect(desktopToggle(page)).toBeFocused();
+    await expectClean(page, errors);
+  });
+
+  test("Enter and Space toggle the panel even while the mouse rests on Resources", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/");
+    await menusReady(page);
+    await desktopToggle(page).hover();
+    await expect(desktopPanel(page)).toBeVisible();
+    await desktopToggle(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(desktopToggle(page)).toHaveAttribute("aria-expanded", "false");
+    await expect(desktopPanel(page)).toBeHidden();
+    await page.keyboard.press("Space");
+    await expect(desktopToggle(page)).toHaveAttribute("aria-expanded", "true");
+    await expect(desktopPanel(page)).toBeVisible();
+    await page.keyboard.press("Space");
+    await expect(desktopPanel(page)).toBeHidden();
+    await expectClean(page, errors);
+  });
+
+  for (const how of ["hovered", "focused"] as const) {
+    test(`a panel CSS showed before the script ran (${how}) stays open when the script takes over`, async ({ page }) => {
+      const errors = trackPageErrors(page);
+      // Hold the page's scripts back, so the panel is first shown by CSS alone.
+      let release!: () => void;
+      const scriptsHeld = new Promise<void>((resolve) => { release = resolve; });
+      await page.route("**/_next/static/chunks/*.js", async (route) => {
+        await scriptsHeld;
+        await route.continue();
+      });
+      await page.goto("/", { waitUntil: "domcontentloaded" });
+      if (how === "hovered") await desktopToggle(page).hover();
+      else await desktopToggle(page).focus();
+      await expect(desktopPanel(page)).toBeVisible();
+      await expect(desktopParent(page)).not.toHaveAttribute("data-tz-menu", "ready");
+      release();
+      await menusReady(page);
+      await expect(desktopToggle(page)).toHaveAttribute("aria-expanded", "true");
+      await expect(desktopPanel(page)).toBeVisible();
+      // From here on the script decides: the mouse leaving, or Escape, closes it.
+      if (how === "hovered") await page.mouse.move(700, 600);
+      else await page.keyboard.press("Escape");
+      await expect(desktopPanel(page)).toBeHidden();
+      await expect(desktopToggle(page)).toHaveAttribute("aria-expanded", "false");
+      await expectClean(page, errors);
+    });
+  }
+
   test("clicking Articles goes to /articles/ and marks it current", async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto("/");
