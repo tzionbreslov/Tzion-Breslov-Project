@@ -132,19 +132,21 @@ Any new third-party origin (e.g. PayPal) goes there first, then `npm run build &
 `out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
 Cloudflare rule.
 
-## Launch checklist (not done yet)
+## Launch checklist
 
-1. **Resend:** verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter"
-   topic, and a webhook to `https://api.tzionbreslov.org/webhooks/resend`. tzionbreslov.org has no MX (by choice), so
-   also set Reply-To `tzionbreslovproject@gmail.com` in Resend's broadcast settings; the Worker already sets it on
-   confirmation emails (`RESEND_REPLY_TO_EMAIL` in `wrangler.jsonc`).
-2. **Worker secrets** — all 8 in `wrangler.jsonc` → `secrets.required`, via `npx wrangler secret put NAME` (or
-   `npx wrangler deploy --secrets-file <uncommitted file>`): `RATE_LIMIT_SALT` (random, ≥ 32 chars, e.g.
-   `openssl rand -hex 32` — shorter makes every form return 503), `TURNSTILE_SECRET_KEY` (widget "Tzion Breslov
-   forms"), `RESEND_TRANSACTIONAL_API_KEY`, `RESEND_CONTACTS_API_KEY`, `RESEND_FROM_EMAIL`
-   (e.g. `Tzion Breslov <no-reply@tzionbreslov.org>`), `CONTACT_TO_EMAIL` (`tzionbreslovproject@gmail.com`),
-   `RESEND_NEWSLETTER_TOPIC_ID`, `RESEND_WEBHOOK_SECRET`. Then `npm run worker:deploy` and check
-   `https://api.tzionbreslov.org/health`.
+1. ✅ **Resend** (2026-11-06, `node scripts/setup-resend.mjs`): sending domain tzionbreslov.org **verified** (DKIM
+   `resend._domainkey`, return path `send` MX + SPF, `rsend` CNAME — all on Cloudflare), "Newsletter" topic (default
+   opt-out: nobody is subscribed until they confirm), webhook → `https://api.tzionbreslov.org/webhooks/resend`
+   (bounces, complaints, failures, suppressions, topic changes), and a **send-only** key restricted to the domain for
+   `RESEND_TRANSACTIONAL_API_KEY` (the owner's full-access key is `RESEND_CONTACTS_API_KEY`, needed for Contacts).
+   Still to do by hand in Resend: set Reply-To `tzionbreslovproject@gmail.com` in broadcast settings (the domain has no
+   MX by choice; the Worker already sets it on confirmation emails).
+2. ✅ **Worker deployed** (2026-11-06) at `https://api.tzionbreslov.org` with all 8 secrets and the daily cleanup cron;
+   smoke-tested live (health, CORS allow/deny, Turnstile rejects fake tokens, confirm link redirects, unsigned webhook
+   refused). Secrets persist across deploys, so later code changes need only `npm run worker:deploy`. The secrets live
+   in the git-ignored `.env.worker` (owner's machine) and in Cloudflare; `TURNSTILE_SECRET_KEY` exists **only** in
+   Cloudflare (copied from the widget) — never put it in `.env.worker`, or `--secrets-file` would overwrite it.
+   To rotate a value: `npx wrangler secret put NAME`.
 3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
    Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
    is still served from github.io would break the forms on the only live copy. Until then they show "temporarily

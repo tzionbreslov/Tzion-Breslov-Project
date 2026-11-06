@@ -15,13 +15,24 @@
   tzionbreslov.com** (WordPress) until the owner is ready to switch; apex will be primary (www redirects to it).
 - 2026-11-06 — Owner chose: security hardening (headers, CSP report-only first, HSTS later), forms backend on Cloudflare
   (api.tzionbreslov.org), email anti-spoofing (SPF -all, DMARC reject). Not chosen: Email Routing/forwarding.
-- 2026-11-06 — main requires a PR with passing CI ("check"); force-push/deletion blocked (to be applied from the owner account).
+- 2026-11-06 — main requires a PR with passing CI ("check"); force-push/deletion blocked. Applied from the owner account
+  (ruleset "Protect main", admin role may bypass) and proven: an unreviewed push and a force-push were both rejected (GH013).
+- 2026-11-06 — Instagram: owner wants a 4th Resources tab ("same idea as YouTube") with an in-site preview that leads
+  to instagram.com; data via **Meta's official API** at build time. Account access pending ("waiting for full access");
+  unknown whether it is Business/Creator or still posted to (44 posts; newest possibly Aug 2023, unverified).
+- 2026-11-06 — Dependabot: TypeScript 7 ignored (typescript-eslint 8 supports TS < 7 only); revisit later.
 
 ## Cloudflare state (2026-11-06)
 
 - DNS: proxied placeholders A 192.0.2.1 / AAAA 100:: / www CNAME apex; TXT SPF + _dmarc.
 - Rules: single redirect "tzion_org_to_com_temporary" (302); response header transform "tzion_security_headers".
-- Settings: always_use_https on, min TLS 1.2, SSL strict.
+- Settings: always_use_https on, min TLS 1.2, SSL strict, DNSSEC on (Registrar publishes DS automatically).
+- Configuration rule "tzion_github_pages_origin_ssl_full": SSL Full for tzionbreslov.org + www (GitHub can't renew its
+  certificate while proxied; strict would 526). Zone default stays strict.
+- Resend DNS (verified 2026-11-06): TXT resend._domainkey, MX + TXT on send, CNAME rsend (DNS only).
+- Worker tzion-breslov-api deployed 2026-11-06 → custom domain api.tzionbreslov.org, cron 17 3 * * *, 8 secrets
+  (TURNSTILE_SECRET_KEY only in Cloudflare). Account workers.dev subdomain "tzionbreslov" created (required for cron);
+  the Worker itself is not on workers.dev.
 - D1 tzion-breslov-production 430c5c20-673d-4e3f-b186-18c8c00cbcd8 (0001 applied via API and recorded in d1_migrations).
 - Turnstile "Tzion Breslov forms" site key 0x4AAAAAAF1kfPJ0qES50FAh (secret only in Cloudflare).
 - Live WordPress bug found: the 18 Parasha posts' hero image points at the dead staging host tzionbreslov.estiwolo.com
@@ -33,7 +44,15 @@
   every template at 1440px and 390px; Resources is 0.00% vs the live site (local WordPress feed cache is stale).
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
-- Worker: 34 tests pass; local end-to-end (CORS → Turnstile → validation) verified; real email untested (no Resend key).
+- Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
+  signature). A real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
+- Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
+  (default opt-out); webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677; send-only key 82913060-a568-4518-8a2b-bef4f36255f5.
+- GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (daily rebuild 04:41 UTC);
+  Actions limited to GitHub-owned actions, read-only token, outside-contributor workflows need approval; wiki/projects
+  off; secret scanning + push protection, Dependabot alerts/updates, private vulnerability reporting on.
+- Instagram tab live with the profile + link; sync script, cache and tests ready — needs INSTAGRAM_ACCESS_TOKEN (secret)
+  and INSTAGRAM_USER_ID / INSTAGRAM_API_VERSION (variables): docs/instagram-setup.md.
   The emailed confirmation link (GET) only redirects to the site (`?subscription=confirm#token=…`); the visitor's
   "Confirm my subscription" click POSTs the token (mail scanners can't confirm). Confirmation emails reply to
   `RESEND_REPLY_TO_EMAIL` (tzionbreslovproject@gmail.com) because tzionbreslov.org has no MX by choice.
