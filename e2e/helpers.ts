@@ -19,17 +19,33 @@ const violatesOurPolicy = (text: string) => {
   return directive === undefined || OUR_DIRECTIVES.has(directive);
 };
 
-/** Collects the page's uncaught errors (minus the known theme bug). Call before the first goto. */
+// page.consoleMessages() keeps only the last 200 messages, and a YouTube embed
+// alone can log ~200, so a tracked page records our violations as they happen.
+const recorded = new WeakMap<Page, string[]>();
+
+/** Collects the page's uncaught errors (minus the known theme bug), and its CSP violations. Call before the first goto. */
 export function trackPageErrors(page: Page): () => Error[] {
   const errors: Error[] = [];
   page.on("pageerror", (error) => {
     if (!(error.stack ?? "").includes(KNOWN_THEME_ERROR)) errors.push(error);
+  });
+  const violations: string[] = [];
+  recorded.set(page, violations);
+  page.on("console", (message) => {
+    if (violatesOurPolicy(message.text())) violations.push(message.text());
   });
   return () => errors;
 }
 
 /** Every violation of the site's CSP that Chromium reported on this page so far (all navigations). */
 export async function cspViolations(page: Page): Promise<string[]> {
+  const violations = recorded.get(page);
+  if (violations) {
+    // A round trip to the page first, so messages it logged before now have arrived.
+    await page.evaluate(() => 0).catch(() => undefined);
+    return [...violations];
+  }
+  // Untracked page: fall back to the console's (capped) history.
   const messages = await page.consoleMessages({ filter: "all" });
   return messages.map((message) => message.text()).filter(violatesOurPolicy);
 }
