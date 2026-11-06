@@ -38,13 +38,16 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
   const heroBox = (await hero.boundingBox())!;
   expect((await legal.boundingBox())!.y).toBeGreaterThan(heroBox.y + heroBox.height);
 
-  // The six sections, each a heading over its paragraphs; nothing else is a heading here.
-  await expect(legal.getByRole("heading")).toHaveText(HEADINGS);
+  // The six sections, each a heading over its paragraphs; nothing else is a heading here, and the
+  // sections are plain ones (the headings structure the page), not six region landmarks.
+  await expect(legal.getByRole("heading", { level: 2 })).toHaveText(HEADINGS);
+  await expect(legal.getByRole("heading")).toHaveCount(HEADINGS.length);
+  await expect(legal.getByRole("region")).toHaveCount(0);
   const sections = legal.locator("section.tz-legal__section");
   await expect(sections).toHaveCount(HEADINGS.length);
   for (const [i, heading] of HEADINGS.entries()) {
     const section = sections.nth(i);
-    await expect(section).toHaveAccessibleName(heading);
+    await expect(section.locator(":scope > h2:first-child")).toHaveText(heading);
     expect(await section.locator("p").count(), heading).toBeGreaterThan(0);
   }
   // Requests go to the inbox the site already names (Contact page, form messages).
@@ -92,7 +95,7 @@ test("the notice reads as Tzion's legal layout: 760px wide, Newsreader dark-blue
   expect(layout.textSize).toBe("18px");
   // The first section starts under the intro without a rule; every later one has the light-blue rule.
   expect(layout.rules[0][0]).toBe("none");
-  for (const [style, color] of layout.rules.slice(1)) expect([style, color]).toEqual(["solid", "rgb(207, 224, 241)"]);
+  for (const [style, color] of layout.rules.slice(1)) expect([style, color]).toEqual(["solid", "rgba(30, 97, 161, 0.2)"]);
   for (const width of layout.ruleWidths.slice(1)) expect(width).toBeGreaterThan(0);
   await expectClean(page, errors);
 });

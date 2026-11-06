@@ -191,6 +191,32 @@ TXT record forever** — removing it can drop the verification.
       same way. Do not put these hosts back on strict unless
       `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
       tzionbreslov.org with > 30 days left.
+   4. **Privacy check at the edge, right after proxying.** The privacy notice (`/privacy/`, `content/copy/en.json` `privacy`)
+      says the site sets no cookies of its own and uses no analytics or tracking. Some Cloudflare features would make
+      that untrue once the records are proxied:
+      - a `__cf_bm` cookie (Bot Fight Mode / bot management);
+      - the Web Analytics beacon (`static.cloudflareinsights.com`);
+      - Network Error Logging (`Nel` and `Report-To` headers, which make browsers send error reports to
+        `a.nel.cloudflare.com`; `.org` already sends them today);
+      - anything else Cloudflare injects under `/cdn-cgi/` (e.g. email address obfuscation).
+
+      Read the headers and the HTML the edge serves. Run each command as written, with the quotes.
+      - **bash:**
+        - `curl -sI "https://tzionbreslov.org/" | grep -iE "^(set-cookie|nel|report-to):"`
+        - `curl -s "https://tzionbreslov.org/contact/" | grep -oiE "cdn-cgi|cloudflareinsights"`
+      - **PowerShell:** use `curl.exe`, because in Windows PowerShell 5.1 plain `curl` is `Invoke-WebRequest`.
+        - `curl.exe -sI "https://tzionbreslov.org/" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
+        - `curl.exe -s "https://tzionbreslov.org/contact/" | Select-String -Pattern "cdn-cgi|cloudflareinsights"`
+
+      Repeat with `https://www.tzionbreslov.org/`.
+      - **The check passes** when all four commands print nothing.
+      - **For each hit, choose one, with the owner's go-ahead:**
+        - turn the feature off (Security → Bots for Bot Fight Mode; Web Analytics for the beacon; Scrape Shield
+          for email obfuscation; the zone's Network Error Logging setting for `Nel`/`Report-To`), note its previous
+          value as the undo, and run the check again;
+        - or, if it stays on (or the plan can't turn it off), add a sentence about it to the notice and update its
+          `date` before the forms are turned on (launch checklist, step 3).
+      - This step changes nothing by itself: only the owner-approved setting change does.
 4. **Cloudflare 'Tzion security headers' rule must gain `https://www.google.com` in frame-src on switch day (owner
    go-ahead)** — the Contact page's map; copy the policy from `config/security-headers.mjs` (`CSP_REPORT_ONLY` while
    the header is still report-only). Undo: put back the rule's previous value.

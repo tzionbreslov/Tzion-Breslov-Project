@@ -105,7 +105,7 @@
           "The contact form asks for your first and last name, email address, phone number, address and message. Only your email address and message are required.",
           "The newsletter sign-up in the footer of every page asks for your email address, and the “Get event announcements” sign-up on the Events page for your email address and the lists you choose. Either way we email you a link, and you are subscribed only after you confirm.",
           "An RSVP on the Events page asks for your name, email address and number of guests, any accessibility or dietary needs you want us to know about, and your consent.",
-          "With every form you send, our forms service also receives your IP address."
+          "Our forms service also receives your IP address with every form you send, and when you open the Events page while it lists events, because your browser then asks it which events are full."
         ]
       },
       {
@@ -124,7 +124,7 @@
           "Google Fonts provides the site’s typefaces: on every page your browser downloads them from Google (fonts.googleapis.com and fonts.gstatic.com).",
           "YouTube: the Classes page shows video thumbnails, which your browser loads from YouTube (i.ytimg.com) as soon as the page opens. The video player loads only when you press play, in YouTube’s privacy-enhanced mode (youtube-nocookie.com), and then streams the video from YouTube and other Google services.",
           "Google Maps: the map on the Contact page loads from Google when you open that page, or at the latest as you scroll towards it. Its “Get directions” and “Open in Google Maps” buttons take you to Google Maps.",
-          "PayPal will process donations once online giving is switched on. Until then, the Donate page does not send your details anywhere.",
+          "PayPal will process donations once online giving is switched on. Until then, the Donate page does not send your details anywhere, unless you choose to email them to us.",
           "Each of these providers handles what it receives under its own privacy policy, as do the sites our links lead to, such as YouTube and Instagram."
         ]
       },
@@ -132,9 +132,9 @@
         "heading": "How long we keep it",
         "paragraphs": [
           "Contact messages are delivered to our inbox by email; our forms service does not keep them.",
-          "A sign-up you don’t confirm within 24 hours expires. The forms service deletes every sign-up request, confirmed or not, at its daily clean-up once those 24 hours are over, so within about two days. Once you confirm, Resend keeps your email address and the lists you chose. Unsubscribing stops the emails, but Resend keeps your address, marked as unsubscribed so you are not emailed again, until you ask us to delete it; an address that bounces or reports an email as spam stays on its do-not-send list the same way.",
+          "A sign-up you don’t confirm within 24 hours expires. The forms service deletes your email address and chosen lists from every sign-up, confirmed or not, at its daily clean-up once those 24 hours are over, so within about two days. Once you confirm, Resend keeps your email address and the lists you chose. Unsubscribing stops those emails, but Resend keeps your address, marked as unsubscribed so you are not sent them again, until you ask us to delete it; an address whose emails bounce, or whose owner marks one as spam, stays on its do-not-send list the same way.",
           "RSVPs are kept by the forms service until 90 days after the event starts, then deleted. Each RSVP is also emailed to our inbox.",
-          "Security records: a log of contact and sign-up requests (a reference number and whether it went through, not what you wrote) is kept for 30 days; the reports Resend sends us about email delivery and subscriptions (for example a bounce, a complaint or a change to your lists), which include the email address concerned and, for an email, its subject, for 90 days; the scrambled records that limit repeated submissions for about a day; and error records from the forms service, designed to contain no personal details, for up to 7 days."
+          "Security records: a log of contact and sign-up requests (a reference number and whether it went through, not what you wrote) is kept for 30 days; the reports Resend sends us about email delivery and subscriptions (for example a bounce, a complaint or a change to your lists), which include the email address concerned and, for an email, its subject (for a contact message, the sender’s name), for 90 days; the scrambled records that limit repeated submissions until the next daily clean-up, at most about a day; and error records from the forms service, designed to contain no personal details, for up to 7 days."
         ]
       },
       {

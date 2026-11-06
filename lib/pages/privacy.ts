@@ -7,7 +7,8 @@ import { LARGE_SPACER, esc, renderHero, wrapEntry } from "@/lib/pages/parts";
  * The privacy notice: the Resources header with its own image and heading,
  * then the notice in Tzion's legal layout (app/pages.css, .tz-legal): the date
  * it was last changed, an introduction and its sections, each a heading over
- * its paragraphs. Every word is content/copy/en.json `privacy`; the date is
+ * its paragraphs (plain sections, not six region landmarks: the headings
+ * structure the page). Every word is content/copy/en.json `privacy`; the date is
  * fixed there (it changes when the text does, never with a rebuild). The text
  * describes the site as built and the owner approves it before launch.
  *
@@ -24,11 +25,8 @@ const paragraph = (text: string) =>
 
 function notice() {
   const text = copy.privacy;
-  const sections = text.sections.map(({ heading, paragraphs }, i) => {
-    const id = `tz-privacy-${i + 1}`;
-    return `<section class="tz-legal__section" aria-labelledby="${id}">` +
-      `<h2 class="tz-legal__heading" id="${id}">${esc(heading)}</h2>${paragraphs.map(paragraph).join("")}</section>`;
-  }).join("");
+  const sections = text.sections.map(({ heading, paragraphs }) =>
+    `<section class="tz-legal__section"><h2 class="tz-legal__heading">${esc(heading)}</h2>${paragraphs.map(paragraph).join("")}</section>`).join("");
   // split/join, not replace(): the date is text, not a pattern.
   const updated = text.updated.split("{date}").join(text.date);
   return `<div class="tz-legal"><div class="tz-legal__body">` +

@@ -84,8 +84,10 @@
  * the site's type: Newsreader dark-blue section headings over 18px (1.8rem)
  * Montserrat text, with a light-blue rule between sections. The theme's own
  * light blue (#F2F9FF) is a background colour and would not show as a line on
- * white, so the rule is a deeper tint of it. The page's own wrapper gives the
- * column its side margins on small screens (as on Articles and Gallery). */
+ * white, so the rule is the site's dark blue, faint (as the Classes page's
+ * --tz-vl-line). The page's own wrapper gives the column its side margins on
+ * small screens (as on Articles and Gallery). */
+.tz-legal { --tz-legal-line: rgb(30 97 161 / .2); }
 .tz-legal .tz-legal__body {
   max-width: 760px; margin: 0 auto;
   font-family: var(--font-main, "Montserrat", sans-serif);
@@ -100,7 +102,7 @@
 .tz-legal .tz-legal__section { margin-top: 40px; }
 .tz-legal .tz-legal__section + .tz-legal__section {
   padding-top: 40px;
-  border-top: 2px solid #cfe0f1;
+  border-top: 2px solid var(--tz-legal-line);
 }
 .tz-legal .tz-legal__heading {
   margin: 0 0 16px;
