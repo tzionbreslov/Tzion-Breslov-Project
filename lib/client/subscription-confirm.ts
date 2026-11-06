@@ -35,8 +35,8 @@ const MESSAGES = {
   busy: "Confirming your subscription…",
   joined: "You’ve joined the Tzion Breslov mailing list, welcome to the family!",
   invalid: "This confirmation link is invalid or has expired. Please sign up again.",
-  retry: "We couldn’t confirm your subscription just now. Please try again in a few minutes.",
-  linkError: "We couldn’t check your confirmation link just now. Please open it again from your email later.",
+  retry: "We couldn’t confirm your subscription just now. Please try again in a few minutes, or sign up again.",
+  linkError: "We couldn’t check your confirmation link just now. Please open it again from your email later, or sign up again.",
   unavailable: `Mailing list signups are temporarily unavailable. Please email us at ${publicConfig().contactEmail}.`
 };
 
@@ -67,7 +67,7 @@ function readViewFromUrl(): View | null {
   url.searchParams.delete(SUBSCRIPTION_QUERY_PARAM);
   window.history.replaceState(null, "", url.pathname + url.search);
 
-  if (status === SUBSCRIPTION_QUERY.error) return { message: MESSAGES.linkError };
+  if (status === SUBSCRIPTION_QUERY.error) return { message: MESSAGES.linkError, signUp: true };
   if (status === SUBSCRIPTION_QUERY.invalid || !CONFIRMATION_TOKEN_PATTERN.test(token)) return invalidView();
   if (!publicConfig().apiBaseUrl) return { message: MESSAGES.unavailable };
   return { message: MESSAGES.prompt, token };
