@@ -30,7 +30,10 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit
 
-      - name: Typecheck, lint, Worker tests, build, export check
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Typecheck, lint, unit + Worker tests, build, export + wording checks, browser tests
         run: npm run check
 
       # Switch-day path: the same export built for tzionbreslov.org must have no
