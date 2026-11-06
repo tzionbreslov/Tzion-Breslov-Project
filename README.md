@@ -219,6 +219,9 @@ switch day (step 4).
    in the git-ignored `.env.worker` (owner's machine) and in Cloudflare; `TURNSTILE_SECRET_KEY` exists **only** in
    Cloudflare (copied from the widget) — never put it in `.env.worker`, or `--secrets-file` would overwrite it.
    To rotate a value: `npx wrangler secret put NAME`.
+   **Except the RSVP release (Task 8, not deployed yet):** its code needs migration 0002 and the secret
+   `RESEND_EVENTS_TOPIC_ID` *before* `npm run worker:deploy` (deployed first, it would break the newsletter signup and the
+   daily cleanup). Follow the order and undo steps in the Task 8 pull request.
 3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
    Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
    is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
