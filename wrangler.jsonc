@@ -24,7 +24,13 @@
     // Optional, not a secret: Reply-To on the subscription confirmation email. tzionbreslov.org
     // has no MX (by choice), so without it a subscriber's reply would sit deferred for days
     // before bouncing. Blank/absent = no Reply-To. Contact notifications reply to the visitor.
-    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com"
+    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com",
+    // The site's own list of upcoming events (scripts/write-site-files.mjs): which events take
+    // RSVPs, when they start and their limit. Fetched without following redirects, so until
+    // switch day (.org still 302s to .com) RSVPs answer EVENTS_UNAVAILABLE.
+    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json",
+    // RSVPs are deleted this many days after their event started (daily cleanup cron).
+    "RSVP_RETENTION_DAYS": "90"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
   // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget
@@ -38,10 +44,24 @@
       "RESEND_FROM_EMAIL",
       "CONTACT_TO_EMAIL",
       "RESEND_NEWSLETTER_TOPIC_ID",
+      // The "Event announcements" topic (scripts/setup-resend.mjs); install before the next deploy.
+      "RESEND_EVENTS_TOPIC_ID",
       "RESEND_WEBHOOK_SECRET"
     ]
   },
-  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs and webhook rows.
+  // With invocation logs off, Workers Logs (dashboard → the Worker → Logs) are expected to keep
+  // only the Worker's own log lines, for up to 7 days: RSVP_ORGANIZER_EMAIL_FAILED,
+  // RSVP_CANCEL_FAILED, EVENTS_FEED_EVENT_SKIPPED and the error lines (codes, method and path but
+  // never the query string, request or correlation ids; no personal data), so they can be found
+  // later, not only in a live `wrangler tail`. Cloudflare's docs don't say whether a stored line
+  // still carries request fields (URL, headers, IP) with invocation logs off, so this is confirmed
+  // on switch day (README → Switch day, step 6.5); if the check fails, "enabled" becomes false.
+  // Invocation logs stay OFF: they would store every request's method + URL (e.g.
+  // /v1/subscribe/confirm?token=…), headers and the visitor's IP. "redact_query_string" (Cloudflare:
+  // "Whether query strings are removed from request URLs in logs and traces") is a second guard for
+  // any URL Cloudflare does record, not a substitute for the check. Takes effect at deploy.
+  "observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } },
+  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {

@@ -37,8 +37,9 @@ currently scheduled".
 - **Location** becomes the card's location line (leave it empty for none).
 - **Description** becomes the text on the card. Line breaks are kept, formatting (bold, links) is not, and a long
   description is shortened to about 320 characters with "…".
-- **RSVPs.** Every event takes RSVPs, with no limit, unless its description says otherwise (the RSVP button comes with
-  the RSVP form; the markers below are already read). Type either marker on a **line of its own** in the description;
+- **RSVPs.** Every event takes RSVPs, with no limit, unless its description says otherwise: its card has an **RSVP**
+  button (the form works once the new site is live; until then it asks visitors to email). Type either marker on a
+  **line of its own** in the description;
   markers are never shown on the page:
   - `No RSVP` — no RSVP button for this event (for example a talk at another venue).
   - `RSVP limit: 40` — at most 40 people in total; the page shows when the event is full. The limit must be a whole

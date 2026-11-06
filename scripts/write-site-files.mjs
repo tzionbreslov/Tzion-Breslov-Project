@@ -57,7 +57,12 @@ console.log(`gallery: ${gallery.length} photos`);
 
 // The events the Events page lists, as /events.json: what the forms Worker needs to
 // take RSVPs (which events exist, when they are, their RSVP setting and limit).
-const { syncedAt, events } = JSON.parse(fs.readFileSync(path.join(root, "content", "events.json"), "utf8"));
+// EVENTS_FIXTURE (build time only, like lib/pages/events.ts) swaps in the RSVP
+// browser tests' events (scripts/fixtures/write-events-fixture.mjs).
+const fixture = process.env.EVENTS_FIXTURE?.trim();
+const eventsFile = fixture ? path.resolve(root, fixture) : path.join(root, "content", "events.json");
+if (fixture) console.log(`events: EVENTS_FIXTURE=${path.relative(root, eventsFile)}`);
+const { syncedAt, events } = JSON.parse(fs.readFileSync(eventsFile, "utf8"));
 const published = publishedEvents(events);
 fs.writeFileSync(path.join(publicDir, "events.json"), `${JSON.stringify({ syncedAt, events: published }, null, 2)}\n`);
 console.log(`events: ${published.length} upcoming`);

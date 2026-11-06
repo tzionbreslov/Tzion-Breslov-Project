@@ -3,7 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 import { load } from "cheerio";
 import copy from "../content/copy/en.json" with { type: "json" };
-import { formatEventWhen, publishedEvents, renderEventsList, upcomingEvents } from "../lib/events.mjs";
+import { formatEventWhen, publishedEvents, renderAnnouncements, renderEventsList, upcomingEvents } from "../lib/events.mjs";
 
 /** An event record as scripts/lib/google-calendar.mjs writes it. */
 const record = (fields = {}) => ({
@@ -49,22 +49,62 @@ test("an all-day event reads its date only, a longer one its first and last day"
   assert.equal(formatEventWhen(record({ ...day, timeZone: "America/Los_Angeles" })), "Sunday, November 8, 2026");
 });
 
-test("with no events the list says so and points to the Contact page", () => {
-  const $ = load(renderEventsList([], copy.events));
+test("with no events the list says so and points to the signup below and to the Contact page", () => {
+  const $ = load(renderEventsList([], copy.events, copy.rsvp));
   const empty = $(".tz-events__empty");
   assert.equal(empty.length, 1);
   assert.match(empty.text(), /No events are currently scheduled/);
-  assert.match(empty.text(), /Contact us to hear about the next gathering\./);
+  assert.equal(empty.find("p").text(), "Sign up below to hear about the next gathering, or contact us.");
   assert.equal(empty.find("a").attr("href"), "/contact/");
-  assert.equal(empty.find("a").text(), "Contact us");
+  assert.equal(empty.find("a").text(), "contact us");
   assert.equal($("article").length, 0);
+  assert.equal($("button").length, 0);
+});
+
+test("an event that takes RSVPs has an RSVP button; a \"No RSVP\" event has none", () => {
+  const $ = load(renderEventsList([record(), record({ id: "fedcba9876543210fedcba98", rsvp: "off" })], copy.events, copy.rsvp));
+  const [open, off] = [$("article").eq(0), $("article").eq(1)];
+  const button = open.find("button.tz-event__rsvp");
+  assert.equal(button.length, 1);
+  assert.equal(button.attr("type"), "button");
+  assert.equal(button.text(), "RSVP");
+  assert.equal(off.find("button").length, 0);
+});
+
+test("the \"Get event announcements\" signup: email, the two lists (events ticked), consent and Sign up", () => {
+  const $ = load(renderAnnouncements(copy.announcements));
+  const section = $("section.tz-announce");
+  assert.equal(section.length, 1);
+  assert.equal(section.attr("data-tz-announcements"), "");
+  const title = section.find("h2");
+  assert.equal(title.text(), "Get event announcements");
+  assert.equal(section.attr("aria-labelledby"), title.attr("id"));
+  const form = section.find("form");
+  assert.equal(form.length, 1);
+  assert.equal(form.attr("data-tz-form"), undefined, "never a footer-style Gravity form (lib/client/forms.ts)");
+  assert.equal(form.attr("novalidate"), "");
+  const email = form.find("input[type=email]");
+  assert.equal(email.attr("name"), "email");
+  assert.equal(email.attr("autocomplete"), "email");
+  assert.equal($(`label[for="${email.attr("id")}"]`).text(), "Email");
+  assert.equal(form.find("fieldset legend").text(), "Email lists");
+  const lists = form.find("input[name=topics]");
+  assert.deepEqual(lists.toArray().map((input) => [$(input).attr("value"), $(input).attr("checked") !== undefined, $(input).parent().text()]), [
+    ["events", true, "Event announcements"],
+    ["newsletter", false, "Newsletter"]
+  ]);
+  const consent = form.find("input[name=consent]");
+  assert.equal(consent.attr("type"), "checkbox");
+  assert.equal(consent.attr("checked"), undefined);
+  assert.equal(consent.parent().text(), "I agree to the privacy notice and consent to this submission.");
+  assert.equal(form.find("button[type=submit]").text(), "Sign up");
 });
 
 test("each event is a card with its id, start, RSVP setting and limit", () => {
   const html = renderEventsList([
     record({ summary: "Bring a friend\nParking nearby", location: "Bet Shemesh", limit: 40 }),
     record({ id: "fedcba9876543210fedcba98", startsAt: "2026-11-15T17:30:00.000Z", endsAt: "2026-11-15T19:00:00.000Z", rsvp: "off" })
-  ], copy.events);
+  ], copy.events, copy.rsvp);
   const $ = load(html);
   const cards = $("article.tz-event");
   assert.equal(cards.length, 2);
@@ -89,7 +129,7 @@ test("a card escapes the calendar's text", () => {
     summary: "<img src=x onerror=alert(1)>\n& more",
     location: '"><b>Hall</b>',
     id: 'x" onclick="alert(1)'
-  })], copy.events);
+  })], copy.events, copy.rsvp);
   assert.ok(!html.includes("<script>"));
   assert.ok(!html.includes("<img"));
   assert.ok(!html.includes("<b>"));
@@ -101,7 +141,7 @@ test("a card escapes the calendar's text", () => {
 });
 
 test("a card has a location row only when a location is set, and a description only when there is one", () => {
-  const $ = load(renderEventsList([record(), record({ id: "b", location: "Bet Shemesh", summary: "Hi" })], copy.events));
+  const $ = load(renderEventsList([record(), record({ id: "b", location: "Bet Shemesh", summary: "Hi" })], copy.events, copy.rsvp));
   assert.equal($("article").eq(0).find(".tz-event__where").length, 0);
   assert.equal($("article").eq(0).find(".tz-event__summary").length, 0);
   assert.equal($("article").eq(1).find(".tz-event__where").text(), "Bet Shemesh");

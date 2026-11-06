@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { expectClean, trackPageErrors } from "./helpers";
 
 // The Events page (lib/pages/events.ts, lib/events.mjs) as the committed empty
@@ -23,20 +23,81 @@ test("/events/ opens with its own hero (eagle-in-the-sky.png, \"Upcoming events\
   await expect(hero.locator("p")).toHaveCount(0);
   await expect(page.getByText("Resources for those seeking spiritual growth.")).toHaveCount(0);
 
-  // The empty state, under the hero: no cards, and a way to hear about the next gathering.
+  // The empty state, under the hero: no cards, and two ways to hear about the next gathering.
   await expect(page.locator("article.tz-event")).toHaveCount(0);
   const empty = page.locator(".tz-events__empty");
   await expect(empty).toBeVisible();
   await expect(empty.getByRole("heading", { name: "No events are currently scheduled" })).toBeVisible();
-  await expect(empty.locator("p")).toHaveText("Contact us to hear about the next gathering.");
+  await expect(empty.locator("p")).toHaveText("Sign up below to hear about the next gathering, or contact us.");
   const heroBox = (await hero.boundingBox())!;
   expect((await empty.boundingBox())!.y).toBeGreaterThan(heroBox.y + heroBox.height);
+  // "Sign up below": the announcements signup comes right after the card.
+  const signup = page.getByRole("region", { name: "Get event announcements" });
+  await expect(signup).toBeVisible();
+  expect((await signup.boundingBox())!.y).toBeGreaterThan((await empty.boundingBox())!.y + (await empty.boundingBox())!.height);
 
-  const contact = empty.getByRole("link", { name: "Contact us", exact: true });
+  const contact = empty.getByRole("link", { name: "contact us", exact: true });
   await expect(contact).toHaveAttribute("href", "/contact/");
   await contact.click();
   await page.waitForURL("**/contact/");
   await expectClean(page, errors);
+});
+
+// The "Get event announcements" signup (lib/events.mjs, lib/client/announcements.ts).
+// The committed build has no forms API (forms stay off on the preview), so it can't send.
+test.describe("Get event announcements", () => {
+  const signup = (page: Page) => page.getByRole("region", { name: "Get event announcements" });
+  const CONSENT = "I agree to the privacy notice and consent to this submission.";
+
+  test("has an email field, the two lists (Event announcements ticked), the consent and Sign up", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/events/");
+    const form = signup(page);
+    await expect(form.getByRole("heading", { name: "Get event announcements" })).toBeVisible();
+    await expect(form.getByLabel("Email", { exact: true })).toHaveAttribute("type", "email");
+    await expect(form.getByRole("checkbox", { name: "Event announcements" })).toBeChecked();
+    await expect(form.getByRole("checkbox", { name: "Newsletter" })).not.toBeChecked();
+    await expect(form.getByRole("checkbox", { name: CONSENT })).not.toBeChecked();
+    await expect(form.getByRole("button", { name: "Sign up" })).toBeVisible();
+    // Not a footer-style Gravity form: forms.ts and the subscription notice leave it alone.
+    await expect(form.locator("form[data-tz-form]")).toHaveCount(0);
+    await expectClean(page, errors);
+  });
+
+  test("needs at least one list ticked", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/events/");
+    await page.waitForSelector("[data-tz-announcements=ready]");
+    const form = signup(page);
+    await form.getByLabel("Email", { exact: true }).fill("visitor@example.com");
+    await form.getByRole("checkbox", { name: "Event announcements" }).uncheck();
+    await form.getByRole("checkbox", { name: CONSENT }).check();
+    await form.getByRole("button", { name: "Sign up" }).click();
+    const lists = form.getByRole("group", { name: "Email lists" });
+    await expect(lists).toHaveAccessibleDescription("Choose at least one list.");
+    await expect(form.getByRole("checkbox", { name: "Event announcements" })).toBeFocused();
+    await expect(form.getByRole("alert")).toHaveCount(0);
+
+    // Ticking one clears it.
+    await form.getByRole("checkbox", { name: "Newsletter" }).check();
+    await form.getByRole("button", { name: "Sign up" }).click();
+    await expect(lists).not.toHaveAccessibleDescription("Choose at least one list.");
+    await expectClean(page, errors);
+  });
+
+  test("submitting shows the unavailable message with tzionbreslovproject@gmail.com", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/events/");
+    await page.waitForSelector("[data-tz-announcements=ready]");
+    const form = signup(page);
+    await form.getByLabel("Email", { exact: true }).fill("visitor@example.com");
+    await form.getByRole("checkbox", { name: CONSENT }).check();
+    await form.getByRole("button", { name: "Sign up" }).click();
+    const alert = form.getByRole("alert");
+    await expect(alert).toHaveText("This form is temporarily unavailable. Please email us at tzionbreslovproject@gmail.com.");
+    await expect(alert).toContainText("tzionbreslovproject@gmail.com");
+    await expectClean(page, errors);
+  });
 });
 
 test("Events is in the menus before Gallery and marked current on /events/", async ({ page }) => {

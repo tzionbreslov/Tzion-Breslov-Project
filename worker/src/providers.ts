@@ -1,3 +1,4 @@
+import type { SubscribeTopic } from "../../lib/api-contract";
 import { PublicError, requireBinding, type Env } from "./types";
 
 type TurnstileResult = {
@@ -71,9 +72,18 @@ export async function sendEmail(
   if (!response.ok) throw new PublicError("UPSTREAM_FAILURE", `Resend email returned ${response.status}`);
 }
 
-/** Opt a confirmed email into the single Resend "newsletter" topic (creating the contact if needed). */
-export async function subscribeToNewsletter(env: Env, email: string) {
-  const topics = [{ id: requireBinding(env, "RESEND_NEWSLETTER_TOPIC_ID"), subscription: "opt_in" }];
+const TOPIC_IDS: Record<SubscribeTopic, "RESEND_NEWSLETTER_TOPIC_ID" | "RESEND_EVENTS_TOPIC_ID"> = {
+  newsletter: "RESEND_NEWSLETTER_TOPIC_ID",
+  events: "RESEND_EVENTS_TOPIC_ID"
+};
+
+/**
+ * Opt a confirmed email into the chosen Resend topics (the newsletter, the
+ * "Event announcements"), creating the contact if needed. Only the chosen
+ * topics' ids are required, and other topics are left as they are.
+ */
+export async function subscribeToTopics(env: Env, email: string, chosen: SubscribeTopic[]) {
+  const topics = chosen.map((topic) => ({ id: requireBinding(env, TOPIC_IDS[topic]), subscription: "opt_in" }));
   const createResponse = await resendRequest(env, "RESEND_CONTACTS_API_KEY", "/contacts", {
     method: "POST",
     body: JSON.stringify({ email, unsubscribed: false, topics })

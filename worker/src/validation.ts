@@ -1,11 +1,14 @@
 import {
   CONFIRMATION_TOKEN_PATTERN,
   ENVELOPE_FIELDS,
+  EVENT_ID_PATTERN,
   FIELD_LIMITS,
   MAX_FILL_TIME_MS,
   MIN_FILL_TIME_MS,
   PHONE_PATTERN,
-  type ApiInputField
+  SUBSCRIBE_TOPICS,
+  type ApiInputField,
+  type SubscribeTopic
 } from "../../lib/api-contract";
 import { PublicError, invalidInput } from "./types";
 
@@ -23,6 +26,7 @@ type JsonRecord = Record<string, unknown>;
 
 export type ContactInput = ReturnType<typeof validateContact>;
 export type SubscribeInput = ReturnType<typeof validateSubscription>;
+export type RsvpInput = ReturnType<typeof validateRsvp>;
 
 export async function readJson(request: Request, maximumBytes = 16_384): Promise<JsonRecord> {
   const contentType = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase() ?? "";
@@ -117,9 +121,36 @@ export function validateContact(input: JsonRecord) {
   return { ...result, firstName, lastName, email: emailAddress, phone, address, message };
 }
 
+const isTopic = (value: unknown): value is SubscribeTopic =>
+  typeof value === "string" && (SUBSCRIBE_TOPICS as readonly string[]).includes(value);
+
+/** The lists to join, in SUBSCRIBE_TOPICS order without duplicates. Missing (or null) = the newsletter. */
+export function subscribeTopics(raw: unknown): SubscribeTopic[] {
+  if (raw === undefined || raw === null) return ["newsletter"];
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every(isTopic)) invalidInput("topics");
+  return SUBSCRIBE_TOPICS.filter((topic) => raw.includes(topic));
+}
+
 export function validateSubscription(input: JsonRecord) {
   const result = envelope(input);
-  return { ...result, email: email(input) };
+  return { ...result, email: email(input), topics: subscribeTopics(input.topics) };
+}
+
+/** `POST /v1/rsvp`, in form order (so `field` names the first visible problem), the event last. */
+export function validateRsvp(input: JsonRecord) {
+  const result = envelope(input);
+  const name = singleLineText(input, "name", FIELD_LIMITS.name.min, FIELD_LIMITS.name.max);
+  const emailAddress = email(input);
+  const guests = input.guests;
+  if (typeof guests !== "number" || !Number.isInteger(guests) || guests < FIELD_LIMITS.guests.min || guests > FIELD_LIMITS.guests.max) {
+    invalidInput("guests");
+  }
+  // Line breaks stay (it is a note); bidi controls go, so the organizer's email reads as typed.
+  const accessibility = text(input, "accessibility", 0, FIELD_LIMITS.accessibility.max, true).replace(/[\u202a-\u202e\u2066-\u2069]/gu, "").trim();
+  if (input.consent !== "granted") invalidInput("consent");
+  const eventId = input.eventId;
+  if (typeof eventId !== "string" || !EVENT_ID_PATTERN.test(eventId)) invalidInput("eventId");
+  return { ...result, eventId, name, email: emailAddress, guests, accessibility };
 }
 
 /** `POST /v1/subscribe/confirm`: just the emailed single-use token (no envelope). */

@@ -43,6 +43,9 @@ WordPress backup (.wpress, private, not in git)
   React only adds the interactive pieces in `components/enhancers.tsx`:
   - the Resources dropdown in the header menus → `lib/client/menu.ts`
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
+  - Events page RSVPs (button per event, "This event is full", the RSVP form in `lib/client/dialog.ts`) →
+    `lib/client/rsvp.ts`, and its "Get event announcements" signup → `lib/client/announcements.ts`; both send
+    through `lib/client/submit.ts` like the other forms
   - Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
   - (dormant since the Resources page was removed: its YouTube grid `lib/client/youtube.ts` and Instagram tab
     `lib/client/instagram.ts`)
@@ -52,8 +55,8 @@ WordPress backup (.wpress, private, not in git)
   - Gallery photo viewer (whole photo, caption, "3 of 7", previous/next, arrow keys, swipe) → `lib/client/gallery.ts` +
     `lib/client/dialog.ts`; the photos are the files in `public/media/gallery` (see "Gallery photos" below)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
-- Events page (`lib/pages/events.ts`, cards from `lib/events.mjs`): no script, the list is rendered at build time from
-  the Google Calendar (see "Events" below).
+- Events page (`lib/pages/events.ts`, cards and the announcements signup from `lib/events.mjs`): the list is rendered
+  at build time from the Google Calendar (see "Events" below); only the RSVPs and the signup run in the browser.
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), and Yoast's sitemaps and `robots.txt` are
 republished at the same paths, minus the removed pages. Removed addresses (`/resources/`, `/video/…`, the archives,
@@ -106,7 +109,10 @@ events only uses the calendar. Every deploy (and the rebuilds around 07:00 and 2
 address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/events.json`, carried between deploys in
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
-publishes the list as `/events.json` for the forms Worker. Owner steps and details:
+publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
+(`POST /v1/rsvp`, `GET /v1/rsvp/availability`; RSVPs are deleted 90 days after the event, `RSVP_RETENTION_DAYS`).
+The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
+they go live on switch day (step 6 below, with each step's undo). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
 
 ## Instagram (switched off)
@@ -188,6 +194,68 @@ TXT record forever** — removing it can drop the verification.
    mail records — and give it SPF + DMARC (it has neither today, at Wix DNS): start DMARC at `p=none` with a report
    address, list every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
    notifications? newsletters?), publish one SPF covering exactly those, then tighten DMARC to `quarantine`/`reject`.
+6. **RSVPs and "Event announcements" (Task 8, owner go-ahead), in this order.** Migration 0002 must come before the
+   deploy: the new Worker writes `subscription_confirmations.topics_json` and its daily cleanup deletes from `rsvps`.
+   SQL below runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
+   dashboard's D1 console). Every statement here holds only single quotes (no `"`, `$`, backtick or `!`), so it
+   reaches D1 unchanged inside `--command "…"` in bash and in PowerShell; each was rehearsed that way with `--local`.
+   1. **Any time before:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
+      `lib/events.mjs` and its `content/copy/en.json` import) and checks `wrangler.jsonc`; it changes nothing live.
+   2. **Topic:** `node scripts/setup-resend.mjs` (the full-access key in `.env.worker`) creates "Event announcements"
+      and writes `RESEND_EVENTS_TOPIC_ID` to `.env.worker`. *Undo:* delete the topic in Resend (Audience → Topics, or
+      `DELETE https://api.resend.com/topics/<id>`) and that line.
+   3. **Secret:** `npx wrangler secret put RESEND_EVENTS_TOPIC_ID` (9 secrets; `TURNSTILE_SECRET_KEY` stays only in
+      Cloudflare). *Undo (after step 5's undo):* `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
+   4. **Migration:** note a bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then
+      `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
+      ignores it). *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
+      - losing only the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json;
+        DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (also drops the table's two indexes; every
+        other row stays; 0002 can be applied again later), or
+      - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
+        database and loses every contact, signup and RSVP row written since.
+   5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
+      `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it, and so do **Workers Logs** (`observability` in
+      `wrangler.jsonc`). With **invocation logs off** (`"invocation_logs": false`; they would store every request's
+      URL, confirmation tokens included, its headers and the visitor's IP), Workers Logs are expected to keep only the
+      Worker's own log lines for up to 7 days (dashboard → the Worker → Logs): codes such as
+      `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and `EVENTS_FEED_EVENT_SKIPPED`, method and path (never the
+      query string), request or correlation ids; no personal data. Cloudflare's docs don't say whether a stored line
+      still carries request fields with invocation logs off, so this is confirmed by the check below.
+      `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.
+      **Check at once, before step 6 turns the forms on:**
+      - **Force a stored line** (on a healthy deploy the Worker only logs failures). Pick a probe of letters, digits and
+        hyphens that appears nowhere else, e.g. `tzprobe-7k2q9x`, and run, with the quotes:
+        `curl -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in bash, or
+        `curl.exe -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in PowerShell (in Windows PowerShell
+        5.1, plain `curl` is `Invoke-WebRequest`). The answer is a 404,
+        `{"ok":false,"error":"NOT_FOUND","correlationId":"<id>"}`, and the Worker logs exactly one line:
+        `{"correlationId":"<id>","method":"GET","path":"/nope","error":"NOT_FOUND"}`.
+      - **Open it:** Workers & Pages → tzion-breslov-api → Logs, search for that `<id>`, open the event and expand the
+        full event, not just the message column.
+      - **The check fails** if any of these appear: the probe string anywhere; any URL, path or trigger field besides
+        the Worker's own four (`correlationId`, `method`, `path`, `error`, also shown parsed as fields), e.g.
+        `$workers.event.request.url` or `$workers.event.request.path`; any request header (e.g. `cf-connecting-ip`,
+        `user-agent`); any `cf` request data (e.g. colo, country, city, ASN). Cloudflare's own bookkeeping
+        (timestamp, level, Worker name and version, outcome, ids) is fine. Both tests count: with query strings
+        redacted, a stored URL would no longer hold the probe.
+      - **If it fails:** change that line of `wrangler.jsonc` to `"observability": { "enabled": false },` and run
+        `npm run worker:deploy` again straight away. Not `wrangler rollback`: that would take back the whole RSVP
+        release. From then on, diagnose live with `npx wrangler tail`. Delete the stored test lines if the dashboard
+        allows it; otherwise they expire within 7 days. Record the change in its own pull request. The owner may later
+        choose a Tail Worker that strips those fields, or sampling, instead.
+
+      *Undo (the whole release):* `npx wrangler rollback <version>`, then at once
+      `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');` — the
+      previous Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would
+      land on a list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the
+      Newsletter.
+   6. **After the switch:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK": every upcoming event
+      that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
+      `https://api.tzionbreslov.org/v1/rsvp/availability` (a 200 alone isn't enough: with every event skipped it would
+      list none). It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect), and exits
+      with 2 when no upcoming event takes RSVPs (add one to the calendar, redeploy, check again). Then turn the site's
+      forms on (launch checklist, step 3).
 
 ## Security headers
 
@@ -212,6 +280,9 @@ switch day (step 4).
    in the git-ignored `.env.worker` (owner's machine) and in Cloudflare; `TURNSTILE_SECRET_KEY` exists **only** in
    Cloudflare (copied from the widget) — never put it in `.env.worker`, or `--secrets-file` would overwrite it.
    To rotate a value: `npx wrangler secret put NAME`.
+   **Except the RSVP release (Task 8, not deployed yet):** its code needs migration 0002 and the secret
+   `RESEND_EVENTS_TOPIC_ID` *before* `npm run worker:deploy` (deployed first, it would break the newsletter signup and the
+   daily cleanup). Follow switch day, step 6.
 3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
    Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
    is still served from github.io would break the forms on the only live copy. Until then they show "temporarily

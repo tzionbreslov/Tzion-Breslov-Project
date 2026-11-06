@@ -72,12 +72,184 @@
   outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px; border-radius: 4px;
 }
 
+/* RSVP (lib/client/rsvp.ts): the button, or "This event is full". */
+.tz-events .tz-event__actions { margin-top: 24px; }
+.tz-events .tz-event__full {
+  margin: 0;
+  font-size: 16px; font-weight: 700; line-height: 1.5;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+
+/* The theme's turquoise pill (uppercase Montserrat 800, its shadow), from
+ * all: unset so the theme's bare-button look and hover jump never apply; dark
+ * blue on hover and focus. The RSVP dialog lives outside .tz-events. */
+.tz-events .tz-event__rsvp,
+.tz-events .tz-button,
+.tz-rsvp-dialog .tz-button {
+  all: unset; box-sizing: border-box;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 12px 34px;
+  border: 2px solid var(--wp--preset--color--turquoise, #70b9bc); border-radius: 40px;
+  background: var(--wp--preset--color--turquoise, #70b9bc); color: #fff;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+  font-size: 16px; font-weight: 800; line-height: 1.2; letter-spacing: .6px; text-transform: uppercase;
+  text-align: center;
+  box-shadow: 0 10px 12px #00000029;
+  cursor: pointer;
+  transition: background-color .25s ease, border-color .25s ease;
+}
+.tz-events .tz-event__rsvp:hover, .tz-events .tz-event__rsvp:focus,
+.tz-events .tz-button:hover, .tz-events .tz-button:focus,
+.tz-rsvp-dialog .tz-button:hover, .tz-rsvp-dialog .tz-button:focus {
+  transform: none;
+  background: var(--wp--preset--color--dark-blue, #1e61a1); border-color: var(--wp--preset--color--dark-blue, #1e61a1);
+  color: #fff;
+}
+.tz-events .tz-event__rsvp:focus-visible,
+.tz-events .tz-button:focus-visible,
+.tz-rsvp-dialog .tz-button:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px;
+}
+.tz-events .tz-button:disabled,
+.tz-rsvp-dialog .tz-button:disabled { opacity: .6; cursor: progress; }
+
+/* "Get event announcements": a card like the events', after the list. */
+.tz-events .tz-announce {
+  max-width: 880px; margin: 40px auto 0; box-sizing: border-box;
+  padding: 36px 44px;
+  background-color: var(--wp--preset--color--light-blue, #f2f9ff);
+  border: 1px solid var(--wp--preset--color--dark-blue, #1e61a1);
+  border-radius: 30px 30px 0 30px;
+  box-shadow: 3px 5px 15px #00000029;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+}
+.tz-events .tz-announce__title {
+  margin: 0 0 20px;
+  font-family: var(--font-secondary, "Newsreader", serif);
+  font-size: 34px; font-weight: 500; line-height: 1.2;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-events .tz-announce__form { display: grid; gap: 20px; justify-items: start; }
+.tz-events .tz-announce__email { width: 100%; max-width: 480px; }
+.tz-events .tz-announce__lists {
+  display: flex; flex-wrap: wrap; gap: 10px 28px;
+  min-width: 0; margin: 0; padding: 0; border: 0;
+}
+.tz-events .tz-announce__lists legend { float: left; width: 100%; margin: 0 0 4px; padding: 0; }
+
+/* Fields, shared by the signup and the RSVP form: the Contact form's white
+ * inputs with their grey border. The theme pads every input (!important). */
+.tz-events .tz-field,
+.tz-rsvp-dialog .tz-field { display: grid; gap: 8px; min-width: 0; }
+.tz-events .tz-field__label,
+.tz-rsvp-dialog .tz-field__label {
+  font-size: 15px; font-weight: 600; line-height: 1.4; color: #333;
+}
+.tz-events .tz-field__input,
+.tz-rsvp-dialog .tz-field__input {
+  box-sizing: border-box; width: 100%; min-height: 48px;
+  border: 1px solid #707070; border-radius: 8px;
+  background: #fff; color: #333;
+  font-family: var(--font-main, "Montserrat", sans-serif); font-size: 16px; line-height: 1.5;
+}
+.tz-rsvp-dialog textarea.tz-field__input { resize: vertical; }
+.tz-events .tz-field__input:focus,
+.tz-rsvp-dialog .tz-field__input:focus { border-color: var(--wp--preset--color--dark-blue, #1e61a1); }
+.tz-events .tz-field__input:focus-visible,
+.tz-rsvp-dialog .tz-field__input:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 1px;
+}
+.tz-events .tz-field__input[aria-invalid="true"],
+.tz-rsvp-dialog .tz-field__input[aria-invalid="true"] { border-color: #b3261e; }
+
+.tz-events .tz-check,
+.tz-rsvp-dialog .tz-check {
+  display: inline-flex; align-items: flex-start; gap: 10px;
+  font-size: 16px; line-height: 1.5; color: #333; cursor: pointer;
+}
+.tz-events .tz-check input[type="checkbox"],
+.tz-rsvp-dialog .tz-check input[type="checkbox"] {
+  flex: none; width: 20px; height: 20px; margin: 2px 0 0; padding: 0 !important;
+  accent-color: var(--wp--preset--color--dark-blue, #1e61a1); cursor: pointer;
+}
+.tz-events .tz-check input[type="checkbox"]:focus-visible,
+.tz-rsvp-dialog .tz-check input[type="checkbox"]:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 2px;
+}
+.tz-events .tz-consent,
+.tz-rsvp-dialog .tz-consent { font-size: 15px; }
+
+.tz-events .tz-field__error,
+.tz-rsvp-dialog .tz-field__error {
+  margin: -4px 0 0; font-size: 14px; font-weight: 600; line-height: 1.4; color: #b3261e;
+}
+.tz-events .tz-form-message,
+.tz-rsvp-dialog .tz-form-message {
+  margin: 0; padding: 14px 18px; border-radius: 12px;
+  font-size: 16px; font-weight: 600; line-height: 1.5;
+  outline: none;
+}
+.tz-events .tz-form-message--error,
+.tz-rsvp-dialog .tz-form-message--error { background: #fdecea; border: 1px solid #f1b8b2; color: #8c1d18; }
+.tz-events .tz-form-message--success,
+.tz-rsvp-dialog .tz-form-message--success {
+  background: #fff; border: 1px solid var(--wp--preset--color--turquoise, #70b9bc);
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-events .tz-turnstile:empty,
+.tz-rsvp-dialog .tz-turnstile:empty { display: none; }
+
+/* The RSVP dialog (lib/client/dialog.ts): an event card's look on the
+ * dialog's overlay. It scrolls inside itself on short screens. */
+.tz-dialog.tz-rsvp-dialog {
+  box-sizing: border-box;
+  width: min(600px, 100% - 32px);
+  padding: 40px 44px 36px;
+  background-color: var(--wp--preset--color--light-blue, #f2f9ff);
+  border: 1px solid var(--wp--preset--color--dark-blue, #1e61a1);
+  border-radius: 30px 30px 0 30px;
+  box-shadow: 3px 5px 15px #00000029;
+  color: #333;
+}
+.tz-rsvp-dialog .tz-rsvp__title {
+  margin: 0 48px 10px 0;
+  font-family: var(--font-secondary, "Newsreader", serif);
+  font-size: 30px; font-weight: 500; line-height: 1.2;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  overflow-wrap: anywhere;
+}
+.tz-rsvp-dialog .tz-rsvp__when {
+  margin: 0 0 24px;
+  font-size: 16px; font-weight: 600; line-height: 1.5;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-rsvp-dialog .tz-rsvp__form { display: grid; gap: 18px; justify-items: stretch; }
+.tz-rsvp-dialog .tz-rsvp__form .tz-button { justify-self: start; }
+.tz-dialog.tz-rsvp-dialog .tz-dialog__close {
+  top: 18px; right: 18px;
+  border-color: rgb(30 97 161 / .35); background: #fff;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-dialog.tz-rsvp-dialog .tz-dialog__close:hover { color: #fff; }
+.tz-dialog.tz-rsvp-dialog .tz-dialog__close:focus-visible { outline-color: var(--wp--preset--color--dark-blue, #1e61a1); }
+
 @media (max-width: 600px) {
   .tz-events { padding: 0; }
   .tz-events .tz-event,
-  .tz-events .tz-events__empty { padding: 28px 22px; }
+  .tz-events .tz-events__empty,
+  .tz-events .tz-announce { padding: 28px 22px; }
   .tz-events .tz-event__title { font-size: 28px; }
-  .tz-events .tz-events__empty-title { font-size: 28px; }
+  .tz-events .tz-events__empty-title,
+  .tz-events .tz-announce__title { font-size: 28px; }
   .tz-events .tz-event__when,
   .tz-events .tz-event__where { font-size: 16px; }
+  .tz-dialog.tz-rsvp-dialog { padding: 28px 20px; }
+  .tz-rsvp-dialog .tz-rsvp__title { font-size: 26px; }
+  .tz-dialog.tz-rsvp-dialog .tz-dialog__close { top: 12px; right: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-events .tz-event__rsvp,
+  .tz-events .tz-button,
+  .tz-rsvp-dialog .tz-button { transition: none; }
 }

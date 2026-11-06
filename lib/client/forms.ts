@@ -9,6 +9,7 @@ import {
 } from "@/lib/api-contract";
 import { mountTurnstile, type TurnstileHandle } from "./turnstile";
 import { publicConfig } from "./config";
+import { envelopeFields, submitPublicForm } from "./submit";
 
 /**
  * Turns the imported Gravity Forms markup (signup in the footer, contact page)
@@ -33,12 +34,14 @@ const FIELDS: Record<FormKind, Record<string, FieldSpec>> = {
   }
 };
 
-const CONFIRMATION: Record<FormKind, string> = {
+/** Also the "Get event announcements" signup's confirmation (announcements.ts), word for word. */
+export const CONFIRMATION: Record<FormKind, string> = {
   signup: "Almost there! Please check your inbox and click the link to confirm your subscription.",
   contact: "Thanks for contacting us! We will get in touch with you shortly."
 };
 
-const MESSAGES = {
+/** The site's form messages; the RSVP and announcements forms reuse the ones they share. */
+export const MESSAGES = {
   required: "This field is required.",
   email: "The email address entered is invalid, please check the formatting (e.g. email@domain.com).",
   phone: "Please enter a valid phone number.",
@@ -49,7 +52,8 @@ const MESSAGES = {
   failed: "Something went wrong sending your message. Please try again."
 };
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** The Worker's email check (worker/src/validation.ts). */
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function formNumber(form: HTMLFormElement) {
   return form.id.replace("gform_", "");
@@ -139,7 +143,8 @@ function inputFor(kind: FormKind, form: HTMLFormElement, field: ApiInputField | 
   return name ? (form.elements.namedItem(name) as HTMLInputElement | null) : null;
 }
 
-function addHoneypot(form: HTMLFormElement) {
+/** The visually hidden honeypot (app/enhancements.css .tz-hp), appended to the form. */
+export function addHoneypot(form: HTMLFormElement) {
   const wrap = document.createElement("div");
   wrap.className = "tz-hp";
   wrap.setAttribute("aria-hidden", "true");
@@ -193,19 +198,9 @@ function enhance(form: HTMLFormElement) {
       const payload = {
         ...values,
         [ENVELOPE_FIELDS.honeypot]: honeypot.value,
-        [ENVELOPE_FIELDS.startedAt]: startedAt,
-        [ENVELOPE_FIELDS.submittedAt]: new Date().toISOString(),
-        [ENVELOPE_FIELDS.requestId]: crypto.randomUUID(),
-        [ENVELOPE_FIELDS.turnstileToken]: await turnstile.token()
+        ...envelopeFields(startedAt, await turnstile.token())
       };
-      const response = await fetch(apiBaseUrl + (kind === "signup" ? API_PATHS.subscribe : API_PATHS.contact), {
-        method: "POST",
-        mode: "cors",
-        credentials: "omit",
-        cache: "no-store",
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
+      const response = await submitPublicForm(kind === "signup" ? API_PATHS.subscribe : API_PATHS.contact, payload);
       if (response.ok) {
         turnstile.remove();
         showConfirmation(form, CONFIRMATION[kind]);

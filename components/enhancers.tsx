@@ -11,6 +11,8 @@ import { enhanceInstagramFeeds } from "@/lib/client/instagram";
 import { enhanceVideoLibrary } from "@/lib/client/video-library";
 import { enhanceGallery } from "@/lib/client/gallery";
 import { enhanceMenus } from "@/lib/client/menu";
+import { enhanceRsvp } from "@/lib/client/rsvp";
+import { enhanceAnnouncements } from "@/lib/client/announcements";
 import { DonateForm } from "@/components/donate-form";
 
 const noop = () => () => undefined;
@@ -42,6 +44,7 @@ export function Enhancers({ islands }: { islands: Island[] }) {
     if (islands.includes("instagram-feed")) cleanups.push(enhanceInstagramFeeds(document));
     if (islands.includes("video-library")) cleanups.push(enhanceVideoLibrary(document));
     if (islands.includes("gallery")) cleanups.push(enhanceGallery(document));
+    if (islands.includes("events")) cleanups.push(enhanceRsvp(document), enhanceAnnouncements(document));
     return () => cleanups.forEach((fn) => fn());
   }, [islands]);
 
