@@ -42,6 +42,12 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
 | `node scripts/compare-live.mjs` | Compare the WordPress reference's text/images/links with the live site |
+| `npm run rollback -- checkpoint-NNN` | Open a pull request that rolls every file back to a checkpoint (`--dry-run` to only list what it undoes); see ROLLBACK.md |
+
+## Checkpoints and rollback
+
+Every merge into `main` is tagged `checkpoint-NNN` with a Release listing its changes; checkpoints can't be moved or
+deleted. How to roll the preview back right away, or for good: [ROLLBACK.md](ROLLBACK.md).
 
 ## YouTube feed (Resources page)
 

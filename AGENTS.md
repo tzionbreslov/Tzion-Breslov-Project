@@ -15,6 +15,12 @@ deployment. Update `PROJECT_MEMORY.md` when the owner confirms a durable decisio
 
 ## Rules for this repo
 
+- **Owner rule (2026-11-06): never change any wording that is on the site today** — headings, paragraphs, buttons,
+  menu labels, footer, article titles and their spellings. Relinked buttons keep their labels; new pages reuse existing
+  wording where they say the same thing. Only the pages the owner asked to remove may lose text.
+- **Owner rule (2026-11-06): a real checkpoint with every change.** One change = one pull request, never batched; each
+  merge becomes a protected `checkpoint-NNN` tag + Release (ROLLBACK.md). Before changing a live service, record its
+  undo (Worker version, D1 Time Travel bookmark, exported DNS/rules) in the pull request.
 - The site must stay visually identical to the WordPress original. After any change to `content/`, `public/`,
   `components/site-document.tsx` or `lib/youtube-feed.ts`, run `node scripts/visual-diff.mjs` against the WordPress
   reference (`tools/wordpress-reference`) and keep every page at ~0.00% (Donate is the one intentional exception).

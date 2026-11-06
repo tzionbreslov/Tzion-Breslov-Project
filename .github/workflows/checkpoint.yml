@@ -1,0 +1,36 @@
+name: Checkpoint
+
+# Every change that lands on main becomes a checkpoint: an unmovable tag
+# checkpoint-NNN plus a Release listing what changed and how to roll back
+# (ROLLBACK.md). No concurrency group on purpose: queued runs would replace each
+# other and skip a checkpoint; number clashes are retried by the script.
+on:
+  push:
+    branches:
+      - main
+
+permissions: {}
+
+jobs:
+  checkpoint:
+    name: Record checkpoint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Tag and release
+        run: node scripts/checkpoint.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKPOINT_SHA: ${{ github.sha }}
