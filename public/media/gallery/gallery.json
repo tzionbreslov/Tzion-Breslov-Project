@@ -1,0 +1,32 @@
+{
+  "files": {
+    "01-class-gathering.webp": {
+      "alt": "Rabbi Kalmus teaching a class around a table",
+      "order": 1
+    },
+    "02-group-selfie.webp": {
+      "alt": "A group photo from a Tzion Breslov gathering",
+      "order": 2
+    },
+    "03-rabbi-lecturing.webp": {
+      "alt": "Rabbi Kalmus lecturing at a podium",
+      "order": 3
+    },
+    "04-rabbi-portrait.webp": {
+      "alt": "Portrait of Rabbi David Yisrael Kalmus",
+      "order": 4
+    },
+    "05-collage.webp": {
+      "alt": "Collage of photos from Tzion Breslov classes (1)",
+      "order": 5
+    },
+    "06-collage.webp": {
+      "alt": "Collage of photos from Tzion Breslov classes (2)",
+      "order": 6
+    },
+    "07-collage.webp": {
+      "alt": "Collage of photos from Tzion Breslov classes (3)",
+      "order": 7
+    }
+  }
+}

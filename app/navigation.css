@@ -92,6 +92,15 @@
   }
 }
 
+/* Below 1440px the five items at the theme's 15px a side are wider than the menu's half of the
+ * header and push the centred logo aside: 10px a side there. The theme's own rule
+ * (.nav-primary .genesis-nav-menu a, also the header buttons) loads later, so this one goes
+ * through the menu's id, and touches the top-level links and the Resources toggle only. */
+@media only screen and (min-width: 1280px) and (max-width: 1439px) {
+  .nav-primary #menu-main-menu-links > .menu-item > a,
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 10px; padding-right: 10px; }
+}
+
 @keyframes tz-menu-in {
   from { opacity: 0; translate: 0 -6px; }
 }

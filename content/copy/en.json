@@ -2,7 +2,8 @@
   "nav": {
     "home": "Home",
     "classes": "Classes",
-    "articles": "Articles"
+    "articles": "Articles",
+    "gallery": "Gallery"
   },
   "articles": {
     "heading": "Articles",
@@ -29,5 +30,15 @@
     "playVideo": "Play video",
     "views": "views",
     "closePlayer": "Close video player"
+  },
+  "gallery": {
+    "title": "Gallery",
+    "description": "Photos from Tzion Breslov classes and gatherings.",
+    "heading": "Gallery",
+    "defaultAlt": "Photo from Tzion Breslov",
+    "previous": "Previous photo",
+    "next": "Next photo",
+    "close": "Close",
+    "counter": "{n} of {total}"
   }
 }
