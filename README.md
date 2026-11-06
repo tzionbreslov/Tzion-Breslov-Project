@@ -43,6 +43,9 @@ WordPress backup (.wpress, private, not in git)
   React only adds the interactive pieces in `components/enhancers.tsx`:
   - the Resources dropdown in the header menus → `lib/client/menu.ts`
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
+  - Events page RSVPs (button per event, "This event is full", the RSVP form in `lib/client/dialog.ts`) →
+    `lib/client/rsvp.ts`, and its "Get event announcements" signup → `lib/client/announcements.ts`; both send
+    through `lib/client/submit.ts` like the other forms
   - Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
   - (dormant since the Resources page was removed: its YouTube grid `lib/client/youtube.ts` and Instagram tab
     `lib/client/instagram.ts`)
@@ -52,8 +55,8 @@ WordPress backup (.wpress, private, not in git)
   - Gallery photo viewer (whole photo, caption, "3 of 7", previous/next, arrow keys, swipe) → `lib/client/gallery.ts` +
     `lib/client/dialog.ts`; the photos are the files in `public/media/gallery` (see "Gallery photos" below)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
-- Events page (`lib/pages/events.ts`, cards from `lib/events.mjs`): no script, the list is rendered at build time from
-  the Google Calendar (see "Events" below).
+- Events page (`lib/pages/events.ts`, cards and the announcements signup from `lib/events.mjs`): the list is rendered
+  at build time from the Google Calendar (see "Events" below); only the RSVPs and the signup run in the browser.
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), and Yoast's sitemaps and `robots.txt` are
 republished at the same paths, minus the removed pages. Removed addresses (`/resources/`, `/video/…`, the archives,
@@ -106,7 +109,11 @@ events only uses the calendar. Every deploy (and the rebuilds around 07:00 and 2
 address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/events.json`, carried between deploys in
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
-publishes the list as `/events.json` for the forms Worker. Owner steps and details:
+publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
+(`POST /v1/rsvp`, `GET /v1/rsvp/availability`; RSVPs are deleted 90 days after the event, `RSVP_RETENTION_DAYS`).
+The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
+they go live on switch day (steps and their undo in the description of the Task 8 pull request, "RSVPs and Event
+announcements"). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
 
 ## Instagram (switched off)

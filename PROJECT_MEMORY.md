@@ -73,6 +73,13 @@
   as `/events.json` for the Worker's RSVPs (Task 8). "No RSVP" / "RSVP limit: 40" lines in a description set an
   event's RSVPs. With six menu items the desktop menu links have 17px text and 8px side padding from 1340 to 1919px,
   6px below 1340px (18px and 15px from 1920px, as before), so the logo stays centred with ≥12px around it.
+- Site structure, Task 8 (2026-11-06, built and tested, **not deployed**): RSVPs on `/events/` (button per event, hidden
+  once it starts, "This event is full" from `GET /v1/rsvp/availability`, the form in the site's dialog) and a "Get event
+  announcements" signup (lists: Event announcements, Newsletter → `topics` on `/v1/subscribe`). The Worker reads the
+  site's `/events.json` (`EVENTS_FEED_URL`, no redirects followed) and reserves seats in one SQL statement; RSVPs never
+  touch `request_log`. Migration 0002 (additive), secret `RESEND_EVENTS_TOPIC_ID` (9 secrets), the Resend topic and
+  the Worker deploy wait for switch day (Task 11; steps + undo in the Task 8 PR). RSVP retention 90 days after the
+  event is **pending the owner's confirmation** (Ruach used 365).
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
