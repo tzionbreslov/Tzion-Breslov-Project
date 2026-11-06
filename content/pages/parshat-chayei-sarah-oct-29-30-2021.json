@@ -202,6 +202,15 @@
    "ref": "styles/b04f0ba1fb7a.css"
   },
   {
+   "t": "link",
+   "attrs": {
+    "rel": "stylesheet",
+    "id": "wp-block-cover-css",
+    "href": "/wp-includes/blocks/cover/style.min.css?ver=7.1.4",
+    "media": "all"
+   }
+  },
+  {
    "t": "style",
    "id": "wp-block-image-inline-css",
    "ref": "styles/d8dd5f9b5513.css"
