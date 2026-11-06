@@ -52,18 +52,53 @@ overwrites `content/` from the WordPress snapshot, so only do that while WordPre
 
 All public, build-time values:
 
-- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.com` once the Worker is deployed
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — Cloudflare Turnstile site key for tzionbreslov.com
+- `NEXT_PUBLIC_SITE_URL` — the site's public origin for canonical links, social cards, structured data, sitemaps and
+  `robots.txt`. Unset = `https://tzionbreslov.com` (where WordPress still lives); set to `https://tzionbreslov.org` on
+  switch day.
+- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.org` once the Worker has its Resend secrets
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `0x4AAAAAAF1kfPJ0qES50FAh` (widget "Tzion Breslov forms", tzionbreslov.org + www)
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID` — when PayPal checkout is wired
 
 Without the first two, the forms show a "temporarily unavailable — email us" message instead of failing silently.
 Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. See `SECURITY.md`.
 
+## Domains and Cloudflare
+
+**tzionbreslov.org** (Cloudflare Registrar + DNS, account `tzionbreslovproject@gmail.com`) is the site's future home.
+**tzionbreslov.com** is still the WordPress site at the old host. Until the switch:
+
+| Piece | State |
+|---|---|
+| `tzionbreslov.org`, `www` | Proxied placeholder records (`192.0.2.1`, `100::`) + redirect rule **302** → `https://tzionbreslov.com` + same path. 302, not 301: a cached 301 would loop once .com later redirects to .org. |
+| Zone security | Always HTTPS, TLS ≥ 1.2, SSL Full (strict), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
+| Email | `v=spf1 -all` + DMARC `p=reject` (nothing may send as @tzionbreslov.org; Resend's DKIM still aligns later) |
+| Forms API | D1 `tzion-breslov-production` (schema applied), Turnstile widget (site key above). Worker `tzion-breslov-api` → `api.tzionbreslov.org` deploys with `npm run worker:deploy` |
+| GitHub Pages preview | `tzionbreslov.github.io/Tzion-Breslov-Project/` (canonical links still point at the real domain) |
+
+### Switch day (.com → .org)
+
+1. **GitHub (owner account):** Settings → Pages → custom domain `tzionbreslov.org`. Also verify the domain under the
+   owner's Settings → Pages → *Verified domains* (TXT `_github-pages-challenge-tzionbreslov`) so nobody else can claim it.
+2. **GitHub variables:** `NEXT_PUBLIC_SITE_URL=https://tzionbreslov.org`; re-run *Deploy GitHub Pages*.
+3. **Cloudflare DNS:** delete the redirect rule; replace the placeholders with GitHub Pages records, **DNS-only** at first
+   so GitHub can issue its certificate — apex `A` 185.199.108.153 / .109 / .110 / .111, `AAAA` 2606:50c0:8000::153 /
+   8001 / 8002 / 8003, `www` CNAME `tzionbreslov.github.io`. When Pages shows the certificate, tick *Enforce HTTPS*,
+   then switch the records to proxied (SSL Full (strict) is already set).
+4. **Verify live**, then turn the CSP from `Content-Security-Policy-Report-Only` into `Content-Security-Policy` and stage
+   HSTS (short max-age first). `node scripts/check-csp.mjs` must pass before any CSP change.
+5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org` (keep its MX/TXT mail records).
+
+## Security headers
+
+`config/security-headers.mjs` is the source of truth; Cloudflare's Transform Rule "Tzion security headers" must match it.
+Any new third-party origin (e.g. PayPal) goes there first, then `npm run build && node scripts/check-csp.mjs` (serves
+`out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
+Cloudflare rule.
+
 ## Launch checklist (not done yet)
 
-1. Deploy the Worker: create the D1 database, fill `account_id`/`database_id` in `wrangler.jsonc`, set secrets,
-   `npm run db:migrate:remote`, `npm run worker:deploy`.
-2. Resend: verify the sending domain, create the "newsletter" topic. Turnstile: create a widget for the two hostnames.
-3. Move DNS for tzionbreslov.com to Cloudflare (preserve MX/TXT mail records), point the apex + `www` at GitHub Pages,
-   set the custom domain in the repo's Pages settings, and add a redirect rule `/about/` → `/about-us/` (301).
-4. Wire PayPal in `lib/client/donations.ts`.
+1. Resend: verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter" topic,
+   then set the Worker's Resend secrets and `npm run worker:deploy`. Only then set `NEXT_PUBLIC_API_BASE_URL` and
+   `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (until then the forms show "temporarily unavailable — email us").
+2. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
+3. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs`).

@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // Serves ./out like GitHub Pages does (dir -> index.html, unknown -> 404.html).
+// SECURITY_HEADERS=1 adds the production security headers (config/security-headers.mjs).
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { SECURITY_HEADERS } from "../config/security-headers.mjs";
 
 const root = path.resolve(process.argv[2] ?? "out");
 const port = Number(process.env.PORT ?? 3100);
@@ -18,6 +20,7 @@ http.createServer((req, res) => {
   }
   let status = 200;
   if (!fs.existsSync(file)) { status = 404; file = path.join(root, "404.html"); }
-  res.writeHead(status, { "Content-Type": types[path.extname(file)] ?? "application/octet-stream" });
+  const extra = process.env.SECURITY_HEADERS === "1" ? SECURITY_HEADERS : {};
+  res.writeHead(status, { ...extra, "Content-Type": types[path.extname(file)] ?? "application/octet-stream" });
   fs.createReadStream(file).pipe(res);
 }).listen(port, () => console.log(`serving ${root} on http://localhost:${port}`));

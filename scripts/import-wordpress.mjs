@@ -46,7 +46,11 @@ const REDIRECTS = { "/about/": "/about-us/" };
 const FORM_ISLANDS = { 2: "signup", 3: "contact", 4: "donate" };
 
 const hash = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 12);
-const toRelative = (s) => s.replaceAll(`${LOCAL}/`, "/").replaceAll(LOCAL, "/").replaceAll("http:\\/\\/localhost:8088\\/", "\\/").replaceAll("http:\\/\\/localhost:8088", "\\/");
+// The designer's staging host (tzionbreslov.estiwolo.com) is gone; WordPress still
+// pointed the Parasha hero images at it, so they 404 on the live site. The same
+// files are in the uploads backup, so serve them locally.
+const STAGING = "https://tzionbreslov.estiwolo.com/wp-content/";
+const toRelative = (s) => s.replaceAll(STAGING, "/wp-content/").replaceAll(`${LOCAL}/`, "/").replaceAll(LOCAL, "/").replaceAll("http:\\/\\/localhost:8088\\/", "\\/").replaceAll("http:\\/\\/localhost:8088", "\\/");
 const toAbsolute = (s) => s.replaceAll(LOCAL, PRODUCTION).replaceAll("http:\\/\\/localhost:8088", "https:\\/\\/tzionbreslov.com");
 
 function resetDir(dir) {
@@ -296,7 +300,11 @@ function seedYoutube() {
 }
 
 // ---------------------------------------------------------------- sitemaps
-/** Republish Yoast's sitemaps and robots.txt at their original URLs (Search Console keeps working). */
+/**
+ * Keep Yoast's sitemaps and robots.txt (same URLs, so Search Console keeps working)
+ * as templates in content/site-files; scripts/write-site-files.mjs renders them into
+ * public/ at build time with the configured site URL.
+ */
 function publishSitemaps() {
   const dir = path.join(golden, "sitemaps");
   if (!fs.existsSync(dir)) return "none in snapshot";
@@ -305,7 +313,7 @@ function publishSitemaps() {
     let text = fs.readFileSync(path.join(dir, name), "utf8").replaceAll(LOCAL, PRODUCTION).replaceAll("//localhost:8088", "//tzionbreslov.com");
     // The XSL stylesheet lives in the Yoast plugin, which no longer exists.
     text = text.replace(/<\?xml-stylesheet[^>]*\?>/, "");
-    fs.writeFileSync(path.join(publicDir, name), text);
+    fs.writeFileSync(path.join(contentDir, "site-files", name), text);
   }
   return files.join(", ");
 }
@@ -314,7 +322,7 @@ function publishSitemaps() {
 async function main() {
   if (!fs.existsSync(pagesDir)) throw new Error(`Snapshot not found at ${pagesDir}`);
   const keepYoutube = fs.existsSync(path.join(contentDir, "youtube.json")) ? fs.readFileSync(path.join(contentDir, "youtube.json")) : null;
-  for (const dir of ["pages", "fragments", "styles", "scripts"]) resetDir(path.join(contentDir, dir));
+  for (const dir of ["pages", "fragments", "styles", "scripts", "site-files"]) resetDir(path.join(contentDir, dir));
   if (keepYoutube) fs.writeFileSync(path.join(contentDir, "youtube.json"), keepYoutube);
   for (const dir of ["wp-content", "wp-includes"]) fs.rmSync(path.join(publicDir, dir), { recursive: true, force: true });
 

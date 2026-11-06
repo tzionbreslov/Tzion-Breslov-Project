@@ -2,6 +2,7 @@ import { createElement, type ReactNode } from "react";
 import { readShared, type Attrs, type HeadItem, type PageContent, type ScriptItem } from "@/lib/content";
 import { expandTokens } from "@/lib/youtube-feed";
 import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
+import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
 import "@/app/enhancements.css";
 
@@ -25,7 +26,7 @@ const BOOLEAN_ATTRS = new Set(["defer", "async", "nomodule"]);
 function props(attrs: Attrs, key: string) {
   const out: Record<string, unknown> = { key };
   for (const [name, value] of Object.entries(attrs)) {
-    out[ATTR_NAMES[name] ?? name] = BOOLEAN_ATTRS.has(name) ? true : name === "href" || name === "src" ? withBase(value) : value;
+    out[ATTR_NAMES[name] ?? name] = BOOLEAN_ATTRS.has(name) ? true : name === "href" || name === "src" ? withBase(toSiteUrl(value)) : toSiteUrl(value);
   }
   return out;
 }
@@ -48,7 +49,7 @@ function headItem(item: HeadItem, i: number) {
     case "style":
       return <style key={key} id={item.id ?? undefined} dangerouslySetInnerHTML={{ __html: rebaseCss(readShared(item.ref)) }} />;
     case "jsonld":
-      return <script key={key} type="application/ld+json" className="yoast-schema-graph" dangerouslySetInnerHTML={{ __html: item.json }} />;
+      return <script key={key} type="application/ld+json" className="yoast-schema-graph" dangerouslySetInnerHTML={{ __html: toSiteUrl(item.json) }} />;
     case "script":
       return script(item, key);
   }
@@ -88,7 +89,7 @@ export function SiteBody({ page }: { page: PageContent }) {
   );
 }
 
-export function RedirectDocument({ to: target, site }: { to: string; site: string }) {
+export function RedirectDocument({ to: target }: { to: string }) {
   const to = withBase(target);
   return (
     <html lang="en-US">
@@ -96,7 +97,7 @@ export function RedirectDocument({ to: target, site }: { to: string; site: strin
         <meta charSet="UTF-8" />
         <title>Redirecting…</title>
         <meta httpEquiv="refresh" content={`0; url=${to}`} />
-        <link rel="canonical" href={`${site}${target}`} />
+        <link rel="canonical" href={`${SITE_URL}${target}`} />
         <meta name="robots" content="noindex" />
       </head>
       <body>

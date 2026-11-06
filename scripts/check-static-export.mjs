@@ -9,7 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "out");
 const rawBase = process.env.NEXT_PUBLIC_BASE_PATH?.trim() ?? "";
 const base = rawBase ? `/${rawBase.replace(/^\/+|\/+$/g, "")}` : "";
-const PRODUCTION = "https://tzionbreslov.com";
+const PRODUCTION = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://tzionbreslov.com").replace(/\/+$/, "");
 const errors = [];
 const fail = (msg) => errors.push(msg);
 
@@ -23,6 +23,10 @@ const htmlFor = (route) => path.join(out, route, "index.html");
 
 for (const file of ["404.html", ".nojekyll", "robots.txt", "sitemap_index.xml", "page-sitemap.xml", "post-sitemap.xml", "video-sitemap.xml"]) {
   if (!fs.existsSync(path.join(out, file))) fail(`missing ${file}`);
+}
+for (const file of ["robots.txt", "sitemap_index.xml", "page-sitemap.xml"]) {
+  const text = fs.existsSync(path.join(out, file)) ? fs.readFileSync(path.join(out, file), "utf8") : "";
+  if (!text.includes(PRODUCTION)) fail(`${file} does not reference ${PRODUCTION}`);
 }
 for (const { path: route } of routes) if (!fs.existsSync(htmlFor(route))) fail(`route not exported: ${route}`);
 for (const [from, to] of Object.entries(redirects)) {
@@ -48,6 +52,7 @@ for (const file of walk(out)) {
   const html = fs.readFileSync(file, "utf8");
   const rel = path.relative(out, file);
   if (html.includes("localhost:8088")) fail(`${rel} still references localhost:8088`);
+  if (html.includes("estiwolo.com/wp-content")) fail(`${rel} still references the dead staging host`);
   if (/\/wp-admin\/admin-ajax\.php/.test(html.replace(/var uagb_data[^;]*;/g, ""))) fail(`${rel} references admin-ajax`);
   const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
   if (canonical && !canonical.startsWith(PRODUCTION)) fail(`${rel} canonical is ${canonical}`);

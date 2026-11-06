@@ -6,7 +6,9 @@
     "node": ">=24 <26"
   },
   "scripts": {
+    "predev": "node scripts/write-site-files.mjs",
     "dev": "next dev",
+    "prebuild": "node scripts/write-site-files.mjs",
     "build": "next build",
     "import:wordpress": "node scripts/import-wordpress.mjs",
     "sync:youtube": "node scripts/sync-youtube.mjs",

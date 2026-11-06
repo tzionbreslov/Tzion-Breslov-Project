@@ -4,7 +4,7 @@
  * Shared by the Worker (`worker/src`) and the Next.js frontend, so keep this
  * file free of runtime/DOM/Worker globals: types and `as const` values only.
  *
- * Base URL: `https://api.tzionbreslov.com` in production,
+ * Base URL: `https://api.tzionbreslov.org` in production,
  * `http://localhost:8787` under `npm run worker:dev`.
  *
  * Every public POST must:
@@ -75,8 +75,8 @@ export const MAX_FILL_TIME_MS = 86_400_000;
 
 /**
  * After a successful double-opt-in click, the Worker answers 303 to
- * SUBSCRIPTION_CONFIRMATION_REDIRECT_URL (`https://tzionbreslov.com/`) with
- * this query parameter appended, e.g. `https://tzionbreslov.com/?subscription=confirmed`.
+ * SUBSCRIPTION_CONFIRMATION_REDIRECT_URL (`https://tzionbreslov.org/`) with
+ * this query parameter appended, e.g. `https://tzionbreslov.org/?subscription=confirmed`.
  */
 export const SUBSCRIPTION_CONFIRMED_QUERY = { subscription: "confirmed" } as const;
 
