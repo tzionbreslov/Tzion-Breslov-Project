@@ -86,7 +86,8 @@ function openRsvp(card: HTMLElement, opener: HTMLButtonElement) {
   const id = (part: string) => `tz-rsvp-${n}-${part}`;
   const eventId = card.dataset.eventId ?? "";
   const title = card.querySelector(".tz-event__title")?.textContent?.trim() ?? "";
-  const label = text.dialogTitle.replace("{title}", title);
+  // split/join, not replace(): "$&", "$'" or "$$" in a calendar title are text, not patterns.
+  const label = text.dialogTitle.split("{title}").join(title);
 
   const body = el("div", "tz-rsvp");
   const heading = el("h2", "tz-rsvp__title");

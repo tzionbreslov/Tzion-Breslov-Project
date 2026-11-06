@@ -53,6 +53,13 @@ jobs:
           NEXT_PUBLIC_API_BASE_URL: https://api.tzionbreslov.org
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: 1x00000000000000000000AA
 
+      # The same events as the github.io preview builds them, with no forms API: the RSVP
+      # form must say that RSVPs open when the new site launches, and send nothing.
+      - name: Build the events fixture without a forms API and run the preview RSVP test
+        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && TZ_E2E_EVENTS=preview npx playwright test e2e/rsvp.spec.ts
+        env:
+          EVENTS_FIXTURE: scripts/fixtures/events.e2e.json
+
       # The github.io preview is served from /Tzion-Breslov-Project: every page,
       # link and asset (new pages included) must carry that base path.
       - name: Build and check the GitHub Pages preview variant (base path)

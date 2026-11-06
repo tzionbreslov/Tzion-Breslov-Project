@@ -112,8 +112,7 @@ scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description contr
 publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
 (`POST /v1/rsvp`, `GET /v1/rsvp/availability`; RSVPs are deleted 90 days after the event, `RSVP_RETENTION_DAYS`).
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
-they go live on switch day (steps and their undo in the description of the Task 8 pull request, "RSVPs and Event
-announcements"). Owner steps and details:
+they go live on switch day (step 6 below, with each step's undo). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
 
 ## Instagram (switched off)
@@ -195,6 +194,35 @@ TXT record forever** — removing it can drop the verification.
    mail records — and give it SPF + DMARC (it has neither today, at Wix DNS): start DMARC at `p=none` with a report
    address, list every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
    notifications? newsletters?), publish one SPF covering exactly those, then tighten DMARC to `quarantine`/`reject`.
+6. **RSVPs and "Event announcements" (Task 8, owner go-ahead), in this order.** Migration 0002 must come before the
+   deploy: the new Worker writes `subscription_confirmations.topics_json` and its daily cleanup deletes from `rsvps`.
+   SQL below runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
+   dashboard's D1 console).
+   1. **Any time before:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
+      `lib/events.mjs` and its `content/copy/en.json` import) and lists its bindings; it changes nothing live.
+   2. **Topic:** `node scripts/setup-resend.mjs` (the full-access key in `.env.worker`) creates "Event announcements"
+      and writes `RESEND_EVENTS_TOPIC_ID` to `.env.worker`. *Undo:* delete the topic in Resend (Audience → Topics, or
+      `DELETE https://api.resend.com/topics/<id>`) and that line.
+   3. **Secret:** `npx wrangler secret put RESEND_EVENTS_TOPIC_ID` (9 secrets; `TURNSTILE_SECRET_KEY` stays only in
+      Cloudflare). *Undo (after step 5's undo):* `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
+   4. **Migration:** note a bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then
+      `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
+      ignores it). *Undo (only after step 5's undo, including its DELETE):* either
+      - without losing anything but the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN
+        topics_json; DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (dropping the table drops its
+        two indexes; SQLite drops a column that no index, key, check, foreign key, trigger or view uses, as here — not
+        run yet: rehearse it with `--local` first), or
+      - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
+        database and loses every contact, signup and RSVP row written since.
+   5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
+      `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it (`wrangler.jsonc`). *Undo:*
+      `npx wrangler rollback <version>`, then at once
+      `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = '["events"]';` — the previous
+      Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would land on a
+      list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the Newsletter.
+   6. **After the switch:** `curl -i https://api.tzionbreslov.org/v1/rsvp/availability` must answer **200**. A 503
+      `EVENTS_UNAVAILABLE` means the Worker can't read `https://tzionbreslov.org/events.json` as a plain 200 (it never
+      follows a redirect), and every RSVP would fail. Then turn the site's forms on (launch checklist, step 3).
 
 ## Security headers
 
@@ -221,7 +249,7 @@ switch day (step 4).
    To rotate a value: `npx wrangler secret put NAME`.
    **Except the RSVP release (Task 8, not deployed yet):** its code needs migration 0002 and the secret
    `RESEND_EVENTS_TOPIC_ID` *before* `npm run worker:deploy` (deployed first, it would break the newsletter signup and the
-   daily cleanup). Follow the order and undo steps in the Task 8 pull request.
+   daily cleanup). Follow switch day, step 6.
 3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
    Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
    is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
