@@ -4,13 +4,16 @@
 // page-sitemap.xml. Removed pages (config/site-structure.mjs) leave the sitemaps:
 // their sitemaps aren't published and their <url> entries are dropped. Also lists
 // the Gallery's photos (public/media/gallery) in content/gallery.generated.json
-// (git-ignored), which the Gallery page renders. Runs automatically before
-// `next dev` and `next build`.
+// (git-ignored), which the Gallery page renders, and publishes the upcoming
+// events (content/events.json, scripts/sync-events.mjs) as public/events.json
+// (git-ignored) for the forms Worker. Runs automatically before `next dev` and
+// `next build`.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRemovedPath, NEW_ROUTES, REMOVED_SITEMAPS } from "../config/site-structure.mjs";
 import { resolveSiteUrl, rewriteOrigin } from "../config/site-url.mjs";
+import { publishedEvents } from "../lib/events.mjs";
 import { readGallery } from "./lib/gallery.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,3 +54,10 @@ console.log(`site files written for ${site}`);
 const gallery = await readGallery(path.join(publicDir, "media", "gallery"));
 fs.writeFileSync(path.join(root, "content", "gallery.generated.json"), `${JSON.stringify({ images: gallery }, null, 2)}\n`);
 console.log(`gallery: ${gallery.length} photos`);
+
+// The events the Events page lists, as /events.json: what the forms Worker needs to
+// take RSVPs (which events exist, when they are, their RSVP setting and limit).
+const { syncedAt, events } = JSON.parse(fs.readFileSync(path.join(root, "content", "events.json"), "utf8"));
+const published = publishedEvents(events);
+fs.writeFileSync(path.join(publicDir, "events.json"), `${JSON.stringify({ syncedAt, events: published }, null, 2)}\n`);
+console.log(`events: ${published.length} upcoming`);

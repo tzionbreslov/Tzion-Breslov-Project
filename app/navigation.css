@@ -92,13 +92,24 @@
   }
 }
 
-/* Below 1440px the five items at the theme's 15px a side are wider than the menu's half of the
- * header and push the centred logo aside: 10px a side there. The theme's own rule
- * (.nav-primary .genesis-nav-menu a, also the header buttons) loads later, so this one goes
- * through the menu's id, and touches the top-level links and the Resources toggle only. */
-@media only screen and (min-width: 1280px) and (max-width: 1439px) {
+/* The six items at the theme's 18px text and 15px a side only fit the menu's half of the
+ * header once the header's content gets wider (the theme's min-width: 1919px query); below
+ * that they would push the centred logo aside. So up to 1919px the items take 17px text and
+ * 8px a side (from 1920px they keep the theme's own), and 6px a side below 1340px, where the
+ * header's content is narrower still (it stops growing at about 1340px). Every item stays on one line, the logo stays centred and the menu stays at least
+ * 12px clear of it, even with two items bold (the current one and the one under the mouse, or
+ * Resources with its panel open; e2e/navigation.spec.ts sweeps 1280–1920px with real
+ * scrollbars). The theme's own rule (.nav-primary .genesis-nav-menu a, also the header
+ * buttons) loads later, so these go through the menu's id, and touch the top-level links and
+ * the Resources toggle only; the toggle's focus ring stays inside its neighbours' padding. */
+@media only screen and (min-width: 1280px) and (max-width: 1919px) {
   .nav-primary #menu-main-menu-links > .menu-item > a,
-  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 10px; padding-right: 10px; }
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { font-size: 1.7rem; padding-left: 8px; padding-right: 8px; }
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle:focus-visible { outline-offset: 0; }
+}
+@media only screen and (min-width: 1280px) and (max-width: 1339px) {
+  .nav-primary #menu-main-menu-links > .menu-item > a,
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 6px; padding-right: 6px; }
 }
 
 @keyframes tz-menu-in {

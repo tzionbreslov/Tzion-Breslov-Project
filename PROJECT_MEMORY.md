@@ -30,6 +30,10 @@
 - 2026-11-06 — Site structure design approved (docs/superpowers/specs/2026-11-06-site-structure-design.md); phase 1 =
   everything except translations, which come last.
 - 2026-11-06 — Dependabot: TypeScript 7 ignored (typescript-eslint 8 supports TS < 7 only); revisit later.
+- 2026-11-06 — Calendar refresh only twice daily, morning and night (owner): the deploy rebuilds around 07:00 and 21:00
+  Israel time (cron 07:05 and 21:05 Asia/Jerusalem, off the hour; the times are the spec's call), replacing the
+  daily 04:41 UTC rebuild. Events come from one public
+  Google Calendar (`GOOGLE_CALENDAR_ICAL_URL`, a repository variable the owner sets: docs/EVENT_CALENDAR.md).
 
 ## Cloudflare state (2026-11-06)
 
@@ -57,18 +61,25 @@
   `/articles/` (+ page 2). Menus (Home · About · Resources ▾ Classes, Articles · Contact) come from `lib/navigation.mjs`.
 - Site structure, Task 5 (2026-11-06): `/gallery/` (menu item before Contact) shows the photos in `public/media/gallery`
   (7 placeholders from the old site until the owner sends real ones: adding a photo = adding a file) with an on-page
-  viewer. Between 1280 and 1439px the menu links have 10px side padding (not 15px) so the logo stays centred.
+  viewer. Between 1280 and 1439px the menu links have 10px side padding (not 15px) so the logo stays centred
+  (superseded in Task 7).
 - Site structure, Task 6 (2026-11-06): the Contact page has a Google map pinned on "Bet Shemesh, Israel" (owner) under
   the form and the three cards, with "Get directions" and "Open in Google Maps" links (`lib/pages/contact-map.ts`); the
   rest of the page is unchanged. CSP frame-src now allows `https://www.google.com`: the Cloudflare rule "Tzion security
   headers" must gain it on switch day (owner go-ahead).
+- Site structure, Task 7 (2026-11-06): `/events/` (menu item before Gallery) lists the upcoming events of the Google
+  Calendar, read at every deploy into `content/events.json` (Actions cache, never committed; git keeps the empty
+  default, so until `GOOGLE_CALENDAR_ICAL_URL` is set it says "No events are currently scheduled"), and publishes them
+  as `/events.json` for the Worker's RSVPs (Task 8). "No RSVP" / "RSVP limit: 40" lines in a description set an
+  event's RSVPs. With six menu items the desktop menu links have 17px text and 8px side padding from 1340 to 1919px,
+  6px below 1340px (18px and 15px from 1920px, as before), so the logo stays centred with ≥12px around it.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
   signature). A real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
 - Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
   (default opt-out); webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677; send-only key 82913060-a568-4518-8a2b-bef4f36255f5.
-- GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (daily rebuild 04:41 UTC);
+- GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds around 07:00 and 21:00 Israel time);
   Actions limited to GitHub-owned actions, read-only token, outside-contributor workflows need approval; wiki/projects
   off; secret scanning + push protection, Dependabot alerts/updates, private vulnerability reporting on.
 - Instagram switched off with the Resources page (owner, 2026-11-06): no tab and no link (the footer icon stays). The

@@ -5,9 +5,14 @@ on:
     branches:
       - main
   workflow_dispatch:
-  # Daily rebuild so new YouTube uploads appear without anyone committing.
+  # Twice-daily rebuild, morning and night in Israel (owner's choice), so calendar events
+  # and new YouTube uploads appear without anyone committing. A few minutes past the hour:
+  # GitHub delays (and may drop) scheduled runs most at the start of an hour.
   schedule:
-    - cron: "41 4 * * *"
+    - cron: "5 7 * * *"
+      timezone: "Asia/Jerusalem"
+    - cron: "5 21 * * *"
+      timezone: "Asia/Jerusalem"
 
 concurrency:
   group: github-pages
@@ -51,6 +56,11 @@ jobs:
       - name: Test Worker
         run: npm run test:worker
 
+      # Before the calendar sync below: these also check that git holds only the
+      # empty default of content/events.json.
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Test YouTube feed parser
         run: npm run test:youtube
 
@@ -64,6 +74,29 @@ jobs:
       # means restoring the sync and cache steps (docs/instagram-setup.md).
       - name: Test Instagram feed sync
         run: npm run test:instagram
+
+      # Events page (docs/EVENT_CALENDAR.md). Build-time only (never committed): the
+      # last good list is carried between deploys in the Actions cache, so a calendar
+      # outage keeps the previous events instead of emptying the page.
+      - name: Restore last calendar events
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: content/events.json
+          key: events-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: events-
+
+      # Without the variable it skips with a notice; if Google is unreachable it warns.
+      # Either way the build uses the restored (or the committed, empty) list.
+      - name: Refresh calendar events
+        run: npm run sync:events
+        env:
+          GOOGLE_CALENDAR_ICAL_URL: ${{ vars.GOOGLE_CALENDAR_ICAL_URL }}
+
+      - name: Save calendar events for the next deploy
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: content/events.json
+          key: events-${{ github.run_id }}-${{ github.run_attempt }}
 
       # base_path is "/Tzion-Breslov-Project" on the github.io URL and "" once
       # the custom domain is set in the Pages settings.

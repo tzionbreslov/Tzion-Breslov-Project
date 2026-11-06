@@ -25,12 +25,13 @@ test("siteRoutes serves the imported pages that are kept, then the new pages", (
   const raw = routesJson();
   const index = siteRoutes(raw);
   const kept = paths(raw).filter((path) => !isRemovedPath(path));
-  assert.deepEqual(paths(index), [...kept, "/articles/", "/articles/page/2/", "/classes/", "/gallery/"]);
-  assert.deepEqual(index.routes.slice(-4), [
+  assert.deepEqual(paths(index), [...kept, "/articles/", "/articles/page/2/", "/classes/", "/gallery/", "/events/"]);
+  assert.deepEqual(index.routes.slice(-5), [
     { path: "/articles/", key: "tz:articles" },
     { path: "/articles/page/2/", key: "tz:articles__page__2" },
     { path: "/classes/", key: "tz:classes" },
-    { path: "/gallery/", key: "tz:gallery" }
+    { path: "/gallery/", key: "tz:gallery" },
+    { path: "/events/", key: "tz:events" }
   ]);
   // Home, About, Contact, Donate and the 18 Parasha posts.
   assert.equal(kept.length, 22);
