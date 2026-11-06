@@ -8,8 +8,8 @@ node_modules/
 .cloudflare-env.ps1
 .wrangler/
 .DS_Store
-dist/
-build/
+/dist/
+/build/
 .next/
 next-env.d.ts
 out/
