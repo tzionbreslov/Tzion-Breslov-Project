@@ -1105,6 +1105,16 @@ describe("POST /v1/rsvp", () => {
       .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
   });
 
+  it("drops bidi controls from the accessibility note, keeping its line breaks", async () => {
+    const outbound = mockProviders("rsvp");
+    const payload = rsvpPayload({ accessibility: "Wheelchair\u202e access\nNo \u2066nuts\u2069" });
+    expect((await fetchHandler(publicRequest("/v1/rsvp", payload), env)).status).toBe(202);
+    expect((await rsvpRow(payload.requestId))?.accessibility).toBe("Wheelchair access\nNo nuts");
+    const [organizer] = sentTo(outbound, "team@example.test");
+    expect((organizer.body as SentEmail).text).toContain("Wheelchair access\nNo nuts");
+    expect((organizer.body as SentEmail).text).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/u);
+  });
+
   it("keeps the calendar's title to one line in the email subjects", async () => {
     const outbound = mockProviders("rsvp", { feedEvents: [feedEvent({ title: "Class\r\nBcc: attacker@example.test\u202e\tnight" })] });
     const payload = rsvpPayload();

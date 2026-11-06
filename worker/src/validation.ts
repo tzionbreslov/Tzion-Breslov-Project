@@ -145,7 +145,8 @@ export function validateRsvp(input: JsonRecord) {
   if (typeof guests !== "number" || !Number.isInteger(guests) || guests < FIELD_LIMITS.guests.min || guests > FIELD_LIMITS.guests.max) {
     invalidInput("guests");
   }
-  const accessibility = text(input, "accessibility", 0, FIELD_LIMITS.accessibility.max, true);
+  // Line breaks stay (it is a note); bidi controls go, so the organizer's email reads as typed.
+  const accessibility = text(input, "accessibility", 0, FIELD_LIMITS.accessibility.max, true).replace(/[\u202a-\u202e\u2066-\u2069]/gu, "").trim();
   if (input.consent !== "granted") invalidInput("consent");
   const eventId = input.eventId;
   if (typeof eventId !== "string" || !EVENT_ID_PATTERN.test(eventId)) invalidInput("eventId");
