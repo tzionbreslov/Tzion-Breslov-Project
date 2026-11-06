@@ -133,3 +133,14 @@ html.tz-lightbox-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .tz-donate__tier, .tz-donate__submit { transition: none; }
 }
+
+/* Article header ("Breeze of Breslov", the 18 Parasha posts only): show the whole
+ * sky picture so the heart-shaped cloud is fully visible. The banner takes the
+ * picture's own proportions (1920x739) and never goes below its original 400px;
+ * the picture itself is unchanged and stays where it is. */
+body.single-post .wp-block-cover.hero { aspect-ratio: 1920 / 739; }
+/* Below ~1040px the banner is 400px tall and wider than the screen, so the crop
+ * shifts left to keep the heart (about 16-52% across the picture) in frame. */
+@media (max-width: 1039px) {
+  body.single-post .wp-block-cover.hero .wp-block-cover__image-background { object-position: 25% 50%; }
+}
