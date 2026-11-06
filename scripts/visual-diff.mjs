@@ -7,6 +7,9 @@
 // compares only the part above the reference page's footer widgets — for
 // structure work, where the menu and footer links change on purpose.
 //
+// A page that is new (404 on REF, 200 on NEXT) is listed as "no reference" and
+// left out of the worst mismatch; a page that is 404 on both sides is compared.
+//
 // Writes ref/next/diff PNGs to .tmp/visual/ and prints the mismatch per page.
 import fs from "node:fs";
 import path from "node:path";
@@ -22,11 +25,15 @@ const MASK_NAV = args.includes("--mask-nav");
 const pageArgs = args.filter((arg) => !arg.startsWith("--"));
 const NAV_SELECTORS = "header.site-header, .mobile-menu-wrap, #genesis-footer-widgets";
 const PAGES = pageArgs.length ? pageArgs : [
-  "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/",
+  "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/", "/articles/",
   "/parshat-noach-october-8-9-2021/", "/video/video-1/", "/category/uncategorized/",
   "/author/esti-wolo/", "/no-such-page/"
 ];
 const VIEWPORTS = { desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } };
+
+const status = async (url) => (await fetch(url)).status;
+const NO_REFERENCE = new Set();
+for (const p of PAGES) if ((await status(REF + p)) === 404 && (await status(NEXT + p)) === 200) NO_REFERENCE.add(p);
 
 async function capture(page, url) {
   await page.goto(url, { waitUntil: "load" });
@@ -101,6 +108,10 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
   const page = await context.newPage();
   for (const p of PAGES) {
     const name = `${vpName}${p.replace(/\//g, "_") || "_"}`;
+    if (NO_REFERENCE.has(p)) {
+      console.log(`${"n/a".padStart(7)}  ${vpName.padEnd(7)} ${p.padEnd(36)} no reference (404 on REF)`);
+      continue;
+    }
     // Chromium's full-page capture occasionally drops images on very tall
     // pages (on either side), so keep the best of a few attempts.
     let best;
@@ -124,4 +135,5 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
   await context.close();
 }
 await browser.close();
-console.log(`worst mismatch ${(worst * 100).toFixed(2)}%  (images in ${OUT})`);
+const unreferenced = NO_REFERENCE.size ? `; no reference: ${[...NO_REFERENCE].join(" ")}` : "";
+console.log(`worst mismatch ${(worst * 100).toFixed(2)}%  (images in ${OUT})${unreferenced}`);

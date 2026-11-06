@@ -42,3 +42,10 @@ jobs:
         run: npm run build && npm run check:static-export
         env:
           NEXT_PUBLIC_SITE_URL: https://tzionbreslov.org
+
+      # The github.io preview is served from /Tzion-Breslov-Project: every page,
+      # link and asset (new pages included) must carry that base path.
+      - name: Build and check the GitHub Pages preview variant (base path)
+        run: npm run build && npm run check:static-export
+        env:
+          NEXT_PUBLIC_BASE_PATH: /Tzion-Breslov-Project

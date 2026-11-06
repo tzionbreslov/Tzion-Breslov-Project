@@ -20,7 +20,7 @@ const digest = (html, base) => {
   c.find("a").each((_, el) => tokens.push(`[a:${($(el).attr("href") ?? "").replace(base, "")}]`));
   return tokens;
 };
-const paths = [...new Set([...(await sitemap(LIVE)), "/resources/page/2/", "/resources/page/3/", "/category/uncategorized/page/2/", "/author/esti-wolo/page/2/", "/no-such-page/"])];
+const paths = [...new Set([...(await sitemap(LIVE)), "/articles/", "/resources/page/2/", "/resources/page/3/", "/category/uncategorized/page/2/", "/author/esti-wolo/page/2/", "/no-such-page/"])];
 let bad = 0;
 for (const p of paths) {
   const get = async (b) => (await fetch(b + p, { headers: { "user-agent": "Mozilla/5.0" } })).text();

@@ -2,12 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { CSP } from "../config/security-headers.mjs";
+import { siteRoutes } from "../config/site-structure.mjs";
 import { expectClean, trackPageErrors } from "./helpers";
 
-// Task 2 switches this to siteRoutes(index).routes from config/site-structure.mjs.
-const { routes } = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "content", "routes.json"), "utf8")) as {
-  routes: { path: string }[];
-};
+// Every page the site serves: the imported ones minus removed, plus the composed ones.
+const { routes } = siteRoutes(JSON.parse(fs.readFileSync(path.join(__dirname, "..", "content", "routes.json"), "utf8")));
 
 // Scroll the whole page so lazy images, scroll animations and their handlers run too.
 async function scrollThrough(page: Page) {

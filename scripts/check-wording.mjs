@@ -12,10 +12,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRemovedPath } from "../config/site-structure.mjs";
 import { extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
-
-// Task 2 replaces this with: import { isRemovedPath } from "../config/site-structure.mjs";
-const isRemovedPath = (_route) => false;
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BASELINE = path.join(root, "tests", "wording", "checkpoint-001.json");
@@ -35,6 +33,8 @@ if (args[0] === "--write-baseline") {
     process.exit(1);
   }
   const outDir = path.resolve(args[1]);
+  // The imported pages only (not siteRoutes): the baseline records what the
+  // checkpoint-001 site said, and its build has none of the composed pages.
   const { routes } = JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8"));
   const baseline = {};
   for (const route of [...routes.map((r) => r.path), NOT_FOUND]) {
