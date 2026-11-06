@@ -49,12 +49,18 @@
       "RESEND_WEBHOOK_SECRET"
     ]
   },
-  // Workers Logs keep only the Worker's own log lines for 7 days (dashboard → Worker → Logs), so
-  // RSVP_ORGANIZER_EMAIL_FAILED, RSVP_CANCEL_FAILED, EVENTS_FEED_EVENT_SKIPPED and the error lines
-  // (codes, request or correlation ids, never personal data) can be found later, not only in a
-  // live `wrangler tail`. Invocation logs stay OFF: they would store every request's method + URL
-  // (e.g. /v1/subscribe/confirm?token=…), headers and the visitor's IP. Takes effect at deploy.
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  // With invocation logs off, Workers Logs (dashboard → the Worker → Logs) are expected to keep
+  // only the Worker's own log lines, for up to 7 days: RSVP_ORGANIZER_EMAIL_FAILED,
+  // RSVP_CANCEL_FAILED, EVENTS_FEED_EVENT_SKIPPED and the error lines (codes, method and path but
+  // never the query string, request or correlation ids; no personal data), so they can be found
+  // later, not only in a live `wrangler tail`. Cloudflare's docs don't say whether a stored line
+  // still carries request fields (URL, headers, IP) with invocation logs off, so this is confirmed
+  // on switch day (README → Switch day, step 6.5); if the check fails, "enabled" becomes false.
+  // Invocation logs stay OFF: they would store every request's method + URL (e.g.
+  // /v1/subscribe/confirm?token=…), headers and the visitor's IP. "redact_query_string" (Cloudflare:
+  // "Whether query strings are removed from request URLs in logs and traces") is a second guard for
+  // any URL Cloudflare does record, not a substitute for the check. Takes effect at deploy.
+  "observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } },
   // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [

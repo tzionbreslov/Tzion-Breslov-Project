@@ -272,6 +272,20 @@ describe("HTTP boundary", () => {
     expect((await fetchHandler(publicRequest("/v1/rsvp/availability", {}), env)).status).toBe(404);
   });
 
+  it("logs the switch-day probe (an unknown path) as one line with method and path, never its query string", async () => {
+    // README → Switch day, step 6.5: the stored line this request leaves in Workers Logs must hold only these fields,
+    // so the probe string can only appear there if Cloudflare itself stored the request URL.
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await fetchHandler(new Request("https://api.test/nope?probe=tzprobe-7k2q9x"), env);
+    expect(response.status).toBe(404);
+    const body = await errorBody(response);
+    expect(body.error).toBe("NOT_FOUND");
+    const logged = logs.mock.calls.map((args) => String(args[0]));
+    expect(logged).toHaveLength(1);
+    expect(JSON.parse(logged[0])).toEqual({ correlationId: body.correlationId, method: "GET", path: "/nope", error: "NOT_FOUND" });
+    expect(logged[0]).not.toContain("tzprobe-7k2q9x");
+  });
+
   it("rejects JSON lookalike content types", async () => {
     const request = publicRequest("/v1/contact", contactPayload());
     request.headers.set("Content-Type", "application/jsonp");

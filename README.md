@@ -216,12 +216,36 @@ TXT record forever** — removing it can drop the verification.
         database and loses every contact, signup and RSVP row written since.
    5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
       `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it, and so do **Workers Logs** (`observability` in
-      `wrangler.jsonc`). They keep only the Worker's own log lines, for 7 days (dashboard → the Worker → Logs): codes
-      such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and `EVENTS_FEED_EVENT_SKIPPED` with request or
-      correlation ids, no personal data. **Invocation logs are off** (`"invocation_logs": false`): they would
-      store every request's URL (confirmation tokens included), its headers and the visitor's IP. After the deploy,
-      open one stored line in the dashboard and check it shows no request URL or IP. *Undo:* `npx wrangler rollback
-      <version>`, then at once
+      `wrangler.jsonc`). With **invocation logs off** (`"invocation_logs": false`; they would store every request's
+      URL, confirmation tokens included, its headers and the visitor's IP), Workers Logs are expected to keep only the
+      Worker's own log lines for up to 7 days (dashboard → the Worker → Logs): codes such as
+      `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and `EVENTS_FEED_EVENT_SKIPPED`, method and path (never the
+      query string), request or correlation ids; no personal data. Cloudflare's docs don't say whether a stored line
+      still carries request fields with invocation logs off, so this is confirmed by the check below.
+      `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.
+      **Check at once, before step 6 turns the forms on:**
+      - **Force a stored line** (on a healthy deploy the Worker only logs failures). Pick a probe of letters, digits and
+        hyphens that appears nowhere else, e.g. `tzprobe-7k2q9x`, and run, with the quotes:
+        `curl -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in bash, or
+        `curl.exe -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in PowerShell (in Windows PowerShell
+        5.1, plain `curl` is `Invoke-WebRequest`). The answer is a 404,
+        `{"ok":false,"error":"NOT_FOUND","correlationId":"<id>"}`, and the Worker logs exactly one line:
+        `{"correlationId":"<id>","method":"GET","path":"/nope","error":"NOT_FOUND"}`.
+      - **Open it:** Workers & Pages → tzion-breslov-api → Logs, search for that `<id>`, open the event and expand the
+        full event, not just the message column.
+      - **The check fails** if any of these appear: the probe string anywhere; any URL, path or trigger field besides
+        the Worker's own four (`correlationId`, `method`, `path`, `error`, also shown parsed as fields), e.g.
+        `$workers.event.request.url` or `$workers.event.request.path`; any request header (e.g. `cf-connecting-ip`,
+        `user-agent`); any `cf` request data (e.g. colo, country, city, ASN). Cloudflare's own bookkeeping
+        (timestamp, level, Worker name and version, outcome, ids) is fine. Both tests count: with query strings
+        redacted, a stored URL would no longer hold the probe.
+      - **If it fails:** change that line of `wrangler.jsonc` to `"observability": { "enabled": false },` and run
+        `npm run worker:deploy` again straight away. Not `wrangler rollback`: that would take back the whole RSVP
+        release. From then on, diagnose live with `npx wrangler tail`. Delete the stored test lines if the dashboard
+        allows it; otherwise they expire within 7 days. Record the change in its own pull request. The owner may later
+        choose a Tail Worker that strips those fields, or sampling, instead.
+
+      *Undo (the whole release):* `npx wrangler rollback <version>`, then at once
       `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');` — the
       previous Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would
       land on a list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the
