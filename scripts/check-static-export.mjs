@@ -104,6 +104,19 @@ for (const file of walk(out)) {
 }
 for (const [ref, from] of broken) fail(`broken local reference ${ref} (first seen in ${from})`);
 
+// The Contact page's map (lib/pages/contact-map.ts): one section, after the "Beit Shemesh, Israel" card, embedding
+// Google Maps pinned on Bet Shemesh (its origin is in config/security-headers.mjs).
+const contactFile = htmlFor("/contact/");
+if (fs.existsSync(contactFile)) {
+  const contact = fs.readFileSync(contactFile, "utf8");
+  const sections = contact.split('<section class="tz-map"').length - 1;
+  const map = contact.indexOf('<section class="tz-map"');
+  const card = contact.indexOf("Beit Shemesh, Israel");
+  if (sections !== 1) fail(`/contact/ has ${sections} map sections, expected 1`);
+  else if (!/<iframe [^>]*src="https:\/\/www\.google\.com\/maps\?q=Bet%20Shemesh%2C%20Israel&amp;[^"]*output=embed"/.test(contact.slice(map))) fail("/contact/ map does not embed Google Maps pinned on Bet Shemesh, Israel");
+  else if (card < 0 || card > map) fail("/contact/ map is not after the \"Beit Shemesh, Israel\" card");
+}
+
 for (const forbidden of [".dev.vars", ".env"]) if (fs.existsSync(path.join(out, forbidden))) fail(`secret-looking file exported: ${forbidden}`);
 
 if (errors.length) {

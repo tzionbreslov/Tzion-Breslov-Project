@@ -58,6 +58,10 @@
 - Site structure, Task 5 (2026-11-06): `/gallery/` (menu item before Contact) shows the photos in `public/media/gallery`
   (7 placeholders from the old site until the owner sends real ones: adding a photo = adding a file) with an on-page
   viewer. Between 1280 and 1439px the menu links have 10px side padding (not 15px) so the logo stays centred.
+- Site structure, Task 6 (2026-11-06): the Contact page has a Google map pinned on "Bet Shemesh, Israel" (owner) under
+  the form and the three cards, with "Get directions" and "Open in Google Maps" links (`lib/pages/contact-map.ts`); the
+  rest of the page is unchanged. CSP frame-src now allows `https://www.google.com`: the Cloudflare rule "Tzion security
+  headers" must gain it on switch day (owner go-ahead).
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

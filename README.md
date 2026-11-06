@@ -35,8 +35,9 @@ WordPress backup (.wpress, private, not in git)
 - `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/` and `/gallery/`), built from
   Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
-  description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. Their new English text lives
-  only in `content/copy/en.json`.
+  description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. `contact-map.ts` adds the map
+  (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
+  Their new English text lives only in `content/copy/en.json`.
 - `app/[[...slug]]` — one catch-all route renders every page; `app/global-not-found.tsx` is the 404.
 - The original theme scripts (jQuery, GSAP animations, Spectra blocks, slick carousel) still run unchanged.
   React only adds the interactive pieces in `components/enhancers.tsx`:
@@ -162,7 +163,10 @@ TXT record forever** — removing it can drop the verification.
       same way. Do not put these hosts back on strict unless
       `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
       tzionbreslov.org with > 30 days left.
-4. **Verify live:** `node scripts/check-csp.mjs https://tzionbreslov.org` (and `https://www.tzionbreslov.org`) must report
+4. **Cloudflare 'Tzion security headers' rule must gain `https://www.google.com` in frame-src on switch day (owner
+   go-ahead)** — the Contact page's map; copy the policy from `config/security-headers.mjs` (`CSP_REPORT_ONLY` while
+   the header is still report-only). Undo: put back the rule's previous value.
+   **Verify live:** `node scripts/check-csp.mjs https://tzionbreslov.org` (and `https://www.tzionbreslov.org`) must report
    zero violations; then rename the header to `Content-Security-Policy` with the value of `CSP` (it re-adds
    `upgrade-insecure-requests`) and stage HSTS (short max-age first).
 5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT
@@ -175,7 +179,8 @@ TXT record forever** — removing it can drop the verification.
 `config/security-headers.mjs` is the source of truth; Cloudflare's Transform Rule "Tzion security headers" must match it.
 Any new third-party origin (e.g. PayPal) goes there first, then `npm run build && node scripts/check-csp.mjs` (serves
 `out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
-Cloudflare rule.
+Cloudflare rule. The Contact page's map added `https://www.google.com` to frame-src; the Cloudflare rule gains it on
+switch day (step 4).
 
 ## Launch checklist
 

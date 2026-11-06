@@ -123,6 +123,17 @@ await visit(BASE + "/gallery/", async () => {
 
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 await visit(BASE + "/contact/", async () => {
+  // The map (Google Maps, lazy): scroll it into view and wait until Google's embed has really loaded.
+  const map = page.locator("section.tz-map iframe");
+  await map.scrollIntoViewIfNeeded();
+  const mapFrame = async () => (await map.elementHandle()).contentFrame();
+  const isMap = (frame) => frame?.url().startsWith("https://www.google.com/maps");
+  for (let i = 0; i < 40 && !isMap(await mapFrame()); i++) await page.waitForTimeout(250);
+  const frame = await mapFrame();
+  if (!isMap(frame)) throw new Error(`the map did not load (its frame is at ${frame?.url() || "about:blank"})`);
+  await frame.waitForLoadState("load");
+  await page.waitForTimeout(1500);
+
   const contactForm = page.locator("form[data-tz-form=contact]");
   if (!apiBase || !(await contactForm.count())) return;
   // Never reach a deployed Worker: answer the forms API locally. A request
