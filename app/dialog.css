@@ -19,6 +19,8 @@ html.tz-dialog-open { overflow: hidden; }
   position: fixed; top: 50%; left: 50%; z-index: 100001;
   width: min(1120px, 100% - 32px);
   max-height: calc(100dvh - 32px);
+  /* Content taller than the screen scrolls inside the box (the page behind is locked). */
+  overflow: auto; overscroll-behavior: contain;
   transform: translate(-50%, -50%);
   outline: none;
   font-family: var(--font-main, "Montserrat", sans-serif);

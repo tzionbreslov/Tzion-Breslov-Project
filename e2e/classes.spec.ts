@@ -141,6 +141,19 @@ test("search filters the clips, says when nothing matches, and Escape clears it"
   await button(page, "Videos").click();
   await expect(input).toHaveValue("");
   await expect(shown(page, "video")).toHaveCount(VIDEOS.length);
+
+  // The open search box never covers the tabs, down to small phones, and leaves room to type.
+  type Box = { x: number; y: number; width: number; height: number };
+  const overlaps = (a: Box, b: Box) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  const field = page.locator(".tz-vl__search-field");
+  for (const width of [360, 390, 414, 768]) {
+    await page.setViewportSize({ width, height: 800 });
+    const [box, videos, shorts] = await Promise.all([field, button(page, "Videos"), button(page, "Shorts")].map((part) => part.boundingBox()));
+    if (!box || !videos || !shorts) throw new Error(`search box or tabs not laid out at ${width}px`);
+    expect(overlaps(box, videos), `search box over "Videos" at ${width}px`).toBe(false);
+    expect(overlaps(box, shorts), `search box over "Shorts" at ${width}px`).toBe(false);
+    expect(box.width, `search box width at ${width}px`).toBeGreaterThanOrEqual(200);
+  }
   await expectClean(page, errors);
 });
 
@@ -247,15 +260,29 @@ test("thumbnails are as wide as on the Resources Classes tab", async ({ page }, 
 
 test.describe("without JavaScript", () => {
   test.use({ javaScriptEnabled: false });
-  test("every card is a plain link to the video on YouTube", async ({ page }) => {
+  test("every video and clip is a visible link to YouTube, and no control that needs JS shows", async ({ page }) => {
     const errors = trackPageErrors(page);
     const response = await page.goto("/classes/");
     expect(response?.status()).toBe(200);
-    await expect(shown(page, "video")).toHaveCount(VIDEOS.length);
     const link = shown(page, "video").first().locator("a.tz-vl__trigger");
     await expect(link).toHaveAttribute("href", `https://www.youtube.com/watch?v=${VIDEOS[0].id}`);
     await expect(link).toHaveAttribute("target", "_blank");
     await expect(link).toHaveAttribute("aria-label", `Play video: ${VIDEOS[0].title}`);
+
+    // Both tabs' cards, one after the other under the tab names.
+    const watch = (clips: Clip[]) => clips.map((clip) => `https://www.youtube.com/watch?v=${clip.id}`);
+    for (const [kind, name, clips] of [["video", "Videos", VIDEOS], ["short", "Shorts", SHORTS]] as const) {
+      await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+      const links = grid(page, kind).locator("a.tz-vl__trigger");
+      await expect(links).toHaveCount(clips.length);
+      expect(await links.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("href")))).toEqual(watch([...clips]));
+      for (const each of await links.all()) await expect(each).toBeVisible();
+    }
+    expect(SHORTS).toHaveLength(26);
+
+    // The tabs, search and sort only work with JS: none of them shows.
+    await expect(page.locator(".tz-vl__bar")).toBeHidden();
+    await expect(library(page).locator("button:visible, input:visible")).toHaveCount(0);
     await expectClean(page, errors);
   });
 });

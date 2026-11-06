@@ -44,22 +44,33 @@ function card(video: LibraryVideo, kind: Kind) {
     `</a></article>`;
 }
 
-function grid(videos: LibraryVideo[], kind: Kind) {
+/** A tab's cards, under its name (the name shows only without JS, where the tabs are hidden). */
+function grid(videos: LibraryVideo[], kind: Kind, name: string) {
   const cards = sortVideos(videos, "latest").map((video) => card(video, kind)).join("");
-  return `<div class="tz-vl__grid" data-kind="${kind}"${kind === "short" ? " hidden" : ""}>${cards}</div>`;
+  return `<h2 class="tz-vl__kind" hidden>${esc(name)}</h2>` +
+    `<div class="tz-vl__grid" data-kind="${kind}"${kind === "short" ? " hidden" : ""}>${cards}</div>`;
 }
+
+// Without JS the tabs, search and sort would do nothing: they're taken out, and
+// both tabs' cards are listed one after the other under their tab names, so
+// every video and clip is still a link to YouTube.
+const NO_SCRIPT = "<noscript><style>" +
+  ".tz-vl .tz-vl__bar{display:none}" +
+  ".tz-vl .tz-vl__grid[hidden]{display:grid!important}" +
+  ".tz-vl .tz-vl__kind[hidden]{display:block!important}" +
+  "</style></noscript>";
 
 function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
   const text = copy.classes;
   const count = esc(text.videoCount.replace("{count}", String(videos.length + shorts.length)));
   const sort = (["latest", "popular", "oldest"] as const).map((order) =>
     `<button type="button" data-order="${order}" aria-pressed="${order === "latest"}">${esc(text[order])}</button>`).join("");
-  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" aria-labelledby="tz-vl-title">` +
+  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
     `<div class="tz-vl__profile">` +
     `<span class="tz-vl__avatar"><img src="${LOGO}" alt="" width="215" height="216"></span>` +
     `<div class="tz-vl__intro">` +
     `<h1 id="tz-vl-title" class="tz-vl__title">${esc(text.heading)}</h1>` +
-    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong> · ${count}</p>` +
+    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong> <span class="tz-vl__count">· ${count}</span></p>` +
     `<a class="tz-vl__channel" href="${CHANNEL_URL}" target="_blank" rel="noopener noreferrer">${esc(text.channel)}${EXTERNAL}</a>` +
     `</div></div>` +
     `<div class="tz-vl__bar">` +
@@ -76,8 +87,8 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
     `</div></div>` +
     `<div class="tz-vl__sort" role="group" aria-label="${esc(text.sortLabel)}">${sort}</div>` +
     `</div>` +
-    grid(videos, "video") +
-    grid(shorts, "short") +
+    grid(videos, "video", text.videosTab) +
+    grid(shorts, "short", text.shortsTab) +
     `<p class="tz-vl__empty" role="status" hidden>${esc(text.noResults)}</p>` +
     `</section>`;
 }
