@@ -79,23 +79,43 @@ Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. Se
 | Piece | State |
 |---|---|
 | `tzionbreslov.org`, `www` | Proxied placeholder records (`192.0.2.1`, `100::`) + redirect rule **302** → `https://tzionbreslov.com` + same path. 302, not 301: a cached 301 would loop once .com later redirects to .org. |
-| Zone security | Always HTTPS, TLS ≥ 1.2, SSL Full (strict), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
-| Email | `v=spf1 -all` + DMARC `p=reject` (nothing may send as @tzionbreslov.org; Resend's DKIM still aligns later) |
+| Zone security | Always HTTPS, TLS ≥ 1.2, DNSSEC, SSL Full (strict) for the zone plus a Configuration Rule giving the two site hosts SSL **Full** (see switch day, step 3), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
+| Email | `v=spf1 -all` + DMARC `p=reject` (nothing may send as @tzionbreslov.org; Resend's DKIM still aligns later). No MX: inbound mail is declined, so the Worker sets a Reply-To on its emails. |
 | Forms API | D1 `tzion-breslov-production` (schema applied), Turnstile widget (site key above). Worker `tzion-breslov-api` → `api.tzionbreslov.org` deploys with `npm run worker:deploy` |
 | GitHub Pages preview | `tzionbreslov.github.io/Tzion-Breslov-Project/` (canonical links still point at the real domain) |
 
+### Before switch day (any time, owner account)
+
+**Verify the domain with GitHub first**, so nobody else's Pages site can ever claim it: owner profile → Settings → Pages →
+*Verified domains* → Add `tzionbreslov.org`, create the TXT record GitHub shows
+(`_github-pages-challenge-tzionbreslov.tzionbreslov.org`) in Cloudflare, wait until it resolves, click *Verify*. **Keep that
+TXT record forever** — removing it can drop the verification.
+
 ### Switch day (.com → .org)
 
-1. **GitHub (owner account):** Settings → Pages → custom domain `tzionbreslov.org`. Also verify the domain under the
-   owner's Settings → Pages → *Verified domains* (TXT `_github-pages-challenge-tzionbreslov`) so nobody else can claim it.
-2. **GitHub variables:** `NEXT_PUBLIC_SITE_URL=https://tzionbreslov.org`; re-run *Deploy GitHub Pages*.
-3. **Cloudflare DNS:** delete the redirect rule; replace the placeholders with GitHub Pages records, **DNS-only** at first
-   so GitHub can issue its certificate — apex `A` 185.199.108.153 / .109 / .110 / .111, `AAAA` 2606:50c0:8000::153 /
-   8001 / 8002 / 8003, `www` CNAME `tzionbreslov.github.io`. When Pages shows the certificate, tick *Enforce HTTPS*,
-   then switch the records to proxied (SSL Full (strict) is already set).
-4. **Verify live**, then turn the CSP from `Content-Security-Policy-Report-Only` into `Content-Security-Policy` and stage
-   HSTS (short max-age first). `node scripts/check-csp.mjs` must pass before any CSP change.
-5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org` (keep its MX/TXT mail records).
+1. **GitHub (owner account):** repo Settings → Pages → custom domain `tzionbreslov.org` (only after the domain shows *Verified*).
+2. **GitHub variables:** `NEXT_PUBLIC_SITE_URL=https://tzionbreslov.org`; re-run *Deploy GitHub Pages*. (CI already builds
+   and checks this variant on every PR.)
+3. **Cloudflare DNS, in this order:**
+   1. Replace the placeholders with GitHub Pages records, **DNS-only**: apex `A` 185.199.108.153 / .109 / .110 / .111,
+      `AAAA` 2606:50c0:8000::153 / 8001::153 / 8002::153 / 8003::153, `www` CNAME `tzionbreslov.github.io`. (Change DNS
+      *before* touching the redirect rule — DNS-only traffic never hits it, while deleting it first would send visitors
+      to the placeholder address.)
+   2. When repo Settings → Pages shows the certificate, tick *Enforce HTTPS*, then **delete the 302 redirect rule** (it
+      must be gone before re-proxying, or it would loop once .com 301s to .org).
+   3. Switch the records to proxied. The Configuration Rule "tzion_github_pages_origin_ssl_full" (already created) makes
+      Cloudflare use SSL **Full** for the site hosts: GitHub reports proxied domains as not HTTPS-eligible and may fail
+      to renew its certificate, and under Full (strict) that would turn every page into a 526. Ruach Breslov runs the
+      same way. Do not put these hosts back on strict unless
+      `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
+      tzionbreslov.org with > 30 days left.
+4. **Verify live:** `node scripts/check-csp.mjs https://tzionbreslov.org` (and `https://www.tzionbreslov.org`) must report
+   zero violations; then rename the header to `Content-Security-Policy` with the value of `CSP` (it re-adds
+   `upgrade-insecure-requests`) and stage HSTS (short max-age first).
+5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT
+   mail records — and give it SPF + DMARC (it has neither today, at Wix DNS): start DMARC at `p=none` with a report
+   address, list every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
+   notifications? newsletters?), publish one SPF covering exactly those, then tighten DMARC to `quarantine`/`reject`.
 
 ## Security headers
 
@@ -106,8 +126,18 @@ Cloudflare rule.
 
 ## Launch checklist (not done yet)
 
-1. Resend: verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter" topic,
-   then set the Worker's Resend secrets and `npm run worker:deploy`. Only then set `NEXT_PUBLIC_API_BASE_URL` and
-   `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (until then the forms show "temporarily unavailable — email us").
-2. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
-3. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs`).
+1. **Resend:** verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter"
+   topic, and a webhook to `https://api.tzionbreslov.org/webhooks/resend`.
+2. **Worker secrets** — all 8 in `wrangler.jsonc` → `secrets.required`, via `npx wrangler secret put NAME` (or
+   `npx wrangler deploy --secrets-file <uncommitted file>`): `RATE_LIMIT_SALT` (random, ≥ 32 chars, e.g.
+   `openssl rand -hex 32` — shorter makes every form return 503), `TURNSTILE_SECRET_KEY` (widget "Tzion Breslov
+   forms"), `RESEND_TRANSACTIONAL_API_KEY`, `RESEND_CONTACTS_API_KEY`, `RESEND_FROM_EMAIL`
+   (e.g. `Tzion Breslov <no-reply@tzionbreslov.org>`), `CONTACT_TO_EMAIL` (`tzionbreslovproject@gmail.com`),
+   `RESEND_NEWSLETTER_TOPIC_ID`, `RESEND_WEBHOOK_SECRET`. Then `npm run worker:deploy` and check
+   `https://api.tzionbreslov.org/health`.
+3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
+   Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
+   is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
+   unavailable — email us".
+4. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
+5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first).

@@ -32,3 +32,10 @@ jobs:
 
       - name: Typecheck, lint, Worker tests, build, export check
         run: npm run check
+
+      # Switch-day path: the same export built for tzionbreslov.org must have no
+      # tzionbreslov.com left in canonicals, social tags, JSON-LD, sitemaps or robots.
+      - name: Build and check the tzionbreslov.org variant
+        run: npm run build && npm run check:static-export
+        env:
+          NEXT_PUBLIC_SITE_URL: https://tzionbreslov.org

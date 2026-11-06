@@ -32,9 +32,17 @@ export const CSP_DIRECTIVES = {
   "upgrade-insecure-requests": []
 };
 
-export const CSP = Object.entries(CSP_DIRECTIVES)
-  .map(([k, v]) => (v.length ? `${k} ${v.join(" ")}` : k))
-  .join("; ");
+const serialize = (entries) => entries.map(([k, v]) => (v.length ? `${k} ${v.join(" ")}` : k)).join("; ");
+
+/** Enforced policy (local checks now; Cloudflare once the site is served from .org and verified). */
+export const CSP = serialize(Object.entries(CSP_DIRECTIVES));
+
+/**
+ * What Cloudflare sends today as Content-Security-Policy-Report-Only. Browsers
+ * ignore upgrade-insecure-requests in report-only mode (and log an error), so
+ * it is left out until the policy is enforced.
+ */
+export const CSP_REPORT_ONLY = serialize(Object.entries(CSP_DIRECTIVES).filter(([k]) => k !== "upgrade-insecure-requests"));
 
 export const SECURITY_HEADERS = {
   "Content-Security-Policy": CSP,
