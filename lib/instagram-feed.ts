@@ -9,7 +9,7 @@ import { withBase } from "./base-path";
  * without JavaScript. lib/client/instagram.ts adds the in-site preview.
  */
 
-export type InstagramMedia = { src: string; width: number; height: number };
+export type InstagramMedia = { src: string; width: number; height: number; alt?: string };
 export type InstagramPost = {
   id: string;
   permalink: string;

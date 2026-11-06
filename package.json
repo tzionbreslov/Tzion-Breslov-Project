@@ -13,6 +13,8 @@
     "import:wordpress": "node scripts/import-wordpress.mjs",
     "sync:youtube": "node scripts/sync-youtube.mjs",
     "test:youtube": "node --test scripts/youtube-feed.test.mjs",
+    "sync:instagram": "node scripts/sync-instagram.mjs",
+    "test:instagram": "node --test scripts/instagram-feed.test.mjs",
     "check:static-export": "node scripts/check-static-export.mjs",
     "audit": "npm audit --audit-level=high",
     "typecheck": "next typegen && tsc --noEmit",
@@ -24,7 +26,7 @@
     "worker:deploy": "wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply tzion-breslov-production --local",
     "db:migrate:remote": "wrangler d1 migrations apply tzion-breslov-production --remote",
-    "check": "npm run typecheck && npm run typecheck:worker && npm run lint && npm run test:youtube && npm run test:worker && npm run build && npm run check:static-export"
+    "check": "npm run typecheck && npm run typecheck:worker && npm run lint && npm run test:youtube && npm run test:instagram && npm run test:worker && npm run build && npm run check:static-export"
   },
   "dependencies": {
     "next": "^16.4.5",
@@ -47,6 +49,7 @@
     "pixelmatch": "^7.1.0",
     "pngjs": "^7.0.0",
     "postcss": "^8.5.26",
+    "sharp": "^0.35.5",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
     "vitest": "^4.1.11",

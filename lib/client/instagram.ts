@@ -53,7 +53,7 @@ function openPreview(data: InstagramClientData, post: InstagramClientPost, opene
     img.src = m.src;
     img.width = m.width;
     img.height = m.height;
-    img.alt = total > 1 ? `Photo ${i + 1} of ${total}` : "";
+    img.alt = m.alt || (total > 1 ? `Photo ${i + 1} of ${total}` : "");
     img.decoding = "async";
     if (i > 0) img.loading = "lazy";
     track.append(img);

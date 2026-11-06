@@ -37,6 +37,7 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
 | `npm run check` | Typecheck, lint, Worker tests, build, export check |
+| `npm run sync:instagram` | Pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
@@ -50,6 +51,13 @@ The deploy workflow refreshes it at build time and runs daily (04:41 UTC), so ne
 commit. Videos that scroll out of the feed's 15-entry window only stay listed if they are in the committed
 `content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
 intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
+
+## Instagram tab (Resources page)
+
+An owner-requested addition (WordPress never had it): latest posts from @tzionbreslovproject in a 4th Resources tab,
+with an in-site preview that leads to instagram.com. Data comes from Meta's official API at build time
+(`npm run sync:instagram`, photos copied onto the site); until the account is connected the tab shows the profile and
+a link. **Setup and token care: [docs/instagram-setup.md](docs/instagram-setup.md).**
 
 ## Editing content
 

@@ -59,6 +59,46 @@ jobs:
       - name: Refresh YouTube feed
         run: npm run sync:youtube
 
+      - name: Test Instagram feed sync
+        run: npm run test:instagram
+
+      # Instagram (docs/instagram-setup.md). The last good feed (JSON + images) is
+      # carried between deploys in the Actions cache, so a token or API problem keeps
+      # the previous posts instead of emptying the tab. The key includes a hash of the
+      # committed content/instagram.json, so committing a new snapshot or settings
+      # change starts a fresh cache instead of being overwritten by an old one.
+      - name: Instagram cache key
+        id: igkey
+        shell: bash
+        run: echo "hash=$(sha256sum content/instagram.json | cut -c1-16)" >> "${GITHUB_OUTPUT}"
+
+      - name: Restore last Instagram feed
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            content/instagram.json
+            public/media/instagram
+          key: instagram-${{ steps.igkey.outputs.hash }}-${{ github.run_id }}
+          restore-keys: instagram-${{ steps.igkey.outputs.hash }}-
+
+      # Secret only on this step; this workflow never runs on pull_request. Without the
+      # secret it skips with a notice and the tab shows the committed/cached feed.
+      - name: Refresh Instagram feed
+        run: npm run sync:instagram
+        env:
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_USER_ID: ${{ vars.INSTAGRAM_USER_ID }}
+          INSTAGRAM_API_VERSION: ${{ vars.INSTAGRAM_API_VERSION }}
+          INSTAGRAM_API_HOST: ${{ vars.INSTAGRAM_API_HOST }}
+
+      - name: Save Instagram feed for the next deploy
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            content/instagram.json
+            public/media/instagram
+          key: instagram-${{ steps.igkey.outputs.hash }}-${{ github.run_id }}
+
       # base_path is "/Tzion-Breslov-Project" on the github.io URL and "" once
       # the custom domain is set in the Pages settings.
       - name: Build
