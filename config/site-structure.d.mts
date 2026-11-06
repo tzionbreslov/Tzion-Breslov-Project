@@ -1,6 +1,7 @@
 export type Route = { path: string; key: string };
 export type RouteIndex = { site: string; routes: Route[]; redirects: Record<string, string> };
 
+export const PRIVACY_PATH: string;
 export const NEW_ROUTES: Route[];
 export const REMOVED_PATHS: string[];
 export const REMOVED_SECTIONS: string[];

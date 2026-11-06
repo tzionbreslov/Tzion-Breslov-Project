@@ -97,6 +97,12 @@ test("the \"Get event announcements\" signup: email, the two lists (events ticke
   assert.equal(consent.attr("type"), "checkbox");
   assert.equal(consent.attr("checked"), undefined);
   assert.equal(consent.parent().text(), "I agree to the privacy notice and consent to this submission.");
+  // Only "privacy notice" is a link, to the privacy notice (the page's base path is added when it is rendered).
+  const privacy = consent.parent().find("a");
+  assert.equal(privacy.length, 1);
+  assert.equal(privacy.attr("href"), "/privacy/");
+  assert.equal(privacy.text(), "privacy notice");
+  assert.equal(consent.next("span").html(), 'I agree to the <a href="/privacy/">privacy notice</a> and consent to this submission.');
   assert.equal(form.find("button[type=submit]").text(), "Sign up");
 });
 

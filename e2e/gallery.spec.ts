@@ -284,7 +284,7 @@ test("Gallery is in the menus before Contact and marked current on /gallery/", a
   const labels = (list: string) => page.locator(`${list} > li`).evaluateAll((nodes) =>
     nodes.map((node) => node.querySelector(":scope > a, :scope > button, :scope > .tz-menu-group-label")?.textContent?.trim()));
   const desktop = ["Home", "About", "Resources", "Events", "Gallery", "Contact"];
-  const lists = { "#menu-main-menu-links": desktop, "#menu-mobile-menu": [...desktop, "Donate", "Taste a Class"], "#menu-mobile-menu-1": [...desktop, "Donate", "Taste a Class"] };
+  const lists = { "#menu-main-menu-links": desktop, "#menu-mobile-menu": [...desktop, "Donate", "Taste a Class"], "#menu-mobile-menu-1": [...desktop, "Donate", "Taste a Class", "Privacy"] };
   for (const [list, expected] of Object.entries(lists)) {
     expect(await labels(list), list).toEqual(expected);
     const current = page.locator(`${list} [aria-current="page"]`);

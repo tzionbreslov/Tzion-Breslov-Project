@@ -4,7 +4,8 @@
     "classes": "Classes",
     "articles": "Articles",
     "events": "Events",
-    "gallery": "Gallery"
+    "gallery": "Gallery",
+    "privacy": "Privacy"
   },
   "articles": {
     "heading": "Articles",
@@ -90,5 +91,66 @@
     "iframeTitle": "Map of Bet Shemesh, Israel",
     "directions": "Get directions",
     "openInMaps": "Open in Google Maps"
+  },
+  "privacy": {
+    "title": "Privacy notice",
+    "description": "How Tzion Breslov handles the information you send through this website.",
+    "updated": "Last updated {date}",
+    "date": "November 7, 2026",
+    "intro": "This notice explains what information Tzion Breslov receives through this website, what we use it for, who helps us handle it and how long it is kept.",
+    "sections": [
+      {
+        "heading": "What you send us",
+        "paragraphs": [
+          "The contact form asks for your first and last name, email address, phone number, address and message. Only your email address and message are required.",
+          "The newsletter sign-up in the footer of every page asks for your email address, and the “Get event announcements” sign-up on the Events page for your email address and the lists you choose. Either way we email you a link, and you are subscribed only after you confirm.",
+          "An RSVP on the Events page asks for your name, email address and number of guests, any accessibility or dietary needs you want us to know about, and your consent.",
+          "With every form you send, our forms service also receives your IP address."
+        ]
+      },
+      {
+        "heading": "How we use it",
+        "paragraphs": [
+          "We use what you send to answer your message, to send you only the lists you confirmed, and to run our events: knowing who is coming, how many, and what to prepare.",
+          "We also use it to protect the forms from spam and abuse. Cloudflare Turnstile checks that a person, not a program, is sending a form, and our forms service passes your IP address to it for that check. To limit repeated submissions, the forms service keeps short-lived records of your IP address and email address in scrambled (salted and hashed) form."
+        ]
+      },
+      {
+        "heading": "Where it goes",
+        "paragraphs": [
+          "GitHub Pages hosts this website. Cloudflare provides its domain name service (DNS), and every visit to the site passes through Cloudflare’s network.",
+          "Our forms service also runs on Cloudflare: it receives what you send through the forms, keeps the records described below in Cloudflare’s database, and tells the Events page which events are full. Cloudflare Turnstile, which protects the forms, loads on every page, because every page has the newsletter sign-up in its footer. It receives your IP address and information about your browser and device, to tell people from programs.",
+          "Resend sends our emails: the link to confirm a sign-up, the confirmation of your RSVP, and your messages and RSVPs to our inbox. It also keeps the list of confirmed subscribers and the lists each has chosen.",
+          "Google Fonts provides the site’s typefaces: on every page your browser downloads them from Google (fonts.googleapis.com and fonts.gstatic.com).",
+          "YouTube: the Classes page shows video thumbnails, which your browser loads from YouTube (i.ytimg.com) as soon as the page opens. The video player loads only when you press play, in YouTube’s privacy-enhanced mode (youtube-nocookie.com), and then streams the video from YouTube and other Google services.",
+          "Google Maps: the map on the Contact page loads from Google when you open that page, or at the latest as you scroll towards it. Its “Get directions” and “Open in Google Maps” buttons take you to Google Maps.",
+          "PayPal will process donations once online giving is switched on. Until then, the Donate page does not send your details anywhere.",
+          "Each of these providers handles what it receives under its own privacy policy, as do the sites our links lead to, such as YouTube and Instagram."
+        ]
+      },
+      {
+        "heading": "How long we keep it",
+        "paragraphs": [
+          "Contact messages are delivered to our inbox by email; our forms service does not keep them.",
+          "A sign-up you don’t confirm within 24 hours expires. The forms service deletes every sign-up request, confirmed or not, at its daily clean-up once those 24 hours are over, so within about two days. Once you confirm, Resend keeps your subscription until you unsubscribe or ask us to delete it.",
+          "RSVPs are kept by the forms service until 90 days after the event starts, then deleted. Each RSVP is also emailed to our inbox.",
+          "Security records: a log of contact and sign-up requests (a reference number and whether it went through, not what you wrote) is kept for 30 days; the reports Resend sends us about email delivery and subscriptions (for example a bounce, a complaint or a change to your lists), which include the email address concerned and, for an email, its subject, for 90 days; the scrambled records that limit repeated submissions for about a day; and error records from the forms service, designed to contain no personal details, for up to 7 days."
+        ]
+      },
+      {
+        "heading": "Cookies and tracking",
+        "paragraphs": [
+          "This website sets no cookies of its own and uses no analytics, advertising or tracking tools.",
+          "The services that load inside some of its pages (Cloudflare Turnstile, the YouTube player once you press play, and the Contact page’s Google map) may store their own information in your browser, under their providers’ policies."
+        ]
+      },
+      {
+        "heading": "Your choices",
+        "paragraphs": [
+          "You can stop newsletter or event-announcement emails at any time with the unsubscribe link in them, or by writing to us.",
+          "To see, correct or delete the information you have sent us, write to tzionbreslovproject@gmail.com."
+        ]
+      }
+    ]
   }
 }

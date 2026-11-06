@@ -1,4 +1,5 @@
 import copy from "@/content/copy/en.json";
+import { PRIVACY_PATH } from "@/config/site-structure.mjs";
 import {
   API_PATHS,
   ENVELOPE_FIELDS,
@@ -9,6 +10,7 @@ import {
   type RsvpAvailabilityResponse,
   type RsvpRequest
 } from "@/lib/api-contract";
+import { withBase } from "@/lib/base-path";
 import { publicConfig } from "./config";
 import { openDialog } from "./dialog";
 import { EMAIL, MESSAGES, addHoneypot } from "./forms";
@@ -40,8 +42,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className = "") {
 
 /**
  * The RSVP form's consent checkbox and its label, built here only.
- * "{privacy}" names the privacy notice (Task 9 makes it a link to /privacy/,
- * with lib/base-path.ts#withBase for the preview's base path).
+ * "{privacy}" is a link to the privacy notice (with the preview's base path,
+ * lib/base-path.ts#withBase); the sentence reads as before.
  */
 function consentLabel() {
   const label = el("label", "tz-check tz-consent");
@@ -52,7 +54,10 @@ function consentLabel() {
   input.required = true;
   const sentence = el("span");
   const [before, after = ""] = text.consent.split("{privacy}");
-  sentence.append(before, text.privacyNotice, after);
+  const privacy = el("a");
+  privacy.href = withBase(PRIVACY_PATH);
+  privacy.textContent = text.privacyNotice;
+  sentence.append(before, privacy, after);
   label.append(input, sentence);
   return { label, input };
 }

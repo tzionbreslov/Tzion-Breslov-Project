@@ -178,6 +178,19 @@
 }
 .tz-events .tz-consent,
 .tz-rsvp-dialog .tz-consent { font-size: 15px; }
+/* "privacy notice" in the consent line links to the privacy notice (/privacy/). */
+.tz-events .tz-consent a,
+.tz-rsvp-dialog .tz-consent a {
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.tz-events .tz-consent a:hover,
+.tz-rsvp-dialog .tz-consent a:hover { text-decoration-thickness: 2px; }
+.tz-events .tz-consent a:focus-visible,
+.tz-rsvp-dialog .tz-consent a:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 2px; border-radius: 4px;
+}
 
 .tz-events .tz-field__error,
 .tz-rsvp-dialog .tz-field__error {

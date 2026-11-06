@@ -4,6 +4,7 @@ import { articlesPage } from "@/lib/pages/articles";
 import { classesPage } from "@/lib/pages/classes";
 import { eventsPage } from "@/lib/pages/events";
 import { galleryPage } from "@/lib/pages/gallery";
+import { privacyPage } from "@/lib/pages/privacy";
 
 /** Builders for the pages composed in code, by route key (NEW_ROUTES in config/site-structure.mjs). */
 const BUILDERS: Record<string, (path: string) => PageContent> = {
@@ -11,7 +12,8 @@ const BUILDERS: Record<string, (path: string) => PageContent> = {
   "tz:articles__page__2": (path) => articlesPage(path, 2),
   "tz:classes": classesPage,
   "tz:gallery": galleryPage,
-  "tz:events": eventsPage
+  "tz:events": eventsPage,
+  "tz:privacy": privacyPage
 };
 
 export function buildPage(key: string): PageContent {

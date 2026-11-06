@@ -29,15 +29,22 @@ WordPress backup (.wpress, private, not in git)
   YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
   the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Events ·
-  Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress
-  menu, which `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
+  Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer, and Privacy last in the footer
+  only). `ORIGINAL_NAV` is the WordPress menu, which `scripts/navigation.test.mjs` proves renders every imported
+  fragment byte for byte. The Resources dropdown runs on
   `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
-- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/` and
-  `/events/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/`, `/events/`
+  and `/privacy/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
   description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. `contact-map.ts` adds the map
   (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
   Their new English text lives only in `content/copy/en.json`.
+- `/privacy/` (`lib/pages/privacy.ts`) — the privacy notice, linked from the footer Quick Links and from the
+  "privacy notice" words in the RSVP and "Get event announcements" consent lines. Its text (`content/copy/en.json`
+  `privacy`) describes the site as built: the forms and what they collect, the Worker's database and how long it keeps
+  each record, and every third party a page contacts (when, and from which host). Change it with the site: a new
+  third-party origin, form field or retention period changes the notice too, and its `date` ("Last updated …") is set
+  by hand when the text changes, never by the build. The owner reads and approves it before launch.
 - `app/[[...slug]]` — one catch-all route renders every page; `app/global-not-found.tsx` is the 404.
 - The original theme scripts (jQuery, GSAP animations, Spectra blocks, slick carousel) still run unchanged.
   React only adds the interactive pieces in `components/enhancers.tsx`:
