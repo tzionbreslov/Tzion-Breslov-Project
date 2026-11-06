@@ -9,6 +9,7 @@ import { enhanceYoutubeFeeds } from "@/lib/client/youtube";
 import { enhancePostGrids } from "@/lib/client/post-grid";
 import { enhanceInstagramFeeds } from "@/lib/client/instagram";
 import { enhanceVideoLibrary } from "@/lib/client/video-library";
+import { enhanceMenus } from "@/lib/client/menu";
 import { DonateForm } from "@/components/donate-form";
 
 const noop = () => () => undefined;
@@ -32,6 +33,7 @@ export function Enhancers({ islands }: { islands: Island[] }) {
 
   useEffect(() => {
     const cleanups: Array<() => void> = [];
+    cleanups.push(enhanceMenus(document));
     cleanups.push(enhanceSubscriptionConfirmation(document));
     if (islands.includes("signup") || islands.includes("contact")) cleanups.push(enhanceForms(document));
     if (islands.includes("youtube-feed")) cleanups.push(enhanceYoutubeFeeds(document));

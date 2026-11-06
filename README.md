@@ -19,10 +19,19 @@ WordPress backup (.wpress, private, not in git)
 - `content/fragments/`, `content/styles/`, `content/scripts/` — shared header/footer HTML and de-duplicated inline CSS/JS.
 - `public/wp-content`, `public/wp-includes` — only the images, CSS and JS the pages actually reference.
 - `config/site-structure.mjs` — the site's structure on top of the import: pages composed in code (`NEW_ROUTES`, keys
-  `tz:…`), imported pages that are removed (`REMOVED_PATHS`) and link rewrites. Next (`lib/content.ts`), the export and
-  CSP checks and the browser smoke test take their route list from its `siteRoutes()`, so a re-import can't bring a
-  removed page back; the wording check skips `isRemovedPath()` pages, and `page-sitemap.xml` gains the `NEW_ROUTES`.
-  `visual-diff.mjs` and `compare-live.mjs` keep their own fixed page lists.
+  `tz:…`), imported pages that are removed (`REMOVED_PATHS`, plus everything under `REMOVED_SECTIONS`: `/resources/`,
+  the 27 `/video/video-N/` clips, the `/category/` and `/author/` archives and the `/about/` forwarding page), link
+  rewrites (`LINK_REWRITES`: `/resources/` → `/classes/`, `/about/` → `/about-us/`) and the Yoast sitemaps that are no
+  longer published. Next (`lib/content.ts`), the export and CSP checks and the browser smoke test take their route list
+  from its `siteRoutes()`, so a re-import can't bring a removed page back; the wording check skips `isRemovedPath()`
+  pages; `write-site-files.mjs` drops removed pages and sitemaps from the sitemaps and adds the `NEW_ROUTES`; the export
+  check fails on any link, sitemap entry or structured-data URL that still points at a removed page, and on any plain
+  YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
+- `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
+  the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Contact, then
+  Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress menu, which
+  `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
+  `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
 - `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/` and `/classes/`), built from Tzion's own
   markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
@@ -31,16 +40,20 @@ WordPress backup (.wpress, private, not in git)
 - `app/[[...slug]]` — one catch-all route renders every page; `app/global-not-found.tsx` is the 404.
 - The original theme scripts (jQuery, GSAP animations, Spectra blocks, slick carousel) still run unchanged.
   React only adds the interactive pieces in `components/enhancers.tsx`:
+  - the Resources dropdown in the header menus → `lib/client/menu.ts`
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
-  - Resources YouTube grid (lightbox, Load More) → `lib/client/youtube.ts`, data in `content/youtube.json`
-  - Resources and Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
+  - Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
+  - (dormant since the Resources page was removed: its YouTube grid `lib/client/youtube.ts` and Instagram tab
+    `lib/client/instagram.ts`)
   - Classes video library (Videos/Shorts tabs, search, sort, on-page player) → `lib/client/video-library.ts` +
     `lib/client/dialog.ts`; ordering/search in `lib/video-library.mjs`, data in `content/youtube.json` (Videos, with
     the feed's view counts for "Most popular") and `content/shorts.json` (the old `/video/video-N/` clips)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
 
-URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), Yoast's sitemaps and `robots.txt` are
-republished at the same paths, and `/about/` redirects to `/about-us/`.
+URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), and Yoast's sitemaps and `robots.txt` are
+republished at the same paths, minus the removed pages. Removed addresses (`/resources/`, `/video/…`, the archives,
+`/about/`) serve the 404 page: no page and no forwarding page is left on the site. After launch the switch-day
+Cloudflare redirect rules send them to their new homes.
 
 ## Commands
 
@@ -50,7 +63,7 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
 | `npm run check` | Typecheck (site + Worker), lint, unit tests (`scripts/**/*.test.mjs`), Worker tests, build, export check, wording check against checkpoint-001, browser tests (Playwright on `out/` with the enforced CSP) |
-| `npm run sync:instagram` | Pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
+| `npm run sync:instagram` | Dormant (Instagram is switched off): pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
@@ -62,7 +75,7 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 Every merge into `main` is tagged `checkpoint-NNN` with a Release listing its changes; checkpoints can't be moved or
 deleted. How to roll the preview back right away, or for good: [ROLLBACK.md](ROLLBACK.md).
 
-## YouTube feed (Resources and Classes pages)
+## YouTube feed (Classes page)
 
 Source: the channel's public RSS feed,
 `https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).
@@ -71,17 +84,19 @@ commit. Videos that scroll out of the feed's 15-entry window only stay listed if
 `content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
 intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
 
-## Instagram tab (Resources page)
+## Instagram (switched off)
 
 An owner-requested addition (WordPress never had it): latest posts from @tzionbreslovproject in a 4th Resources tab,
-with an in-site preview that leads to instagram.com. Data comes from Meta's official API at build time
-(`npm run sync:instagram`, photos copied onto the site); until the account is connected the tab shows the profile and
-a link. **Setup and token care: [docs/instagram-setup.md](docs/instagram-setup.md).**
+with an in-site preview that leads to instagram.com, from Meta's official API at build time. **Switched off since the
+Resources page was removed (owner, 2026-11-06)**: no tab and no link (the footer's Instagram icon stays), the deploy no
+longer syncs it, and `INSTAGRAM_ENABLED` in `config/site-structure.mjs` keeps the importer from adding the tab. The
+code and its tests stay, dormant, so it can come back: [docs/instagram-setup.md](docs/instagram-setup.md).
 
 ## Editing content
 
 Pages are WordPress HTML in `content/pages/<slug>.json` (`main`). Edit the HTML there (keep the class names — the
-original CSS depends on them), or change the shared header/footer in `content/fragments/`. Re-running the importer
+original CSS depends on them), or change the shared header/footer in `content/fragments/` — except their menus, which
+`lib/navigation.mjs` renders (edit `NAV` there; new labels go in `content/copy/en.json`). Re-running the importer
 overwrites `content/` from the WordPress snapshot, so only do that while WordPress is still the source of truth.
 
 ## Configuration (GitHub → Settings → Secrets and variables → Actions → **Variables**)
@@ -170,5 +185,6 @@ Cloudflare rule.
    Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
    is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
    unavailable — email us".
-4. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
+4. Switch day (above), plus Cloudflare 301 redirects for the removed addresses: `/resources/` and `/video/…` →
+   `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`, `/about/` → `/about-us/`.
 5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first).

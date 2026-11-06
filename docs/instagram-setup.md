@@ -1,5 +1,13 @@
 # Connecting Instagram to the Resources tab
 
+> **Dormant (2026-11-06).** The owner switched Instagram off: the Resources page was removed (replaced by Classes and
+> Articles), so there is no Instagram tab and no Instagram link on the site — only the footer's Instagram icon stays.
+> The code is kept so it can come back: `INSTAGRAM_ENABLED` in `config/site-structure.mjs` (read by the importer),
+> `scripts/sync-instagram.mjs`, `lib/client/instagram.ts`, `app/instagram.css`, and the tests, which still run in CI
+> and in the deploy (`npm run test:instagram`). The deploy no longer syncs or caches the feed; turning it back on
+> means giving the feed a page again and restoring the deploy's sync step and its `actions/cache` restore/save steps
+> (removed in `structure/04-navigation`). The setup below is how it worked and still applies then.
+
 The Resources page has an **Instagram** tab. Until the account is connected it shows the profile and a link to
 Instagram. Once connected, every deploy (and a daily rebuild) copies the latest posts and photos onto the site with
 `npm run sync:instagram` — visitors' browsers never contact Instagram, so no cookies and no CSP changes.

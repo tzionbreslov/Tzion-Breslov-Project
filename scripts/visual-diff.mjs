@@ -24,10 +24,10 @@ const args = process.argv.slice(2);
 const MASK_NAV = args.includes("--mask-nav");
 const pageArgs = args.filter((arg) => !arg.startsWith("--"));
 const NAV_SELECTORS = "header.site-header, .mobile-menu-wrap, #genesis-footer-widgets";
+// One of each template the site serves (the removed pages are gone: config/site-structure.mjs).
 const PAGES = pageArgs.length ? pageArgs : [
-  "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/", "/articles/", "/classes/",
-  "/parshat-noach-october-8-9-2021/", "/video/video-1/", "/category/uncategorized/",
-  "/author/esti-wolo/", "/no-such-page/"
+  "/", "/about-us/", "/contact/", "/donate/", "/articles/", "/classes/",
+  "/parshat-noach-october-8-9-2021/", "/no-such-page/"
 ];
 const VIEWPORTS = { desktop: { width: 1440, height: 900 }, mobile: { width: 390, height: 844 } };
 

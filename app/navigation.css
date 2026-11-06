@@ -1,0 +1,126 @@
+/*
+ * The Resources dropdown in the header menus and its group in the footer Quick
+ * Links (lib/navigation.mjs renders the markup, lib/client/menu.ts runs it).
+ * The theme's CSS loads after this file and turns every button into a black
+ * pill that lifts on hover (button, button:hover at 0,1,1), so the toggle starts
+ * from all:unset at a higher specificity. Sizes are in px or rem as the theme's
+ * own menu (html{font-size:62.5%}).
+ */
+
+/* ------------------------------------------------------------ The toggle */
+.tz-menu-parent > .tz-submenu-toggle {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--wp--preset--color--black, #000);
+}
+/* The caret: drawn with borders, so no glyph is announced or translated. */
+.tz-menu-parent > .tz-submenu-toggle::after {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-3px) rotate(45deg);
+  transition: transform .2s ease;
+}
+.tz-menu-parent > .tz-submenu-toggle[aria-expanded="true"]::after { transform: translateY(1px) rotate(225deg); }
+.tz-menu-parent > .tz-submenu-toggle:focus-visible { outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 4px; border-radius: 4px; }
+
+/* ------------------------------------------------------------ Panels open */
+.tz-menu-parent > .tz-sub-menu { display: none; }
+.tz-menu-parent > .tz-submenu-toggle[aria-expanded="true"] + .tz-sub-menu { display: block; }
+
+/* ------------------------------------------------------------ Desktop menu */
+@media only screen and (min-width: 1280px) {
+  /* Without JS (or before it runs): open on hover and while focus is inside. */
+  .nav-primary .tz-menu-parent:not([data-tz-menu="ready"]):is(:hover, :focus-within) > .tz-sub-menu { display: block; }
+
+  .nav-primary .tz-menu-parent { position: relative; }
+  /* The same box as the links beside it (.nav-primary .genesis-nav-menu a). */
+  .nav-primary .tz-menu-parent > .tz-submenu-toggle { padding: 0 15px; }
+  .nav-primary .tz-menu-parent > .tz-submenu-toggle:hover,
+  .nav-primary .tz-menu-parent > .tz-submenu-toggle[aria-expanded="true"],
+  .nav-primary .tz-menu-parent.current-menu-ancestor > .tz-submenu-toggle {
+    color: var(--wp--preset--color--blue, #1d8ca7);
+    font-weight: 800;
+  }
+
+  .nav-primary .tz-menu-parent > .tz-sub-menu {
+    position: absolute;
+    top: calc(100% + 18px);
+    left: 0;
+    z-index: 10000;
+    min-width: 210px;
+    padding: 16px 0;
+    background: #fff;
+    border-radius: 30px 30px 0 30px;
+    box-shadow: 3px 5px 15px #00000029;
+    animation: tz-menu-in .18s ease-out;
+  }
+  /* Bridges the gap under the toggle, so the mouse never leaves the menu item on its way down. */
+  .nav-primary .tz-menu-parent > .tz-sub-menu::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    height: 18px;
+  }
+  .nav-primary .tz-menu-parent .tz-sub-menu a {
+    display: block;
+    padding: 9px 28px;
+    color: var(--wp--preset--color--dark-blue, #1e61a1);
+    font-family: var(--font-main, "Montserrat", sans-serif);
+    font-size: 1.5rem;
+    font-weight: 500;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  .nav-primary .tz-menu-parent .tz-sub-menu a:hover,
+  .nav-primary .tz-menu-parent .tz-sub-menu .current-menu-item > a {
+    color: var(--wp--preset--color--blue, #1d8ca7);
+    font-weight: 800;
+  }
+  .nav-primary .tz-menu-parent .tz-sub-menu a:focus-visible {
+    outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1);
+    outline-offset: -3px;
+  }
+}
+
+@keyframes tz-menu-in {
+  from { opacity: 0; translate: 0 -6px; }
+}
+
+/* ------------------------------------------------------------ Mobile menu */
+/* The slide-out menu is dark blue with white text; the panel opens in place, indented. */
+.mobile-menu .tz-menu-parent > .tz-submenu-toggle { color: #fff; }
+.mobile-menu .tz-menu-parent > .tz-submenu-toggle[aria-expanded="true"],
+.mobile-menu .tz-menu-parent.current-menu-ancestor > .tz-submenu-toggle { font-weight: 800; }
+.mobile-menu .tz-menu-parent > .tz-submenu-toggle:focus-visible { outline-color: #fff; }
+.mobile-menu .tz-menu-parent > .tz-sub-menu { margin-top: 1em; padding-left: 20px; }
+.mobile-menu .tz-sub-menu > .menu-item:last-child { margin-bottom: 0; }
+
+/* ------------------------------------------------------------ Footer Quick Links */
+/* Resources heads its two pages, styled like the links around it. */
+.footer-widgets .tz-menu-group > .tz-menu-group-label {
+  display: block;
+  padding-bottom: 12px;
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 400;
+  line-height: 1.8;
+}
+.footer-widgets .tz-menu-group > .tz-sub-menu { padding-left: 15px; }
+@media only screen and (min-width: 1280px) {
+  .footer-widgets .tz-menu-group > .tz-menu-group-label { padding-bottom: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-menu-parent > .tz-submenu-toggle::after { transition: none; }
+  .nav-primary .tz-menu-parent > .tz-sub-menu { animation: none; }
+}

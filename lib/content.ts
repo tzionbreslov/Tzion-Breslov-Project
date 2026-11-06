@@ -49,7 +49,7 @@ export const routeIndex = cache((): RouteIndex => siteRoutes(JSON.parse(readShar
 export const loadPage = cache((key: string): PageContent =>
   key.startsWith("tz:") ? buildPage(key) : JSON.parse(readShared(`pages/${key}.json`)));
 
-/** "/video/video-1/" <-> ["video", "video-1"] */
+/** "/articles/page/2/" <-> ["articles", "page", "2"] */
 export function slugToPath(slug: string[] | undefined) {
   return slug?.length ? `/${slug.map(decodeURIComponent).join("/")}/` : "/";
 }

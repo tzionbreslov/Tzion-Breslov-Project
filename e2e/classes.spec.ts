@@ -254,31 +254,28 @@ test("the channel link opens YouTube in a new tab", async ({ page }) => {
   await expectClean(page, errors);
 });
 
-// Thumbnails keep today's size: the Classes tab of /resources/ (until Task 4 removes it).
-const PARITY_WIDTHS = [1440, 1024, 768, 390];
+// Thumbnails keep today's size: the first thumbnail's width on the old Resources
+// page's Classes tab, measured at these viewport widths before it was removed.
+const RESOURCES_THUMBNAIL_WIDTHS: Array<[viewport: number, width: number]> = [[1440, 375.28], [1024, 299.95], [768, 214.64], [390, 298]];
 test("thumbnails are as wide as on the Resources Classes tab", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
   const errors = trackPageErrors(page);
-  const widths = async (url: string, selector: string) => {
-    await page.goto(url);
-    const result: number[] = [];
-    for (const width of PARITY_WIDTHS) {
-      await page.setViewportSize({ width, height: 900 });
-      // The plugin grid eases into its new size: read once it has stopped changing.
-      result.push(await page.locator(selector).first().evaluate(async (node) => {
-        for (let last = -1; ; await new Promise((resolve) => setTimeout(resolve, 150))) {
-          const now = node.getBoundingClientRect().width;
-          if (now === last) return now;
-          last = now;
-        }
-      }));
-    }
-    return result;
-  };
-  const resources = await widths("/resources/", "[data-tz-youtube-feed] .sby_video_thumbnail");
-  const classes = await widths("/classes/", ".tz-vl__thumb");
-  testInfo.annotations.push({ type: "thumbnail widths", description: `${PARITY_WIDTHS.join("/")} px: resources ${resources.join(" / ")}, classes ${classes.join(" / ")}` });
-  PARITY_WIDTHS.forEach((width, i) => expect(Math.abs(classes[i] - resources[i]), `at ${width}px: classes ${classes[i]} vs resources ${resources[i]}`).toBeLessThanOrEqual(2));
+  await page.goto("/classes/");
+  const classes: number[] = [];
+  for (const [viewport] of RESOURCES_THUMBNAIL_WIDTHS) {
+    await page.setViewportSize({ width: viewport, height: 900 });
+    // Read once the layout has stopped changing.
+    classes.push(await page.locator(".tz-vl__thumb").first().evaluate(async (node) => {
+      for (let last = -1; ; await new Promise((resolve) => setTimeout(resolve, 150))) {
+        const now = node.getBoundingClientRect().width;
+        if (now === last) return now;
+        last = now;
+      }
+    }));
+  }
+  testInfo.annotations.push({ type: "thumbnail widths", description: RESOURCES_THUMBNAIL_WIDTHS.map(([viewport, width], i) => `${viewport}px: ${classes[i]} (Resources ${width})`).join(", ") });
+  RESOURCES_THUMBNAIL_WIDTHS.forEach(([viewport, width], i) =>
+    expect(Math.abs(classes[i] - width), `at ${viewport}px: classes ${classes[i]} vs Resources ${width}`).toBeLessThanOrEqual(2));
   await expectClean(page, errors);
 });
 

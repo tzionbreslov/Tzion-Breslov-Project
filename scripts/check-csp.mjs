@@ -94,22 +94,14 @@ for (const { path: route } of routes) await visit(BASE + route);
 await visit(BASE + "/no-such-page/");
 
 // Interactive islands pull in extra origins.
-await visit(BASE + "/resources/", async () => {
-  await page.click("[data-tz-youtube-feed] .sby_video_thumbnail");
-  await page.waitForSelector(".tz-lightbox iframe");
-  await page.waitForTimeout(2500);
-  await page.keyboard.press("Escape");
-  await page.click("[data-tz-youtube-feed] .sby_load_btn").catch(() => undefined);
-  await page.click(".uagb-tab a >> nth=1");
+await visit(BASE + "/articles/", async () => {
+  await page.waitForSelector("[data-tz-post-grid=ready]");
   await page.click("[data-tz-post-grid] .uagb-post-pagination-wrap a.page-numbers >> nth=0");
   await page.waitForTimeout(1200);
-  const igTile = page.locator(".tz-ig__tile").first();
-  if (await igTile.count()) {
-    await page.click(".uagb-tab a >> text=Instagram");
-    await igTile.click();
-    await page.waitForSelector(".tz-igv");
-    await page.keyboard.press("Escape");
-  }
+  // The Resources dropdown in the header menu.
+  await page.waitForSelector("#menu-item-33[data-tz-menu=ready]");
+  await page.click("#menu-item-33 > .tz-submenu-toggle");
+  await page.waitForSelector("#tz-sub-resources", { state: "visible" });
 });
 
 await visit(BASE + "/classes/", async () => {
