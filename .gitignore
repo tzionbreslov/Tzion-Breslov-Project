@@ -40,3 +40,5 @@ public/*sitemap*.xml
 content/gallery.generated.json
 # Written from content/events.json at build time (scripts/write-site-files.mjs)
 public/events.json
+# Written by scripts/fixtures/write-events-fixture.mjs for the RSVP browser tests (times relative to now)
+scripts/fixtures/events.e2e.json
