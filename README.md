@@ -37,10 +37,19 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
 | `npm run check` | Typecheck, lint, Worker tests, build, export check |
-| `npm run sync:youtube` | Pull the latest channel uploads into `content/youtube.json` |
+| `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
 | `node scripts/compare-live.mjs` | Compare the WordPress reference's text/images/links with the live site |
+
+## YouTube feed (Resources page)
+
+Source: the channel's public RSS feed,
+`https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).
+The deploy workflow refreshes it at build time and runs daily (04:41 UTC), so new uploads appear within a day without a
+commit. Videos that scroll out of the feed's 15-entry window only stay listed if they are in the committed
+`content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
+intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
 
 ## Editing content
 

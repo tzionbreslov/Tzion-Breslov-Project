@@ -5,6 +5,9 @@ on:
     branches:
       - main
   workflow_dispatch:
+  # Daily rebuild so new YouTube uploads appear without anyone committing.
+  schedule:
+    - cron: "41 4 * * *"
 
 concurrency:
   group: github-pages
@@ -47,6 +50,14 @@ jobs:
 
       - name: Test Worker
         run: npm run test:worker
+
+      - name: Test YouTube feed parser
+        run: npm run test:youtube
+
+      # Build-time only (never committed). If YouTube's RSS is down, this warns and
+      # the build uses the list already in content/youtube.json.
+      - name: Refresh YouTube feed
+        run: npm run sync:youtube
 
       # base_path is "/Tzion-Breslov-Project" on the github.io URL and "" once
       # the custom domain is set in the Pages settings.
