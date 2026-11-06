@@ -1,0 +1,106 @@
+/*
+ * Gallery page (lib/pages/gallery.ts) and its photo viewer (lib/client/gallery.ts,
+ * inside the shared dialog of app/dialog.css). The theme's CSS loads after this
+ * file: every rule that must beat a theme rule (.entry-content ul, ul > li,
+ * button:hover; 0,1,2 at most) is at 0,2,0 or more, and buttons start from
+ * all:unset. Sizes are in px (the theme sets html{font-size:62.5%}).
+ */
+
+/* ---------------------------------------------------------------- Grid */
+.tz-gallery { padding: 0 16px; }
+.tz-gallery .tz-gallery__grid {
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start;
+  margin: 0; padding: 0; list-style: none;
+}
+.tz-gallery .tz-gallery__cell { margin: 0; padding: 0; list-style: none; }
+@media (min-width: 600px) {
+  .tz-gallery .tz-gallery__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .tz-gallery .tz-gallery__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Each photo whole, at its own ratio. Its rounded corners (and a collage's gutters) are
+ * transparency in the file, so the shadow is a drop-shadow that follows them. */
+.tz-gallery .tz-gallery__item {
+  display: block; border-radius: 30px 30px 0 30px; cursor: zoom-in;
+  transition: transform .3s ease;
+}
+.tz-gallery .tz-gallery__item img {
+  display: block; width: 100%; height: auto;
+  filter: drop-shadow(3px 5px 15px #00000029);
+}
+.tz-gallery .tz-gallery__item:hover { transform: translateY(-4px); }
+.tz-gallery .tz-gallery__item:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 4px;
+}
+
+/* ---------------------------------------------------------------- Viewer */
+/* A fixed box: the photo takes what the caption bar leaves, so nothing in it ever scrolls. */
+.tz-dialog.tz-gallery-viewer {
+  height: min(860px, 100dvh - 32px);
+  border-radius: 30px 30px 0 30px;
+  background: #0c2136; box-shadow: 0 35px 100px rgb(0 0 0 / .5);
+}
+.tz-gallery-viewer .tz-gallery-viewer__body { display: grid; grid-template-rows: minmax(0, 1fr) auto; height: 100%; }
+
+/* The photos stack in one cell; swipes are ours (vertical panning and zoom stay the browser's). */
+.tz-gallery-viewer .tz-gallery-viewer__stage {
+  display: grid; min-height: 0; padding: 16px;
+  touch-action: pan-y pinch-zoom; -webkit-user-select: none; user-select: none;
+}
+.tz-gallery-viewer .tz-gallery-viewer__img {
+  grid-area: 1 / 1; width: 100%; height: 100%; min-height: 0; max-width: none;
+  object-fit: contain; opacity: 0; transition: opacity .3s ease;
+  -webkit-user-drag: none;
+}
+.tz-gallery-viewer .tz-gallery-viewer__img.is-current { opacity: 1; }
+@starting-style {
+  .tz-gallery-viewer .tz-gallery-viewer__img.is-current { opacity: 0; }
+}
+
+/* Close sits over the photo's corner: a solid backdrop keeps it readable on a light photo. */
+.tz-gallery-viewer .tz-dialog__close { background: rgb(12 33 54 / .72); }
+
+/* Previous · caption and "3 of 7" · Next */
+.tz-gallery-viewer .tz-gallery-viewer__bar {
+  display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 16px;
+  padding: 14px 18px;
+  background: var(--wp--preset--color--dark-blue, #1e61a1); color: #fff;
+}
+.tz-gallery-viewer .tz-gallery-viewer__text {
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  margin: 0; padding: 0; text-align: center;
+}
+.tz-gallery-viewer .tz-gallery-viewer__caption { font-size: 16px; font-weight: 600; line-height: 1.35; }
+.tz-gallery-viewer .tz-gallery-viewer__counter {
+  color: rgb(255 255 255 / .82); font-size: 13px; font-weight: 500; letter-spacing: .08em; line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+.tz-gallery-viewer .tz-gallery-viewer__nav {
+  all: unset; box-sizing: border-box;
+  width: 42px; height: 42px; display: grid; place-items: center;
+  border: 1px solid rgb(255 255 255 / .32); border-radius: 50%;
+  background: rgb(255 255 255 / .1); color: #fff; cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.tz-gallery-viewer .tz-gallery-viewer__nav svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.tz-gallery-viewer .tz-gallery-viewer__nav:hover {
+  background: var(--wp--preset--color--turquoise, #70b9bc); border-color: var(--wp--preset--color--turquoise, #70b9bc);
+}
+.tz-gallery-viewer .tz-gallery-viewer__nav:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+@media (max-width: 767px) {
+  .tz-dialog.tz-gallery-viewer { border-radius: 20px 20px 0 20px; }
+  .tz-gallery-viewer .tz-gallery-viewer__stage { padding: 12px; }
+  .tz-gallery-viewer .tz-gallery-viewer__bar { gap: 12px; padding: 12px 14px; }
+  .tz-gallery-viewer .tz-gallery-viewer__caption { font-size: 14px; }
+  .tz-gallery-viewer .tz-gallery-viewer__counter { font-size: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-gallery .tz-gallery__item, .tz-gallery-viewer .tz-gallery-viewer__img, .tz-gallery-viewer .tz-gallery-viewer__nav { transition: none; }
+  .tz-gallery .tz-gallery__item:hover { transform: none; }
+}

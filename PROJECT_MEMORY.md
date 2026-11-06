@@ -55,6 +55,9 @@
   27 `/video/video-N/` clips, the `/category/` and `/author/` archives and the `/about/` forwarding page serve the 404
   page (edge redirects come on switch day). The site serves the 22 kept imported pages + 404, plus `/classes/` and
   `/articles/` (+ page 2). Menus (Home · About · Resources ▾ Classes, Articles · Contact) come from `lib/navigation.mjs`.
+- Site structure, Task 5 (2026-11-06): `/gallery/` (menu item before Contact) shows the photos in `public/media/gallery`
+  (7 placeholders from the old site until the owner sends real ones: adding a photo = adding a file) with an on-page
+  viewer. Between 1280 and 1439px the menu links have 10px side padding (not 15px) so the logo stays centred.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

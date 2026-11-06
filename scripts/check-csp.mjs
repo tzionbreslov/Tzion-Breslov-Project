@@ -112,6 +112,15 @@ await visit(BASE + "/classes/", async () => {
   await page.keyboard.press("Escape");
 });
 
+await visit(BASE + "/gallery/", async () => {
+  await page.waitForSelector("[data-tz-gallery=ready]");
+  await page.click("a.tz-gallery__item >> nth=0");
+  await page.waitForSelector(".tz-gallery-viewer img.is-current");
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(600);
+  await page.keyboard.press("Escape");
+});
+
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 await visit(BASE + "/contact/", async () => {
   const contactForm = page.locator("form[data-tz-form=contact]");

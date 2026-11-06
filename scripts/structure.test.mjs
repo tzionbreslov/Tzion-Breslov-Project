@@ -25,11 +25,12 @@ test("siteRoutes serves the imported pages that are kept, then the new pages", (
   const raw = routesJson();
   const index = siteRoutes(raw);
   const kept = paths(raw).filter((path) => !isRemovedPath(path));
-  assert.deepEqual(paths(index), [...kept, "/articles/", "/articles/page/2/", "/classes/"]);
-  assert.deepEqual(index.routes.slice(-3), [
+  assert.deepEqual(paths(index), [...kept, "/articles/", "/articles/page/2/", "/classes/", "/gallery/"]);
+  assert.deepEqual(index.routes.slice(-4), [
     { path: "/articles/", key: "tz:articles" },
     { path: "/articles/page/2/", key: "tz:articles__page__2" },
-    { path: "/classes/", key: "tz:classes" }
+    { path: "/classes/", key: "tz:classes" },
+    { path: "/gallery/", key: "tz:gallery" }
   ]);
   // Home, About, Contact, Donate and the 18 Parasha posts.
   assert.equal(kept.length, 22);
@@ -85,7 +86,7 @@ test("isRemovedPath covers the listed pages and anything under a removed section
   for (const path of ["/video/", "/video/video-28/", "/category/news/", "/author/someone/page/3/", "/resources/page/4/"]) {
     assert.equal(isRemovedPath(path), true, path);
   }
-  for (const path of ["/", "/about-us/", "/about/team/", "/classes/", "/articles/", "/articles/page/2/", "/contact/", "/donate/",
+  for (const path of ["/", "/about-us/", "/about/team/", "/classes/", "/articles/", "/articles/page/2/", "/gallery/", "/contact/", "/donate/",
     "/parshat-noach-october-8-9-2021/", "/videos/", "/resources-old/"]) {
     assert.equal(isRemovedPath(path), false, path);
   }

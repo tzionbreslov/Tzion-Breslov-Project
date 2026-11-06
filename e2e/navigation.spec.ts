@@ -23,7 +23,7 @@ const isOnTop = (link: Locator) => link.evaluate((node) => {
   return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
 });
 
-const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Contact", "Donate", "Taste a Class"];
+const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Gallery", "Contact", "Donate", "Taste a Class"];
 
 test.describe("desktop menu", () => {
   test.skip(({ isMobile }) => isMobile, "the desktop menu shows from 1280px");
@@ -73,7 +73,7 @@ test.describe("desktop menu", () => {
     await page.keyboard.press("Space");
     await expect(desktopPanel(page)).toBeVisible();
     for (let i = 0; i < 3; i++) await page.keyboard.press("Tab");
-    await expect(page.locator("#menu-item-32 > a")).toBeFocused();
+    await expect(page.locator("#menu-item-tz-gallery > a")).toBeFocused();
     await expect(desktopPanel(page)).toBeHidden();
     await expectClean(page, errors);
   });
@@ -170,27 +170,35 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
-  test("at 1280px the menu stays on one line, clear of the logo and the buttons", async ({ page }) => {
+  test("at 1280px and 1440px the menu stays on one line, clear of the logo (still centred) and the buttons", async ({ page }) => {
     const errors = trackPageErrors(page);
-    await page.setViewportSize({ width: 1280, height: 800 });
-    for (const path of ["/", "/classes/"]) {
-      await page.goto(path);
-      const layout = await page.evaluate(() => {
-        const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-        const items = [...document.querySelectorAll<HTMLElement>("#menu-main-menu-links > li")];
-        return {
-          tops: items.map((item) => item.offsetTop),
-          lastRight: items.at(-1)!.getBoundingClientRect().right,
-          menuRight: box("#menu-main-menu-links").right,
-          titleLeft: box(".title-area").left,
-          buttonsLeft: box("#menu-main-menu-buttons").left
-        };
-      });
-      expect(layout.tops, path).toHaveLength(4);
-      expect(new Set(layout.tops).size, `one line on ${path}`).toBe(1);
-      expect(layout.menuRight, path).toBeLessThanOrEqual(layout.titleLeft);
-      expect(layout.lastRight, path).toBeLessThanOrEqual(layout.titleLeft);
-      expect(layout.lastRight, path).toBeLessThan(layout.buttonsLeft);
+    // On /classes/ Resources is bold, on /gallery/ Gallery: the widest the menu gets.
+    for (const width of [1280, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      for (const path of ["/", "/classes/", "/gallery/"]) {
+        await page.goto(path);
+        const layout = await page.evaluate(() => {
+          const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+          const items = [...document.querySelectorAll<HTMLElement>("#menu-main-menu-links > li")];
+          const title = box(".title-area");
+          return {
+            tops: items.map((item) => item.offsetTop),
+            lastRight: items.at(-1)!.getBoundingClientRect().right,
+            menuRight: box("#menu-main-menu-links").right,
+            titleLeft: title.left,
+            titleCentre: title.left + title.width / 2,
+            buttonsLeft: box("#menu-main-menu-buttons").left
+          };
+        });
+        const at = `${path} at ${width}px`;
+        expect(layout.tops, at).toHaveLength(5);
+        expect(new Set(layout.tops).size, `one line on ${at}`).toBe(1);
+        expect(layout.menuRight, at).toBeLessThanOrEqual(layout.titleLeft);
+        expect(layout.lastRight, at).toBeLessThanOrEqual(layout.titleLeft);
+        expect(layout.lastRight, at).toBeLessThan(layout.buttonsLeft);
+        // The logo stays in the middle of the header, as on checkpoint-001: the menu never pushes it aside.
+        expect(Math.abs(layout.titleCentre - width / 2), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);
+      }
     }
     await expectClean(page, errors);
   });

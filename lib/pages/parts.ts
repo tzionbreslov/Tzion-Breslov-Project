@@ -13,7 +13,8 @@ const ARTICLE_TAG = '<article class="post-28 page type-page status-publish entry
 const HERO = '<div class="wp-block-cover alignfull hero"';
 const ARROW = '<div class="svg-img arrow-svg';
 const SMALL_SPACER = '<div aria-hidden="true" class="wp-block-spacer spacer-small-height "></div>';
-const LARGE_SPACER = '<div aria-hidden="true" class="wp-block-spacer spacer-large-height "></div>';
+/** The theme's large spacer block (it ends the Gallery page, and starts the Resources closing sections). */
+export const LARGE_SPACER = '<div aria-hidden="true" class="wp-block-spacer spacer-large-height "></div>';
 const ARTICLES_GRID = "uagb-block-1908e9b6";
 const GRID_OPEN = '<div class="wp-block-uagb-post-grid ';
 

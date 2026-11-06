@@ -9,6 +9,7 @@ import { enhanceYoutubeFeeds } from "@/lib/client/youtube";
 import { enhancePostGrids } from "@/lib/client/post-grid";
 import { enhanceInstagramFeeds } from "@/lib/client/instagram";
 import { enhanceVideoLibrary } from "@/lib/client/video-library";
+import { enhanceGallery } from "@/lib/client/gallery";
 import { enhanceMenus } from "@/lib/client/menu";
 import { DonateForm } from "@/components/donate-form";
 
@@ -40,6 +41,7 @@ export function Enhancers({ islands }: { islands: Island[] }) {
     if (islands.includes("post-grid")) cleanups.push(enhancePostGrids(document));
     if (islands.includes("instagram-feed")) cleanups.push(enhanceInstagramFeeds(document));
     if (islands.includes("video-library")) cleanups.push(enhanceVideoLibrary(document));
+    if (islands.includes("gallery")) cleanups.push(enhanceGallery(document));
     return () => cleanups.forEach((fn) => fn());
   }, [islands]);
 

@@ -28,12 +28,12 @@ WordPress backup (.wpress, private, not in git)
   check fails on any link, sitemap entry or structured-data URL that still points at a removed page, and on any plain
   YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
-  the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Contact, then
-  Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress menu, which
+  the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Gallery ·
+  Contact, then Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress menu, which
   `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
   `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
-- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/` and `/classes/`), built from Tzion's own
-  markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/` and `/gallery/`), built from
+  Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
   description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. Their new English text lives
   only in `content/copy/en.json`.
@@ -48,6 +48,8 @@ WordPress backup (.wpress, private, not in git)
   - Classes video library (Videos/Shorts tabs, search, sort, on-page player) → `lib/client/video-library.ts` +
     `lib/client/dialog.ts`; ordering/search in `lib/video-library.mjs`, data in `content/youtube.json` (Videos, with
     the feed's view counts for "Most popular") and `content/shorts.json` (the old `/video/video-N/` clips)
+  - Gallery photo viewer (whole photo, caption, "3 of 7", previous/next, arrow keys, swipe) → `lib/client/gallery.ts` +
+    `lib/client/dialog.ts`; the photos are the files in `public/media/gallery` (see "Gallery photos" below)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), and Yoast's sitemaps and `robots.txt` are
@@ -74,6 +76,15 @@ Cloudflare redirect rules send them to their new homes.
 
 Every merge into `main` is tagged `checkpoint-NNN` with a Release listing its changes; checkpoints can't be moved or
 deleted. How to roll the preview back right away, or for good: [ROLLBACK.md](ROLLBACK.md).
+
+## Gallery photos
+
+The Gallery shows every `.webp`, `.jpg`, `.jpeg` or `.png` in `public/media/gallery`, whole, at its own shape. To add a
+photo, add the file; to remove one, delete it. Optionally give it alt text (what the photo shows, for people who can't
+see it) and a place in `public/media/gallery/gallery.json`: `"my-photo.jpg": { "alt": "…", "order": 8 }` (lower
+orders first; photos not listed come after them, by file name, with the alt text "Photo from Tzion Breslov"). Every
+build lists the folder into `content/gallery.generated.json` (`scripts/write-site-files.mjs`, git-ignored). Today's 7
+photos are placeholders from the old site (`scripts/convert-gallery-placeholders.mjs`, a one-time script).
 
 ## YouTube feed (Classes page)
 

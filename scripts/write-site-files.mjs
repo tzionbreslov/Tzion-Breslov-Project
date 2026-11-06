@@ -2,13 +2,16 @@
 // Renders content/site-files (Yoast sitemaps + robots.txt) into public/ with the
 // configured site URL, listing the pages composed in code (NEW_ROUTES) in
 // page-sitemap.xml. Removed pages (config/site-structure.mjs) leave the sitemaps:
-// their sitemaps aren't published and their <url> entries are dropped. Runs
-// automatically before `next dev` and `next build`.
+// their sitemaps aren't published and their <url> entries are dropped. Also lists
+// the Gallery's photos (public/media/gallery) in content/gallery.generated.json
+// (git-ignored), which the Gallery page renders. Runs automatically before
+// `next dev` and `next build`.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRemovedPath, NEW_ROUTES, REMOVED_SITEMAPS } from "../config/site-structure.mjs";
 import { resolveSiteUrl, rewriteOrigin } from "../config/site-url.mjs";
+import { readGallery } from "./lib/gallery.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const site = resolveSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
@@ -44,3 +47,7 @@ for (const name of fs.readdirSync(src)) {
   fs.writeFileSync(path.join(publicDir, name), text);
 }
 console.log(`site files written for ${site}`);
+
+const gallery = await readGallery(path.join(publicDir, "media", "gallery"));
+fs.writeFileSync(path.join(root, "content", "gallery.generated.json"), `${JSON.stringify({ images: gallery }, null, 2)}\n`);
+console.log(`gallery: ${gallery.length} photos`);

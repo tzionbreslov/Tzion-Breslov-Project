@@ -36,3 +36,5 @@ tools/wordpress-reference/.data/
 # Rendered from content/site-files at build time (scripts/write-site-files.mjs)
 public/robots.txt
 public/*sitemap*.xml
+# Listed from public/media/gallery at build time (scripts/write-site-files.mjs)
+content/gallery.generated.json

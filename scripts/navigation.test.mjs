@@ -53,30 +53,33 @@ test("on /classes/ only Classes is current, and Resources is its current ancesto
   assert.equal($("#menu-main-menu-buttons [aria-current], #menu-main-menu-buttons .current-menu-item").length, 0);
 });
 
-test("the desktop menu reads Home, About, Resources, Classes, Articles, Contact", () => {
+test("the desktop menu reads Home, About, Resources, Classes, Articles, Gallery, Contact", () => {
   const $ = page("/");
-  assert.deepEqual(labels($, "#menu-main-menu-links", "a, button"), ["Home", "About", "Resources", "Classes", "Articles", "Contact"]);
+  assert.deepEqual(labels($, "#menu-main-menu-links", "a, button"), ["Home", "About", "Resources", "Classes", "Articles", "Gallery", "Contact"]);
   // Resources is a toggle for its panel, not a link.
   const toggle = $("#menu-item-33 > button.tz-submenu-toggle");
   assert.equal(toggle.attr("type"), "button");
   assert.equal(toggle.attr("aria-expanded"), "false");
   assert.equal(toggle.attr("aria-controls"), "tz-sub-resources");
   assert.equal($("#tz-sub-resources").is("ul.tz-sub-menu"), true);
-  assert.equal($("#menu-item-33").next().is("#menu-item-32"), true);
+  assert.equal($("#menu-item-33").next().is("#menu-item-tz-gallery"), true);
+  assert.equal($("#menu-item-tz-gallery").next().is("#menu-item-32"), true);
+  assert.equal($("#menu-item-tz-gallery > a").attr("href"), "/gallery/");
   // The theme's dropdown scripts (global.js slideToggle, a11y-menu) only look for these.
   assert.equal($(".menu-item-has-children, .sub-menu").length, 0);
 });
 
-test("the mobile menu reads Home, About, Resources, Classes, Articles, Contact, Donate, Taste a Class", () => {
+test("the mobile menu reads Home, About, Resources, Classes, Articles, Gallery, Contact, Donate, Taste a Class", () => {
   const $ = page("/");
-  assert.deepEqual(labels($, "#menu-mobile-menu", "a, button"), ["Home", "About", "Resources", "Classes", "Articles", "Contact", "Donate", "Taste a Class"]);
+  assert.deepEqual(labels($, "#menu-mobile-menu", "a, button"), ["Home", "About", "Resources", "Classes", "Articles", "Gallery", "Contact", "Donate", "Taste a Class"]);
+  assert.equal($("#menu-item-tz-gallery-mobile > a").attr("href"), "/gallery/");
   assert.equal($("#menu-item-342 > button").attr("aria-controls"), "tz-sub-resources-mobile");
   assert.equal($("#tz-sub-resources-mobile").is("ul.tz-sub-menu"), true);
 });
 
-test("the footer Quick Links read Home, About, Resources, Classes, Articles, Contact, Donate, Taste a Class", () => {
+test("the footer Quick Links read Home, About, Resources, Classes, Articles, Gallery, Contact, Donate, Taste a Class", () => {
   const $ = page("/");
-  assert.deepEqual(labels($, "#menu-mobile-menu-1", "a, .tz-menu-group-label"), ["Home", "About", "Resources", "Classes", "Articles", "Contact", "Donate", "Taste a Class"]);
+  assert.deepEqual(labels($, "#menu-mobile-menu-1", "a, .tz-menu-group-label"), ["Home", "About", "Resources", "Classes", "Articles", "Gallery", "Contact", "Donate", "Taste a Class"]);
   // Resources is a heading over its two pages here, not a link or a button, and it names their list.
   const label = $("#menu-mobile-menu-1 .tz-menu-group > .tz-menu-group-label");
   assert.equal(label.text(), "Resources");
@@ -126,11 +129,12 @@ test("every new id in the header is unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("Home is current on /, Articles on both Articles pages, and nothing on a page outside the menu", () => {
+test("Home is current on /, Articles on both Articles pages, Gallery on /gallery/, and nothing on a page outside the menu", () => {
   const current = (path) => labels(page(path), "#menu-main-menu-links, #menu-mobile-menu, #menu-mobile-menu-1", "[aria-current]");
   assert.deepEqual(current("/"), ["Home", "Home", "Home"]);
   assert.deepEqual(current("/articles/"), ["Articles", "Articles", "Articles"]);
   assert.deepEqual(current("/articles/page/2/"), ["Articles", "Articles", "Articles"]);
+  assert.deepEqual(current("/gallery/"), ["Gallery", "Gallery", "Gallery"]);
   assert.deepEqual(current("/donate/"), ["Donate", "Donate"]);
   // The 404 page and the Parasha posts.
   for (const path of ["", "/parshat-noach-october-8-9-2021/"]) {

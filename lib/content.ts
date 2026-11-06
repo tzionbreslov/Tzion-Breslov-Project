@@ -23,7 +23,7 @@ export type HeadItem =
   | { t: "jsonld"; json: string }
   | ({ t: "script" } & ScriptItem);
 
-export type Island = "signup" | "contact" | "donate" | "youtube-feed" | "post-grid" | "instagram-feed" | "video-library";
+export type Island = "signup" | "contact" | "donate" | "youtube-feed" | "post-grid" | "instagram-feed" | "video-library" | "gallery";
 
 export type PageContent = {
   path: string | null;

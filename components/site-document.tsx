@@ -10,6 +10,7 @@ import "@/app/enhancements.css";
 import "@/app/instagram.css";
 import "@/app/dialog.css";
 import "@/app/video-library.css";
+import "@/app/gallery.css";
 import "@/app/navigation.css";
 
 /**
