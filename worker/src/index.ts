@@ -1,10 +1,15 @@
 import {
   API_PATHS,
-  SUBSCRIPTION_CONFIRMED_QUERY,
+  CONFIRMATION_TOKEN_PATTERN,
+  SUBSCRIPTION_QUERY,
+  SUBSCRIPTION_QUERY_PARAM,
+  SUBSCRIPTION_TOKEN_FRAGMENT_PARAM,
   TURNSTILE_ACTIONS,
   type ApiErrorResponse,
   type ContactSuccessResponse,
-  type SubscribeSuccessResponse
+  type SubscribeConfirmSuccessResponse,
+  type SubscribeSuccessResponse,
+  type SubscriptionQueryStatus
 } from "../../lib/api-contract";
 import { sha256Hex, verifyResendSignature } from "./crypto";
 import {
@@ -19,12 +24,12 @@ import {
 } from "./database";
 import { sendEmail, subscribeToNewsletter, validateTurnstile } from "./providers";
 import { PublicError, requireBinding, type Env } from "./types";
-import { readJson, validateContact, validateSubscription } from "./validation";
+import { readJson, validateContact, validateSubscription, validateSubscriptionConfirmation } from "./validation";
 
 type JsonObject = Record<string, unknown>;
 type ExecutionContextLike = Pick<ExecutionContext, "waitUntil">;
 
-const publicPostRoutes = new Set<string>([API_PATHS.contact, API_PATHS.subscribe]);
+const publicPostRoutes = new Set<string>([API_PATHS.contact, API_PATHS.subscribe, API_PATHS.subscribeConfirm]);
 
 function allowedOrigins(env: Env) {
   return new Set(env.ALLOWED_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean));
@@ -57,6 +62,24 @@ function responseHeaders(origin = "") {
 
 function json(body: JsonObject, status = 200, origin = "") {
   return new Response(JSON.stringify(body), { status, headers: responseHeaders(origin) });
+}
+
+/** Hardened headers for a response a browser navigates to (no JSON body). */
+function navigationHeaders() {
+  const headers = responseHeaders();
+  headers.delete("Content-Type");
+  return headers;
+}
+
+function logError(correlationId: string, request: Request, error: unknown) {
+  const field = error instanceof PublicError ? error.field : undefined;
+  console.error(JSON.stringify({
+    correlationId,
+    method: request.method,
+    path: new URL(request.url).pathname,
+    error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError",
+    ...(field ? { field } : {})
+  }));
 }
 
 function preflight(request: Request, env: Env) {
@@ -161,21 +184,25 @@ async function handleSubscription(request: Request, env: Env, origin: string) {
     await rateLimitValue(env, "subscribe", "email", input.email, 3);
     const token = await privateHash(env, "subscription-confirmation", input.requestId);
     const tokenHash = await sha256Hex(token);
-    await createSubscriptionConfirmation(env, input, tokenHash);
+    // The token derives from requestId alone and a retry keeps the first attempt's row,
+    // so a reused requestId with another email must not get that row's link mailed to it.
+    const storedEmail = await createSubscriptionConfirmation(env, input, tokenHash);
+    if (!storedEmail || storedEmail !== input.email) throw new PublicError("REQUEST_ID_CONFLICT");
     const confirmationUrl = new URL(API_PATHS.subscribeConfirm, requireBinding(env, "PUBLIC_API_URL"));
     confirmationUrl.searchParams.set("token", token);
     const organizationName = requireBinding(env, "ORGANIZATION_NAME");
     await sendEmail(env, {
-      to: input.email,
+      to: storedEmail,
       subject: `Confirm your ${organizationName} email subscription`,
       text: [
         "Hello,",
         "",
-        `Please confirm that you would like to receive email updates from ${organizationName} by opening this single-use link within 24 hours:`,
+        `Please confirm that you would like to receive email updates from ${organizationName}: open this link within 24 hours, then press "Confirm my subscription" on our website.`,
         confirmationUrl.toString(),
         "",
         "If you did not request this, you can ignore this message and you will not be subscribed."
       ].join("\n"),
+      replyTo: env.RESEND_REPLY_TO_EMAIL?.trim() || undefined,
       idempotencyKey: `subscribe-confirm/${input.requestId}`
     });
     return { ok: true, requestId: input.requestId, confirmationRequired: true } satisfies SubscribeSuccessResponse;
@@ -183,21 +210,61 @@ async function handleSubscription(request: Request, env: Env, origin: string) {
   return json(response, 202, origin);
 }
 
-async function handleSubscriptionConfirmation(request: Request, env: Env) {
+/**
+ * `GET /v1/subscribe/confirm?token=…`, the emailed link. Navigation only: mail
+ * and link scanners pre-fetch links, so this never subscribes anyone, and a
+ * person opening it never sees JSON. It 303s to the site, which asks for an
+ * explicit click (the POST below). The token rides in the fragment, so it never
+ * reaches the site's server or a Referer.
+ */
+async function handleSubscriptionConfirmationLink(request: Request, env: Env) {
+  let target: URL;
+  try {
+    target = confirmationRedirectUrl(env);
+  } catch (error) {
+    const correlationId = crypto.randomUUID();
+    logError(correlationId, request, error);
+    const headers = navigationHeaders();
+    headers.set("Content-Type", "text/plain; charset=utf-8");
+    return new Response(
+      `Subscription confirmation is temporarily unavailable. Please try the link again later. (Reference: ${correlationId})\n`,
+      { status: 500, headers }
+    );
+  }
+
   const token = new URL(request.url).searchParams.get("token") ?? "";
-  if (!/^[0-9a-f]{64}$/.test(token)) throw new PublicError("INVALID_CONFIRMATION");
+  let status: SubscriptionQueryStatus = SUBSCRIPTION_QUERY.invalid;
+  try {
+    if (CONFIRMATION_TOKEN_PATTERN.test(token)) {
+      const confirmation = await findSubscriptionConfirmation(env, await sha256Hex(token));
+      if (confirmation) status = confirmation.used_at ? SUBSCRIPTION_QUERY.confirmed : SUBSCRIPTION_QUERY.confirm;
+    }
+  } catch (error) {
+    logError(crypto.randomUUID(), request, error);
+    status = SUBSCRIPTION_QUERY.error;
+  }
+
+  target.searchParams.set(SUBSCRIPTION_QUERY_PARAM, status);
+  if (status === SUBSCRIPTION_QUERY.confirm) {
+    target.hash = new URLSearchParams({ [SUBSCRIPTION_TOKEN_FRAGMENT_PARAM]: token }).toString();
+  }
+  const headers = navigationHeaders();
+  headers.set("Location", target.toString());
+  return new Response(null, { status: 303, headers });
+}
+
+/** `POST /v1/subscribe/confirm`: the visitor pressed "Confirm my subscription" on the site. */
+async function handleSubscriptionConfirmation(request: Request, env: Env, origin: string) {
+  const { token } = validateSubscriptionConfirmation(await readJson(request));
+  await rateLimitValue(env, "subscribe-confirm", "ip", remoteIp(request), 30);
   const confirmation = await findSubscriptionConfirmation(env, await sha256Hex(token));
   if (!confirmation) throw new PublicError("INVALID_CONFIRMATION");
-  const target = confirmationRedirectUrl(env);
+  // Opt in first, then mark used: if Resend fails, the same token still works on retry.
   if (!confirmation.used_at) {
     await subscribeToNewsletter(env, confirmation.email);
     await markSubscriptionConfirmationUsed(env, confirmation.id);
   }
-
-  for (const [key, value] of Object.entries(SUBSCRIPTION_CONFIRMED_QUERY)) target.searchParams.set(key, value);
-  const headers = responseHeaders();
-  headers.set("Location", target.toString());
-  return new Response(null, { status: 303, headers });
+  return json({ ok: true } satisfies SubscribeConfirmSuccessResponse, 200, origin);
 }
 
 async function readWebhookBody(request: Request) {
@@ -245,7 +312,7 @@ async function route(request: Request, env: Env) {
     return json({ ok: true });
   }
   if (request.method === "GET" && url.pathname === API_PATHS.subscribeConfirm) {
-    return handleSubscriptionConfirmation(request, env);
+    return handleSubscriptionConfirmationLink(request, env);
   }
   if (request.method === "POST" && url.pathname === "/webhooks/resend") return handleResendWebhook(request, env);
 
@@ -253,6 +320,7 @@ async function route(request: Request, env: Env) {
     const origin = requestOrigin(request, env);
     if (url.pathname === API_PATHS.contact) return handleContact(request, env, origin);
     if (url.pathname === API_PATHS.subscribe) return handleSubscription(request, env, origin);
+    if (url.pathname === API_PATHS.subscribeConfirm) return handleSubscriptionConfirmation(request, env, origin);
   }
 
   throw new PublicError("NOT_FOUND");
@@ -264,13 +332,7 @@ async function fetchHandler(request: Request, env: Env) {
     return await route(request, env);
   } catch (error) {
     const publicError = error instanceof PublicError ? error : new PublicError("INTERNAL_ERROR");
-    console.error(JSON.stringify({
-      correlationId,
-      method: request.method,
-      path: new URL(request.url).pathname,
-      error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError",
-      ...(publicError.field ? { field: publicError.field } : {})
-    }));
+    logError(correlationId, request, error);
     const origin = request.headers.get("origin") ?? "";
     const safeOrigin = origin && allowedOrigins(env).has(origin) ? origin : "";
     const body: ApiErrorResponse = {

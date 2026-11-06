@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { allSlugs, resolveRoute, routeIndex } from "@/lib/content";
+import { allSlugs, resolveRoute } from "@/lib/content";
 import { RedirectDocument, SiteDocument } from "@/components/site-document";
 
 export const dynamicParams = false;
@@ -12,6 +12,6 @@ export default async function RootLayout({ children, params }: LayoutProps<"/[[.
   const { slug } = await params;
   const route = resolveRoute(slug);
   if (!route) notFound();
-  if (route.kind === "redirect") return <RedirectDocument to={route.to} site={routeIndex().site} />;
+  if (route.kind === "redirect") return <RedirectDocument to={route.to} />;
   return <SiteDocument page={route.page}>{children}</SiteDocument>;
 }

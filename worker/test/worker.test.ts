@@ -125,7 +125,7 @@ describe("HTTP boundary", () => {
 
   it("rejects public requests from unknown or missing origins without CORS headers", async () => {
     const outbound = mockProviders("contact");
-    for (const path of ["/v1/contact", "/v1/subscribe"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm"]) {
       const response = await fetchHandler(publicRequest(path, contactPayload(), "203.0.113.10", "https://attacker.test"), env);
       expect(response.status).toBe(403);
       expect(response.headers.get("access-control-allow-origin")).toBeNull();
@@ -153,7 +153,7 @@ describe("HTTP boundary", () => {
   });
 
   it("answers a constrained CORS preflight for allowed origins", async () => {
-    for (const path of ["/v1/contact", "/v1/subscribe"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm"]) {
       const response = await fetchHandler(new Request(`https://api.test${path}`, {
         method: "OPTIONS",
         headers: {
@@ -379,50 +379,90 @@ describe("newsletter double opt-in", () => {
     expect(sent.reply_to).toBeUndefined();
     const link = sent.text.match(/https:\/\/api\.test\/v1\/subscribe\/confirm\?token=[0-9a-f]{64}/)?.[0];
     expect(link, sent.text).toBeTruthy();
-    return { payload, link: link as string };
+    return { payload, link: link as string, token: new URL(link as string).searchParams.get("token") as string };
   }
 
-  it("stores a pending confirmation, then opts into the newsletter topic only after the link is opened", async () => {
+  function confirmRequest(token: unknown, requestOrigin = origin, ip = "203.0.113.10") {
+    return publicRequest("/v1/subscribe/confirm", { token }, ip, requestOrigin);
+  }
+
+  async function confirmationRow(requestId: string) {
+    return env.DB.prepare("SELECT email, used_at FROM subscription_confirmations WHERE request_id = ?")
+      .bind(requestId).first<{ email: string; used_at: number | null }>();
+  }
+
+  const newsletterContact = (email: string) => ({
+    email,
+    unsubscribed: false,
+    topics: [{ id: "topic_newsletter", subscription: "opt_in" }]
+  });
+
+  it("only navigates on the emailed link and opts in only on the site's explicit POST", async () => {
     const outbound = mockProviders("subscribe");
-    const { payload, link } = await subscribeAndGetConfirmationUrl(outbound);
-
+    const { payload, link, token } = await subscribeAndGetConfirmationUrl(outbound);
     expect(outbound.contacts()).toHaveLength(0);
-    const pending = await env.DB.prepare("SELECT email, used_at FROM subscription_confirmations WHERE request_id = ?")
-      .bind(payload.requestId).first<{ email: string; used_at: number | null }>();
-    expect(pending).toEqual({ email: payload.email, used_at: null });
+    expect(await confirmationRow(payload.requestId)).toEqual({ email: payload.email, used_at: null });
 
-    const confirmed = await fetchHandler(new Request(link), env);
-    expect(confirmed.status).toBe(303);
-    expect(confirmed.headers.get("location")).toBe("https://site.test/?subscription=confirmed");
+    // Opening the link (or a mail scanner pre-fetching it, repeatedly) subscribes nobody.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const opened = await fetchHandler(new Request(link), env);
+      expect(opened.status).toBe(303);
+      expect(opened.headers.get("location")).toBe(`https://site.test/?subscription=confirm#token=${token}`);
+      expect(opened.headers.get("content-type")).toBeNull();
+      expect(opened.headers.get("cache-control")).toBe("no-store");
+      expect(opened.headers.get("referrer-policy")).toBe("no-referrer");
+      expect(await opened.text()).toBe("");
+    }
+    expect(outbound.contacts()).toHaveLength(0);
+    expect((await confirmationRow(payload.requestId))?.used_at).toBeNull();
 
+    const confirmed = await fetchHandler(confirmRequest(token), env);
+    expect(confirmed.status).toBe(200);
+    expect(confirmed.headers.get("access-control-allow-origin")).toBe(origin);
+    await expect(confirmed.json()).resolves.toEqual({ ok: true });
     const contacts = outbound.contacts();
     expect(contacts).toHaveLength(1);
     expect(contacts[0].method).toBe("POST");
     expect(contacts[0].headers.get("authorization")).toBe("Bearer test-contacts-key");
-    expect(contacts[0].body).toEqual({
-      email: payload.email,
-      unsubscribed: false,
-      topics: [{ id: "topic_newsletter", subscription: "opt_in" }]
-    });
+    expect(contacts[0].body).toEqual(newsletterContact(payload.email));
+    expect((await confirmationRow(payload.requestId))?.used_at).toEqual(expect.any(Number));
 
-    const used = await env.DB.prepare("SELECT used_at FROM subscription_confirmations WHERE request_id = ?")
-      .bind(payload.requestId).first<{ used_at: number | null }>();
-    expect(used?.used_at).toEqual(expect.any(Number));
-
-    const again = await fetchHandler(new Request(link), env);
-    expect(again.status).toBe(303);
+    // A second click is still ok but opts in nothing new; the link now reports "confirmed".
+    const again = await fetchHandler(confirmRequest(token), env);
+    expect(again.status).toBe(200);
+    await expect(again.json()).resolves.toEqual({ ok: true });
+    expect(outbound.contacts()).toHaveLength(1);
+    const reopened = await fetchHandler(new Request(link), env);
+    expect(reopened.status).toBe(303);
+    expect(reopened.headers.get("location")).toBe("https://site.test/?subscription=confirmed");
     expect(outbound.contacts()).toHaveLength(1);
   });
 
   it("updates topics when the Resend contact already exists", async () => {
     const outbound = mockProviders("subscribe", { contactsCreateStatus: 409 });
-    const { payload, link } = await subscribeAndGetConfirmationUrl(outbound);
-    const confirmed = await fetchHandler(new Request(link), env);
-    expect(confirmed.status).toBe(303);
+    const { payload, token } = await subscribeAndGetConfirmationUrl(outbound);
+    const confirmed = await fetchHandler(confirmRequest(token), env);
+    expect(confirmed.status).toBe(200);
     const [, patch] = outbound.contacts();
     expect(patch.method).toBe("PATCH");
     expect(patch.url).toBe(`https://api.resend.com/contacts/${encodeURIComponent(payload.email)}/topics`);
     expect(patch.body).toEqual({ topics: [{ id: "topic_newsletter", subscription: "opt_in" }] });
+  });
+
+  it("keeps the token usable when Resend fails during confirmation", async () => {
+    const failing = mockProviders("subscribe", { contactsCreateStatus: 500 });
+    const { payload, token } = await subscribeAndGetConfirmationUrl(failing);
+    const failed = await fetchHandler(confirmRequest(token), env);
+    expect(failed.status).toBe(502);
+    expect((await errorBody(failed)).error).toBe("UPSTREAM_FAILURE");
+    expect((await confirmationRow(payload.requestId))?.used_at).toBeNull();
+
+    failing.spy.mockRestore();
+    const outbound = mockProviders("subscribe");
+    const retried = await fetchHandler(confirmRequest(token), env);
+    expect(retried.status).toBe(200);
+    expect(outbound.contacts()).toHaveLength(1);
+    expect((await confirmationRow(payload.requestId))?.used_at).toEqual(expect.any(Number));
   });
 
   it("deduplicates a resubmitted requestId without sending a second email", async () => {
@@ -435,21 +475,159 @@ describe("newsletter double opt-in", () => {
     expect(await count("subscription_confirmations")).toBe(1);
   });
 
-  it("rejects unknown, malformed, and expired confirmation tokens", async () => {
-    const outbound = mockProviders("subscribe");
-    const { payload, link } = await subscribeAndGetConfirmationUrl(outbound);
+  it("never mails a retried requestId's link to a different email than the one stored", async () => {
+    const failing = mockProviders("subscribe", { emailStatus: 429 });
+    const victim = subscribePayload();
+    const failed = await fetchHandler(publicRequest("/v1/subscribe", victim), env);
+    expect(failed.status).toBe(502);
+    expect((await errorBody(failed)).error).toBe("UPSTREAM_FAILURE");
+    failing.spy.mockRestore();
 
-    const malformed = await fetchHandler(new Request("https://api.test/v1/subscribe/confirm?token=abc"), env);
-    expect(malformed.status).toBe(400);
-    expect((await errorBody(malformed)).error).toBe("INVALID_CONFIRMATION");
-    const unknown = await fetchHandler(new Request(`https://api.test/v1/subscribe/confirm?token=${"0".repeat(64)}`), env);
-    expect(unknown.status).toBe(400);
+    const outbound = mockProviders("subscribe");
+    const attacker = { ...victim, email: uniqueEmail() };
+    const conflict = await fetchHandler(publicRequest("/v1/subscribe", attacker), env);
+    expect(conflict.status).toBe(409);
+    expect((await errorBody(conflict)).error).toBe("REQUEST_ID_CONFLICT");
+    expect(outbound.emails()).toHaveLength(0);
+    expect((await confirmationRow(victim.requestId))?.email).toBe(victim.email);
+
+    // The documented same-payload retry still works, and mails only the stored address.
+    const retried = await fetchHandler(publicRequest("/v1/subscribe", victim), env);
+    expect(retried.status).toBe(202);
+    expect(outbound.emails()).toHaveLength(1);
+    expect((outbound.emails()[0].body as { to: string[] }).to).toEqual([victim.email]);
+  });
+
+  it("sends unknown, malformed and expired links to the site's notice instead of showing JSON", async () => {
+    const outbound = mockProviders("subscribe");
+    const { payload, link, token } = await subscribeAndGetConfirmationUrl(outbound);
+    for (const url of [
+      "https://api.test/v1/subscribe/confirm",
+      "https://api.test/v1/subscribe/confirm?token=abc",
+      `https://api.test/v1/subscribe/confirm?token=${"0".repeat(64)}`,
+      `https://api.test/v1/subscribe/confirm?token=${token.toUpperCase()}`
+    ]) {
+      const response = await fetchHandler(new Request(url), env);
+      expect(response.status, url).toBe(303);
+      expect(response.headers.get("location")).toBe("https://site.test/?subscription=invalid");
+      expect(response.headers.get("content-type")).toBeNull();
+    }
 
     await env.DB.prepare("UPDATE subscription_confirmations SET expires_at = ? WHERE request_id = ?")
       .bind(Date.now() - 1, payload.requestId).run();
     const expired = await fetchHandler(new Request(link), env);
-    expect(expired.status).toBe(400);
+    expect(expired.status).toBe(303);
+    expect(expired.headers.get("location")).toBe("https://site.test/?subscription=invalid");
     expect(outbound.contacts()).toHaveLength(0);
+  });
+
+  it("redirects to the site's error notice when the link cannot be checked", async () => {
+    const brokenDb = { prepare: () => { throw new Error("D1 unavailable"); } } as unknown as D1Database;
+    const response = await fetchHandler(
+      new Request(`https://api.test/v1/subscribe/confirm?token=${"0".repeat(64)}`),
+      { ...env, DB: brokenDb }
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://site.test/?subscription=error");
+    expect(response.headers.get("content-type")).toBeNull();
+  });
+
+  it("answers a misconfigured redirect URL with plain text, never JSON", async () => {
+    for (const redirect of ["https://elsewhere.test/", "not a url", ""]) {
+      const response = await fetchHandler(
+        new Request(`https://api.test/v1/subscribe/confirm?token=${"0".repeat(64)}`),
+        { ...env, SUBSCRIPTION_CONFIRMATION_REDIRECT_URL: redirect }
+      );
+      expect(response.status, redirect).toBe(500);
+      expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+      expect(response.headers.get("location")).toBeNull();
+      expect(await response.text()).toContain("temporarily unavailable");
+    }
+  });
+
+  it("rejects malformed, unknown and expired tokens on the confirm POST", async () => {
+    const outbound = mockProviders("subscribe");
+    const { payload, token } = await subscribeAndGetConfirmationUrl(outbound);
+    for (const bad of [undefined, "", "abc", 42, "0".repeat(63), token.toUpperCase(), ` ${token}`]) {
+      const response = await fetchHandler(confirmRequest(bad), env);
+      expect(response.status, String(bad)).toBe(400);
+      const body = await errorBody(response);
+      expect(body.error).toBe("INVALID_INPUT");
+      expect(body.field).toBe("token");
+    }
+
+    const unknown = await fetchHandler(confirmRequest("0".repeat(64)), env);
+    expect(unknown.status).toBe(400);
+    expect((await errorBody(unknown)).error).toBe("INVALID_CONFIRMATION");
+
+    await env.DB.prepare("UPDATE subscription_confirmations SET expires_at = ? WHERE request_id = ?")
+      .bind(Date.now() - 1, payload.requestId).run();
+    const expired = await fetchHandler(confirmRequest(token), env);
+    expect(expired.status).toBe(400);
+    expect(expired.headers.get("access-control-allow-origin")).toBe(origin);
+    expect((await errorBody(expired)).error).toBe("INVALID_CONFIRMATION");
+    expect(outbound.contacts()).toHaveLength(0);
+  });
+
+  it("accepts the confirm POST only as JSON from an allowed origin", async () => {
+    const outbound = mockProviders("subscribe");
+    const { payload, token } = await subscribeAndGetConfirmationUrl(outbound);
+
+    const foreign = await fetchHandler(confirmRequest(token, "https://attacker.test"), env);
+    expect(foreign.status).toBe(403);
+    expect(foreign.headers.get("access-control-allow-origin")).toBeNull();
+    expect((await errorBody(foreign)).error).toBe("ORIGIN_NOT_ALLOWED");
+    const noOrigin = new Request("https://api.test/v1/subscribe/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+    });
+    expect((await fetchHandler(noOrigin, env)).status).toBe(403);
+    const formPost = new Request("https://api.test/v1/subscribe/confirm", {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/x-www-form-urlencoded" },
+      body: `token=${token}`
+    });
+    expect((await fetchHandler(formPost, env)).status).toBe(415);
+
+    expect(outbound.contacts()).toHaveLength(0);
+    expect((await confirmationRow(payload.requestId))?.used_at).toBeNull();
+  });
+
+  it("rate limits confirmation attempts per IP", async () => {
+    const outbound = mockProviders("subscribe");
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 31; attempt += 1) {
+      const response = await fetchHandler(confirmRequest("0".repeat(64), origin, "198.51.100.7"), env);
+      statuses.push(response.status);
+    }
+    expect(statuses).toEqual([...Array<number>(30).fill(400), 429]);
+    expect(outbound.calls).toHaveLength(0);
+  });
+
+  it("sets Reply-To on the confirmation email only when RESEND_REPLY_TO_EMAIL is configured", async () => {
+    const outbound = mockProviders("subscribe");
+    // Default test config (blank) is covered by subscribeAndGetConfirmationUrl: no reply_to.
+    await subscribeAndGetConfirmationUrl(outbound);
+
+    const payload = subscribePayload();
+    const configured = await fetchHandler(publicRequest("/v1/subscribe", payload), { ...env, RESEND_REPLY_TO_EMAIL: " replies@example.test " });
+    expect(configured.status).toBe(202);
+    const sent = outbound.emails()[1].body as { to: string[]; reply_to?: string };
+    expect(sent.to).toEqual([payload.email]);
+    expect(sent.reply_to).toBe("replies@example.test");
+
+    const blank = await fetchHandler(publicRequest("/v1/subscribe", subscribePayload()), { ...env, RESEND_REPLY_TO_EMAIL: "   " });
+    expect(blank.status).toBe(202);
+    expect((outbound.emails()[2].body as { reply_to?: string }).reply_to).toBeUndefined();
+    outbound.spy.mockRestore();
+
+    // Contact notifications keep replying to the visitor.
+    const contactOutbound = mockProviders("contact");
+    const contact = contactPayload();
+    const response = await fetchHandler(publicRequest("/v1/contact", contact), { ...env, RESEND_REPLY_TO_EMAIL: "replies@example.test" });
+    expect(response.status).toBe(202);
+    expect((contactOutbound.emails()[0].body as { reply_to?: string }).reply_to).toBe(contact.email);
   });
 
   it("validates the subscription email and honeypot before any provider call", async () => {
@@ -467,13 +645,9 @@ describe("newsletter double opt-in", () => {
   it("ignores legacy fields such as name, topics, consent and locale", async () => {
     const outbound = mockProviders("subscribe");
     const payload = subscribePayload({ name: "Ignored", topics: ["events"], consent: "nope", locale: "he" });
-    const { link } = await subscribeAndGetConfirmationUrl(outbound, payload);
-    await fetchHandler(new Request(link), env);
-    expect(outbound.contacts()[0].body).toEqual({
-      email: payload.email,
-      unsubscribed: false,
-      topics: [{ id: "topic_newsletter", subscription: "opt_in" }]
-    });
+    const { token } = await subscribeAndGetConfirmationUrl(outbound, payload);
+    await fetchHandler(confirmRequest(token), env);
+    expect(outbound.contacts()[0].body).toEqual(newsletterContact(payload.email));
   });
 });
 

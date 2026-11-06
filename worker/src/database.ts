@@ -65,11 +65,17 @@ export async function enforceRateLimit(
   if (!row || row.count > limit) throw new PublicError("RATE_LIMITED");
 }
 
+/**
+ * Stores the pending confirmation for this requestId (first attempt wins) and
+ * returns the email actually stored for it. A retry of the same requestId keeps
+ * the first attempt's row, so the caller must compare and only ever mail the
+ * stored address (never a different email sent with a reused requestId).
+ */
 export async function createSubscriptionConfirmation(
   env: Env,
   input: { requestId: string; email: string },
   tokenHash: string
-) {
+): Promise<string | null> {
   const now = Date.now();
   await env.DB.prepare(
     `INSERT OR IGNORE INTO subscription_confirmations
@@ -83,6 +89,10 @@ export async function createSubscriptionConfirmation(
     now + 24 * 60 * 60_000,
     now
   ).run();
+  const row = await env.DB.prepare("SELECT email FROM subscription_confirmations WHERE request_id = ?")
+    .bind(input.requestId)
+    .first<{ email: string }>();
+  return row?.email ?? null;
 }
 
 export type ConfirmationRow = {

@@ -19,7 +19,7 @@ export type HeadItem =
   | { t: "jsonld"; json: string }
   | ({ t: "script" } & ScriptItem);
 
-export type Island = "signup" | "contact" | "donate" | "youtube-feed" | "post-grid";
+export type Island = "signup" | "contact" | "donate" | "youtube-feed" | "post-grid" | "instagram-feed";
 
 export type PageContent = {
   path: string | null;

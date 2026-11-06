@@ -1,27 +1,34 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tzion-breslov-api",
-  // "account_id" is intentionally omitted. Fill in the Tzion Breslov Cloudflare
-  // account ID here (or export CLOUDFLARE_ACCOUNT_ID) before any deploy or
-  // remote D1 command.
+  // Tzion Breslov Cloudflare account (tzionbreslovproject@gmail.com). Not a secret.
+  "account_id": "ecde4769aa54b9c021e26cd26be213fa",
   "main": "worker/src/index.ts",
   "compatibility_date": "2026-09-03",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "routes": [
     {
-      "pattern": "api.tzionbreslov.com",
+      "pattern": "api.tzionbreslov.org",
       "custom_domain": true
     }
   ],
+  // The site's permanent home is tzionbreslov.org (until the switch, .org redirects to
+  // the WordPress site on tzionbreslov.com, and the forms stay disabled on the site).
   "vars": {
-    "ALLOWED_ORIGINS": "https://tzionbreslov.com,https://www.tzionbreslov.com",
-    "PUBLIC_API_URL": "https://api.tzionbreslov.com",
-    "SUBSCRIPTION_CONFIRMATION_REDIRECT_URL": "https://tzionbreslov.com/",
+    "ALLOWED_ORIGINS": "https://tzionbreslov.org,https://www.tzionbreslov.org",
+    "PUBLIC_API_URL": "https://api.tzionbreslov.org",
+    "SUBSCRIPTION_CONFIRMATION_REDIRECT_URL": "https://tzionbreslov.org/",
     "ORGANIZATION_NAME": "Tzion Breslov",
-    "TURNSTILE_EXPECTED_HOSTNAMES": "tzionbreslov.com,www.tzionbreslov.com"
+    "TURNSTILE_EXPECTED_HOSTNAMES": "tzionbreslov.org,www.tzionbreslov.org",
+    // Optional, not a secret: Reply-To on the subscription confirmation email. tzionbreslov.org
+    // has no MX (by choice), so without it a subscriber's reply would sit deferred for days
+    // before bouncing. Blank/absent = no Reply-To. Contact notifications reply to the visitor.
+    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
+  // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget
+  // (site key 0x4AAAAAAF1kfPJ0qES50FAh).
   "secrets": {
     "required": [
       "RATE_LIMIT_SALT",
@@ -40,8 +47,8 @@
     {
       "binding": "DB",
       "database_name": "tzion-breslov-production",
-      // Replace with the ID printed by `npx wrangler d1 create tzion-breslov-production`.
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      // Created 2026-11-06; 0001_initial.sql applied and recorded in d1_migrations.
+      "database_id": "430c5c20-673d-4e3f-b186-18c8c00cbcd8",
       "migrations_dir": "worker/migrations"
     }
   ]

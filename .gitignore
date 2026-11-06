@@ -8,8 +8,8 @@ node_modules/
 .cloudflare-env.ps1
 .wrangler/
 .DS_Store
-dist/
-build/
+/dist/
+/build/
 .next/
 next-env.d.ts
 out/
@@ -32,3 +32,7 @@ id_ed25519*
 
 # WordPress reference tooling: generated DB dump (contains private data)
 tools/wordpress-reference/.data/
+
+# Rendered from content/site-files at build time (scripts/write-site-files.mjs)
+public/robots.txt
+public/*sitemap*.xml

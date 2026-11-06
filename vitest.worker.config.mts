@@ -22,6 +22,9 @@ export default defineConfig({
           RESEND_TRANSACTIONAL_API_KEY: "test-transactional-key",
           RESEND_CONTACTS_API_KEY: "test-contacts-key",
           RESEND_FROM_EMAIL: "Test Organization <no-reply@example.test>",
+          // Optional; blank = no Reply-To (overrides the production value from wrangler.jsonc).
+          // Tests that need one pass an env override.
+          RESEND_REPLY_TO_EMAIL: "",
           CONTACT_TO_EMAIL: "team@example.test",
           RESEND_NEWSLETTER_TOPIC_ID: "topic_newsletter",
           // Svix-style secret (base64 after the whsec_ prefix) so signed webhooks can be tested end to end.

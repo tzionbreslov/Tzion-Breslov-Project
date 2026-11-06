@@ -4,17 +4,20 @@
  * Shared by the Worker (`worker/src`) and the Next.js frontend, so keep this
  * file free of runtime/DOM/Worker globals: types and `as const` values only.
  *
- * Base URL: `https://api.tzionbreslov.com` in production,
+ * Base URL: `https://api.tzionbreslov.org` in production,
  * `http://localhost:8787` under `npm run worker:dev`.
  *
  * Every public POST must:
  * - be sent from an origin listed in ALLOWED_ORIGINS (exact match, no credentials);
  * - use `Content-Type: application/json` (the CORS preflight allows only that header);
  * - have a JSON object body of at most 16 KiB;
- * - include the security envelope fields described by {@link SecurityEnvelope}.
+ * - include the security envelope fields described by {@link SecurityEnvelope}
+ *   (except `POST /v1/subscribe/confirm`, whose single-use token is the credential;
+ *   see {@link SubscribeConfirmRequest}).
  *
  * Unknown extra fields are ignored. Strings are NFKC-normalized and trimmed
- * server-side before length checks. Success responses are HTTP 202.
+ * server-side before length checks. Success responses are HTTP 202
+ * (HTTP 200 for `POST /v1/subscribe/confirm`, which finishes synchronously).
  *
  * Errors are `{ ok: false, error: ApiErrorCode, correlationId, field? }` with
  * the HTTP status shown in {@link API_ERROR_STATUS}. `field` is only present on
@@ -24,7 +27,14 @@
 export const API_PATHS = {
   contact: "/v1/contact",
   subscribe: "/v1/subscribe",
-  /** GET target of the emailed double-opt-in link. The frontend never calls it directly. */
+  /**
+   * Double opt-in, two methods on one path:
+   * - `GET ?token=…` is the emailed link. It is navigation only (link scanners
+   *   pre-fetch it): it never subscribes anyone, it 303s to the site with a
+   *   {@link SUBSCRIPTION_QUERY} status (see there).
+   * - `POST` with {@link SubscribeConfirmRequest} is sent by the site when the
+   *   visitor presses "Confirm my subscription"; it performs the opt-in.
+   */
   subscribeConfirm: "/v1/subscribe/confirm"
 } as const;
 
@@ -74,11 +84,30 @@ export const MIN_FILL_TIME_MS = 1_500;
 export const MAX_FILL_TIME_MS = 86_400_000;
 
 /**
- * After a successful double-opt-in click, the Worker answers 303 to
- * SUBSCRIPTION_CONFIRMATION_REDIRECT_URL (`https://tzionbreslov.com/`) with
- * this query parameter appended, e.g. `https://tzionbreslov.com/?subscription=confirmed`.
+ * `GET /v1/subscribe/confirm?token=…` (the emailed link) answers 303 to
+ * SUBSCRIPTION_CONFIRMATION_REDIRECT_URL (`https://tzionbreslov.org/`) with
+ * `?subscription=<status>` appended:
+ * - `confirm` + `#token=<token>`: valid, unused link. The token travels in the
+ *   fragment so it never reaches the site's server or a Referer. The site shows
+ *   a "Confirm my subscription" button that POSTs it (never automatically).
+ * - `confirmed`: the link was already used; the visitor is subscribed.
+ * - `invalid`: unknown, malformed or expired (24 h) link; sign up again.
+ * - `error`: temporary server problem; try the link again later.
  */
-export const SUBSCRIPTION_CONFIRMED_QUERY = { subscription: "confirmed" } as const;
+export const SUBSCRIPTION_QUERY_PARAM = "subscription";
+export const SUBSCRIPTION_QUERY = {
+  confirm: "confirm",
+  confirmed: "confirmed",
+  invalid: "invalid",
+  error: "error"
+} as const;
+export type SubscriptionQueryStatus = (typeof SUBSCRIPTION_QUERY)[keyof typeof SUBSCRIPTION_QUERY];
+
+/** Fragment parameter that carries the token on `?subscription=confirm` (`#token=…`). */
+export const SUBSCRIPTION_TOKEN_FRAGMENT_PARAM = "token";
+
+/** Confirmation tokens are 64 lowercase hex characters (256 bits). */
+export const CONFIRMATION_TOKEN_PATTERN = /^[0-9a-f]{64}$/;
 
 /** Fields required on every public POST. */
 export type SecurityEnvelope = {
@@ -115,11 +144,24 @@ export type ContactRequest = SecurityEnvelope & {
 /**
  * `POST /v1/subscribe` (Turnstile action "subscribe").
  * Email-only newsletter signup with double opt-in: the Worker emails a
- * single-use link valid for 24 hours; the contact is added to the Resend
- * "newsletter" topic only when that link is opened.
+ * single-use link valid for 24 hours. Opening it lands on the site
+ * (`?subscription=confirm#token=…`), and the contact is added to the Resend
+ * "newsletter" topic only when the visitor then presses "Confirm my
+ * subscription" (`POST /v1/subscribe/confirm`).
  */
 export type SubscribeRequest = SecurityEnvelope & {
   email: string;
+};
+
+/**
+ * `POST /v1/subscribe/confirm`: the visitor's explicit confirmation click.
+ * No security envelope or Turnstile: the single-use token is the credential.
+ * Rate-limited per IP. Errors: `INVALID_INPUT` (field `token`, not
+ * {@link CONFIRMATION_TOKEN_PATTERN}), `INVALID_CONFIRMATION` (unknown or
+ * expired; sign up again), `UPSTREAM_FAILURE` (safe to retry with the same token).
+ */
+export type SubscribeConfirmRequest = {
+  token: string;
 };
 
 export type ContactSuccessResponse = {
@@ -134,6 +176,11 @@ export type SubscribeSuccessResponse = {
   confirmationRequired: true;
 };
 
+/** HTTP 200. Also returned when the token was already used (the visitor is subscribed). */
+export type SubscribeConfirmSuccessResponse = {
+  ok: true;
+};
+
 /** HTTP status for each error code the Worker can return. */
 export const API_ERROR_STATUS = {
   /** A field failed validation; see `field`. */
@@ -144,7 +191,7 @@ export const API_ERROR_STATUS = {
   SUSPICIOUS_SUBMISSION: 400,
   /** Turnstile token invalid, expired, reused, wrong action or hostname. Reset the widget. */
   BOT_CHALLENGE_FAILED: 400,
-  /** Subscription link invalid or expired (GET /v1/subscribe/confirm only). */
+  /** Confirmation token unknown or expired (POST /v1/subscribe/confirm only); sign up again. */
   INVALID_CONFIRMATION: 400,
   /** Origin header missing or not allowed. */
   ORIGIN_NOT_ALLOWED: 403,
@@ -153,7 +200,7 @@ export const API_ERROR_STATUS = {
   NOT_FOUND: 404,
   /** Same requestId is still being processed; retry shortly. */
   REQUEST_IN_PROGRESS: 409,
-  /** requestId already used on a different endpoint; generate a new one. */
+  /** requestId already used on a different endpoint or with a different email; generate a new one. */
   REQUEST_ID_CONFLICT: 409,
   REQUEST_TOO_LARGE: 413,
   UNSUPPORTED_CONTENT_TYPE: 415,
@@ -175,7 +222,8 @@ export type ApiErrorCode = keyof typeof API_ERROR_STATUS;
 /** Request fields that can appear in `ApiErrorResponse.field`. */
 export type ApiInputField =
   | Exclude<keyof ContactRequest, "website">
-  | Exclude<keyof SubscribeRequest, "website">;
+  | Exclude<keyof SubscribeRequest, "website">
+  | keyof SubscribeConfirmRequest;
 
 export type ApiErrorResponse = {
   ok: false;
@@ -188,3 +236,4 @@ export type ApiErrorResponse = {
 
 export type ContactResponse = ContactSuccessResponse | ApiErrorResponse;
 export type SubscribeResponse = SubscribeSuccessResponse | ApiErrorResponse;
+export type SubscribeConfirmResponse = SubscribeConfirmSuccessResponse | ApiErrorResponse;

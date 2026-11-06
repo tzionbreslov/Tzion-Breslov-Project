@@ -37,10 +37,19 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
 | `npm run check` | Typecheck, lint, Worker tests, build, export check |
-| `npm run sync:youtube` | Pull the latest channel uploads into `content/youtube.json` |
+| `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
 | `node scripts/compare-live.mjs` | Compare the WordPress reference's text/images/links with the live site |
+
+## YouTube feed (Resources page)
+
+Source: the channel's public RSS feed,
+`https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).
+The deploy workflow refreshes it at build time and runs daily (04:41 UTC), so new uploads appear within a day without a
+commit. Videos that scroll out of the feed's 15-entry window only stay listed if they are in the committed
+`content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
+intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
 
 ## Editing content
 
@@ -52,18 +61,85 @@ overwrites `content/` from the WordPress snapshot, so only do that while WordPre
 
 All public, build-time values:
 
-- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.com` once the Worker is deployed
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — Cloudflare Turnstile site key for tzionbreslov.com
+- `NEXT_PUBLIC_SITE_URL` — the site's public origin for canonical links, social cards, structured data, sitemaps and
+  `robots.txt`. Unset = `https://tzionbreslov.com` (where WordPress still lives); set to `https://tzionbreslov.org` on
+  switch day.
+- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.org` once the Worker has its Resend secrets
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `0x4AAAAAAF1kfPJ0qES50FAh` (widget "Tzion Breslov forms", tzionbreslov.org + www)
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID` — when PayPal checkout is wired
 
 Without the first two, the forms show a "temporarily unavailable — email us" message instead of failing silently.
 Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. See `SECURITY.md`.
 
+## Domains and Cloudflare
+
+**tzionbreslov.org** (Cloudflare Registrar + DNS, account `tzionbreslovproject@gmail.com`) is the site's future home.
+**tzionbreslov.com** is still the WordPress site at the old host. Until the switch:
+
+| Piece | State |
+|---|---|
+| `tzionbreslov.org`, `www` | Proxied placeholder records (`192.0.2.1`, `100::`) + redirect rule **302** → `https://tzionbreslov.com` + same path. 302, not 301: a cached 301 would loop once .com later redirects to .org. |
+| Zone security | Always HTTPS, TLS ≥ 1.2, DNSSEC, SSL Full (strict) for the zone plus a Configuration Rule giving the two site hosts SSL **Full** (see switch day, step 3), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
+| Email | `v=spf1 -all` + DMARC `p=reject` (nothing may send as @tzionbreslov.org; Resend's DKIM still aligns later). No MX: inbound mail is declined, so the Worker sets a Reply-To on its emails. |
+| Forms API | D1 `tzion-breslov-production` (schema applied), Turnstile widget (site key above). Worker `tzion-breslov-api` → `api.tzionbreslov.org` deploys with `npm run worker:deploy` |
+| GitHub Pages preview | `tzionbreslov.github.io/Tzion-Breslov-Project/` (canonical links still point at the real domain) |
+
+### Before switch day (any time, owner account)
+
+**Verify the domain with GitHub first**, so nobody else's Pages site can ever claim it: owner profile → Settings → Pages →
+*Verified domains* → Add `tzionbreslov.org`, create the TXT record GitHub shows
+(`_github-pages-challenge-tzionbreslov.tzionbreslov.org`) in Cloudflare, wait until it resolves, click *Verify*. **Keep that
+TXT record forever** — removing it can drop the verification.
+
+### Switch day (.com → .org)
+
+1. **GitHub (owner account):** repo Settings → Pages → custom domain `tzionbreslov.org` (only after the domain shows *Verified*).
+2. **GitHub variables:** `NEXT_PUBLIC_SITE_URL=https://tzionbreslov.org`; re-run *Deploy GitHub Pages*. (CI already builds
+   and checks this variant on every PR.)
+3. **Cloudflare DNS, in this order:**
+   1. Replace the placeholders with GitHub Pages records, **DNS-only**: apex `A` 185.199.108.153 / .109 / .110 / .111,
+      `AAAA` 2606:50c0:8000::153 / 8001::153 / 8002::153 / 8003::153, `www` CNAME `tzionbreslov.github.io`. (Change DNS
+      *before* touching the redirect rule — DNS-only traffic never hits it, while deleting it first would send visitors
+      to the placeholder address.)
+   2. When repo Settings → Pages shows the certificate, tick *Enforce HTTPS*, then **delete the 302 redirect rule** (it
+      must be gone before re-proxying, or it would loop once .com 301s to .org).
+   3. Switch the records to proxied. The Configuration Rule "tzion_github_pages_origin_ssl_full" (already created) makes
+      Cloudflare use SSL **Full** for the site hosts: GitHub reports proxied domains as not HTTPS-eligible and may fail
+      to renew its certificate, and under Full (strict) that would turn every page into a 526. Ruach Breslov runs the
+      same way. Do not put these hosts back on strict unless
+      `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
+      tzionbreslov.org with > 30 days left.
+4. **Verify live:** `node scripts/check-csp.mjs https://tzionbreslov.org` (and `https://www.tzionbreslov.org`) must report
+   zero violations; then rename the header to `Content-Security-Policy` with the value of `CSP` (it re-adds
+   `upgrade-insecure-requests`) and stage HSTS (short max-age first).
+5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT
+   mail records — and give it SPF + DMARC (it has neither today, at Wix DNS): start DMARC at `p=none` with a report
+   address, list every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
+   notifications? newsletters?), publish one SPF covering exactly those, then tighten DMARC to `quarantine`/`reject`.
+
+## Security headers
+
+`config/security-headers.mjs` is the source of truth; Cloudflare's Transform Rule "Tzion security headers" must match it.
+Any new third-party origin (e.g. PayPal) goes there first, then `npm run build && node scripts/check-csp.mjs` (serves
+`out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
+Cloudflare rule.
+
 ## Launch checklist (not done yet)
 
-1. Deploy the Worker: create the D1 database, fill `account_id`/`database_id` in `wrangler.jsonc`, set secrets,
-   `npm run db:migrate:remote`, `npm run worker:deploy`.
-2. Resend: verify the sending domain, create the "newsletter" topic. Turnstile: create a widget for the two hostnames.
-3. Move DNS for tzionbreslov.com to Cloudflare (preserve MX/TXT mail records), point the apex + `www` at GitHub Pages,
-   set the custom domain in the repo's Pages settings, and add a redirect rule `/about/` → `/about-us/` (301).
-4. Wire PayPal in `lib/client/donations.ts`.
+1. **Resend:** verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter"
+   topic, and a webhook to `https://api.tzionbreslov.org/webhooks/resend`. tzionbreslov.org has no MX (by choice), so
+   also set Reply-To `tzionbreslovproject@gmail.com` in Resend's broadcast settings; the Worker already sets it on
+   confirmation emails (`RESEND_REPLY_TO_EMAIL` in `wrangler.jsonc`).
+2. **Worker secrets** — all 8 in `wrangler.jsonc` → `secrets.required`, via `npx wrangler secret put NAME` (or
+   `npx wrangler deploy --secrets-file <uncommitted file>`): `RATE_LIMIT_SALT` (random, ≥ 32 chars, e.g.
+   `openssl rand -hex 32` — shorter makes every form return 503), `TURNSTILE_SECRET_KEY` (widget "Tzion Breslov
+   forms"), `RESEND_TRANSACTIONAL_API_KEY`, `RESEND_CONTACTS_API_KEY`, `RESEND_FROM_EMAIL`
+   (e.g. `Tzion Breslov <no-reply@tzionbreslov.org>`), `CONTACT_TO_EMAIL` (`tzionbreslovproject@gmail.com`),
+   `RESEND_NEWSLETTER_TOPIC_ID`, `RESEND_WEBHOOK_SECRET`. Then `npm run worker:deploy` and check
+   `https://api.tzionbreslov.org/health`.
+3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
+   Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
+   is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
+   unavailable — email us".
+4. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
+5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first).

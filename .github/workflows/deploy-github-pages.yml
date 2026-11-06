@@ -5,6 +5,9 @@ on:
     branches:
       - main
   workflow_dispatch:
+  # Daily rebuild so new YouTube uploads appear without anyone committing.
+  schedule:
+    - cron: "41 4 * * *"
 
 concurrency:
   group: github-pages
@@ -48,12 +51,21 @@ jobs:
       - name: Test Worker
         run: npm run test:worker
 
+      - name: Test YouTube feed parser
+        run: npm run test:youtube
+
+      # Build-time only (never committed). If YouTube's RSS is down, this warns and
+      # the build uses the list already in content/youtube.json.
+      - name: Refresh YouTube feed
+        run: npm run sync:youtube
+
       # base_path is "/Tzion-Breslov-Project" on the github.io URL and "" once
       # the custom domain is set in the Pages settings.
       - name: Build
         run: npm run build
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
           NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${{ vars.NEXT_PUBLIC_TURNSTILE_SITE_KEY }}
           NEXT_PUBLIC_PAYPAL_CLIENT_ID: ${{ vars.NEXT_PUBLIC_PAYPAL_CLIENT_ID }}
@@ -62,6 +74,7 @@ jobs:
         run: npm run check:static-export
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_SITE_URL: ${{ vars.NEXT_PUBLIC_SITE_URL }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5

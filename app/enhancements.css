@@ -43,6 +43,24 @@ html.tz-lightbox-open { overflow: hidden; }
 }
 .tz-notice p { margin: 0; font-weight: 600; }
 .tz-notice button { flex: none; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgb(255 255 255 / .15); color: #fff; font-size: 22px; cursor: pointer; }
+/* "Confirm my subscription" prompt and its outcomes (lib/client/subscription-confirm.ts) */
+.tz-notice [hidden] { display: none !important; }
+.tz-notice__body { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.tz-notice p:focus { outline: none; }
+.tz-notice .tz-notice__action {
+  width: auto; height: auto; min-height: 44px; padding: 10px 22px; border-radius: 30px;
+  background: #fff; color: var(--wp--preset--color--dark-blue, #1e61a1);
+  font: 700 14px/1.2 Montserrat, sans-serif; letter-spacing: .02em; text-transform: uppercase;
+}
+.tz-notice .tz-notice__action:hover { background: var(--wp--preset--color--light-blue, #f2f9ff); }
+.tz-notice .tz-notice__action[aria-disabled="true"] { opacity: .75; cursor: progress; }
+.tz-notice button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* The theme's button padding/shadow stretched the 36px dismiss circle into an oval. */
+.tz-notice > button { padding: 0; box-shadow: none; }
+@media (max-width: 600px) {
+  /* Shrink-to-fit next to left:50% left ~200px for the text on phones. */
+  .tz-notice { width: calc(100% - 32px); }
+}
 
 /* ------------------------------------------------------------ Donate form
  * The theme sets html{font-size:62.5%}, so sizes here are in px. */

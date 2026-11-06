@@ -46,7 +46,11 @@ const REDIRECTS = { "/about/": "/about-us/" };
 const FORM_ISLANDS = { 2: "signup", 3: "contact", 4: "donate" };
 
 const hash = (s) => crypto.createHash("sha256").update(s).digest("hex").slice(0, 12);
-const toRelative = (s) => s.replaceAll(`${LOCAL}/`, "/").replaceAll(LOCAL, "/").replaceAll("http:\\/\\/localhost:8088\\/", "\\/").replaceAll("http:\\/\\/localhost:8088", "\\/");
+// The designer's staging host (tzionbreslov.estiwolo.com) is gone; WordPress still
+// pointed the Parasha hero images at it, so they 404 on the live site. The same
+// files are in the uploads backup, so serve them locally.
+const STAGING = "https://tzionbreslov.estiwolo.com/wp-content/";
+const toRelative = (s) => s.replaceAll(STAGING, "/wp-content/").replaceAll(`${LOCAL}/`, "/").replaceAll(LOCAL, "/").replaceAll("http:\\/\\/localhost:8088\\/", "\\/").replaceAll("http:\\/\\/localhost:8088", "\\/");
 const toAbsolute = (s) => s.replaceAll(LOCAL, PRODUCTION).replaceAll("http:\\/\\/localhost:8088", "https:\\/\\/tzionbreslov.com");
 
 function resetDir(dir) {
@@ -136,6 +140,22 @@ function processPostGrids($, islands) {
   });
 }
 
+/**
+ * Owner-requested addition (2026-11-06, not on the WordPress site): a 4th
+ * "Instagram" tab on the Resources tabs, rendered from content/instagram.json.
+ * Spectra's tab script is index-based, so tab 3 just needs matching markup.
+ */
+function addInstagramTab($, islands) {
+  const tabs = $(".wp-block-uagb-tabs.uagb-block-a64ce816");
+  if (!tabs.length) return;
+  const nav = tabs.find("ul.uagb-tabs__panel");
+  const body = tabs.find(".uagb-tabs__body-wrap");
+  const index = nav.children("li.uagb-tab").length;
+  nav.append(`<li class="uagb-tab " role="none"><a href="#uagb-tabs__tab${index}" class="uagb-tabs-list uagb-tabs__icon-position-left" data-tab="${index}" role="tab">Instagram</a></li>`);
+  body.append(`<div class="wp-block-uagb-tabs-child uagb-tabs__body-container uagb-inner-tab-${index}" aria-labelledby="uagb-tabs__tab${index}"><!--tz:instagram-feed--></div>`);
+  islands.add("instagram-feed");
+}
+
 function processPage(file) {
   const route = routeOf(file);
   const $ = load(fs.readFileSync(file, "utf8"));
@@ -174,6 +194,7 @@ function processPage(file) {
   processForms($, islands);
   processYoutube($, islands);
   processPostGrids($, islands);
+  addInstagramTab($, islands);
   $("noscript").each((_, el) => { if (/gform|sby_/.test($(el).html() ?? "")) $(el).remove(); });
 
   const container = $(".site-container");
@@ -296,7 +317,11 @@ function seedYoutube() {
 }
 
 // ---------------------------------------------------------------- sitemaps
-/** Republish Yoast's sitemaps and robots.txt at their original URLs (Search Console keeps working). */
+/**
+ * Keep Yoast's sitemaps and robots.txt (same URLs, so Search Console keeps working)
+ * as templates in content/site-files; scripts/write-site-files.mjs renders them into
+ * public/ at build time with the configured site URL.
+ */
 function publishSitemaps() {
   const dir = path.join(golden, "sitemaps");
   if (!fs.existsSync(dir)) return "none in snapshot";
@@ -305,7 +330,7 @@ function publishSitemaps() {
     let text = fs.readFileSync(path.join(dir, name), "utf8").replaceAll(LOCAL, PRODUCTION).replaceAll("//localhost:8088", "//tzionbreslov.com");
     // The XSL stylesheet lives in the Yoast plugin, which no longer exists.
     text = text.replace(/<\?xml-stylesheet[^>]*\?>/, "");
-    fs.writeFileSync(path.join(publicDir, name), text);
+    fs.writeFileSync(path.join(contentDir, "site-files", name), text);
   }
   return files.join(", ");
 }
@@ -314,7 +339,7 @@ function publishSitemaps() {
 async function main() {
   if (!fs.existsSync(pagesDir)) throw new Error(`Snapshot not found at ${pagesDir}`);
   const keepYoutube = fs.existsSync(path.join(contentDir, "youtube.json")) ? fs.readFileSync(path.join(contentDir, "youtube.json")) : null;
-  for (const dir of ["pages", "fragments", "styles", "scripts"]) resetDir(path.join(contentDir, dir));
+  for (const dir of ["pages", "fragments", "styles", "scripts", "site-files"]) resetDir(path.join(contentDir, dir));
   if (keepYoutube) fs.writeFileSync(path.join(contentDir, "youtube.json"), keepYoutube);
   for (const dir of ["wp-content", "wp-includes"]) fs.rmSync(path.join(publicDir, dir), { recursive: true, force: true });
 
@@ -324,7 +349,16 @@ async function main() {
     const { route, page } = processPage(file);
     fs.writeFileSync(path.join(contentDir, "pages", `${route.key}.json`), `${JSON.stringify(page, null, 1)}\n`);
     if (route.path) routes.push({ path: route.path, key: route.key });
-    collectAssets(JSON.stringify(page).replaceAll("\\/", "/"), assets);
+    // Head tags and JSON-LD keep absolute production URLs (og:image, schema logo…);
+    // they must exist on our own host once the site URL is switched, so collect
+    // them as root-relative paths too.
+    const own = (s) => s.replaceAll(`${PRODUCTION}/`, "/").replaceAll("http://tzionbreslov.com/", "/");
+    collectAssets(own(JSON.stringify(page).replaceAll("\\/", "/")), assets);
+    for (const h of page.head) {
+      if (h.t === "meta" || h.t === "link") for (const v of Object.values(h.attrs)) collectAssets(own(String(v)), assets);
+      // Parsing drops Yoast's \/ escaping, which the stringified page keeps.
+      else if (h.t === "jsonld") collectAssets(own(JSON.stringify(JSON.parse(h.json))), assets);
+    }
   }
   for (const kind of ["fragments", "styles", "scripts"]) {
     for (const f of fs.readdirSync(path.join(contentDir, kind))) collectAssets(fs.readFileSync(path.join(contentDir, kind, f), "utf8").replaceAll("\\/", "/"), assets);
