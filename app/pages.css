@@ -1,0 +1,79 @@
+/*
+ * Additions to Tzion's imported pages: the Contact page's map
+ * (lib/pages/contact-map.ts). The theme's CSS loads after this file: every
+ * rule that must beat a theme rule (its button rules are 0,4,0 at most) is
+ * scoped under .tz-map at a higher specificity. Sizes are in px (the theme
+ * sets html{font-size:62.5%}).
+ */
+
+/* ---------------------------------------------------------------- Contact map */
+/* Under the contact columns, as wide as they are. The top padding is the gap
+ * their section keeps around its content, and holds the card's shadow. */
+.tz-map { padding-top: var(--wp--preset--spacing--medium, 60px); }
+
+/* The Contact cards' look: light blue, a 1px dark-blue border, the square
+ * bottom-right corner and their shadow. */
+.tz-map .tz-map__card {
+  display: flex; flex-direction: column; gap: 30px;
+  padding: 40px;
+  background-color: var(--wp--preset--color--light-blue, #f2f9ff);
+  border: 1px solid var(--wp--preset--color--dark-blue, #1e61a1);
+  border-radius: 30px 30px 0 30px;
+  box-shadow: 3px 5px 15px #00000029;
+}
+/* Balanced lines on phones: "Find us in / Bet Shemesh", never "Find us in Bet / Shemesh". */
+.tz-map .tz-map__title { margin: 0; text-wrap: balance; }
+
+/* The map keeps its full height before it loads (nothing below it moves),
+ * with the card's corners. */
+.tz-map .tz-map__frame {
+  height: 420px; overflow: hidden;
+  border-radius: 30px 30px 0 30px;
+  background-color: #fff;
+}
+.tz-map .tz-map__iframe {
+  display: block; width: 100%; height: 100%;
+  border: 0; border-radius: 30px 30px 0 30px;
+}
+
+/* The theme's buttons, centred. The theme zeroes flex gaps (.wp-block-buttons
+ * {gap:0!important}, for Safari 13) and spaces buttons with a margin on the
+ * second one only, so pills that wrap to a second row (601–667px) would touch
+ * and sit off-centre. Space them with the theme's .5em as a gap instead, in
+ * both directions, at every width. */
+.tz-map .tz-map__links {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center; margin: 0;
+  gap: .5em !important;
+}
+.tz-map .tz-map__links .wp-block-button + .wp-block-button { margin: 0; }
+/* The theme's outline style is a placeholder (has-REPLACE-color): here it is
+ * dark blue, and fills on hover as the theme intends. */
+.tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link {
+  background: transparent;
+  border: 2px solid var(--wp--preset--color--dark-blue, #1e61a1);
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:hover,
+.tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:focus-visible {
+  background: var(--wp--preset--color--dark-blue, #1e61a1);
+  color: #fff;
+}
+.tz-map .tz-map__links .wp-block-button .wp-block-button__link:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px;
+}
+
+/* Phones: the third Contact card's side padding, a shorter map, and the
+ * stacked buttons as wide as the card (the theme's 300px would overflow it),
+ * with room for "Open in Google Maps" on one line from 360px. */
+@media (max-width: 600px) {
+  .tz-map .tz-map__card { gap: 20px; padding: 40px 20px; }
+  .tz-map .tz-map__frame { height: 300px; }
+  .tz-map .tz-map__links .wp-block-button { width: 100%; }
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link { width: 100%; padding-left: 16px; padding-right: 16px; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link { transition: none; }
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link:hover,
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link:focus { transform: none; }
+}

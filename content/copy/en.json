@@ -40,5 +40,11 @@
     "next": "Next photo",
     "close": "Close",
     "counter": "{n} of {total}"
+  },
+  "map": {
+    "heading": "Find us in Bet Shemesh",
+    "iframeTitle": "Map of Bet Shemesh, Israel",
+    "directions": "Get directions",
+    "openInMaps": "Open in Google Maps"
   }
 }

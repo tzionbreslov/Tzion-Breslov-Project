@@ -3,6 +3,7 @@ import { readShared, type Attrs, type HeadItem, type PageContent, type ScriptIte
 import { stripRemovedUrls } from "@/config/site-structure.mjs";
 import { renderNavigation, rewriteLinks } from "@/lib/navigation.mjs";
 import { expandTokens } from "@/lib/youtube-feed";
+import { insertContactMap } from "@/lib/pages/contact-map";
 import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
 import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
@@ -11,6 +12,7 @@ import "@/app/instagram.css";
 import "@/app/dialog.css";
 import "@/app/video-library.css";
 import "@/app/gallery.css";
+import "@/app/pages.css";
 import "@/app/navigation.css";
 
 /**
@@ -82,10 +84,12 @@ export function SiteBody({ page }: { page: PageContent }) {
   // The menus are rendered for this page (lib/navigation.mjs); the 404 page has
   // no path and marks nothing as current.
   const currentPath = page.path ?? "";
+  // The imported Contact page gains its map (lib/pages/contact-map.ts).
+  const main = page.path === "/contact/" ? insertContactMap(page.main) : page.main;
   const html = [
     page.skipLinks && readShared(page.skipLinks),
     page.header && renderNavigation(readShared(page.header), currentPath),
-    rewriteLinks(expandTokens(page.main)),
+    rewriteLinks(expandTokens(main)),
     page.footer && renderNavigation(readShared(page.footer), currentPath),
     page.footerExtra
   ].filter(Boolean).join("");

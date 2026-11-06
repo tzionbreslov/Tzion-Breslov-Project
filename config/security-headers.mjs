@@ -9,6 +9,8 @@ const SOURCES = {
   // The Classes page's player only (privacy-enhanced, loaded on click); no plain YouTube embeds remain.
   youtube: { img: ["https://i.ytimg.com"], frame: ["https://www.youtube-nocookie.com"] },
   turnstile: { script: ["https://challenges.cloudflare.com"], frame: ["https://challenges.cloudflare.com"], connect: ["https://challenges.cloudflare.com"] },
+  // The Contact page's map (Google Maps embed, lazy-loaded; lib/pages/contact-map.ts).
+  maps: { frame: ["https://www.google.com"] },
   formsApi: { connect: ["https://api.tzionbreslov.org"] }
 };
 

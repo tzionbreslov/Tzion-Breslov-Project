@@ -18,14 +18,15 @@ export const LARGE_SPACER = '<div aria-hidden="true" class="wp-block-spacer spac
 const ARTICLES_GRID = "uagb-block-1908e9b6";
 const GRID_OPEN = '<div class="wp-block-uagb-post-grid ';
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+/** Escapes text for HTML content and double-quoted attributes. */
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** The error every structure edit throws when its target isn't where it expects it (shared with compose.ts). */
+/** The error every structure edit throws when its target isn't where it expects it (shared with compose.ts and contact-map.ts). */
 export const markerMissing = (name: string) => new Error(`structure: marker not found: ${name}`);
 const markerRepeated = (name: string) => new Error(`structure: marker not unique: ${name}`);
 
 /** Where `marker` occurs; it must occur exactly once, so a re-import can't make a cut pick the wrong copy. */
-function findOnce(html: string, marker: string, name: string) {
+export function findOnce(html: string, marker: string, name: string) {
   const at = html.indexOf(marker);
   if (at < 0) throw markerMissing(name);
   if (html.includes(marker, at + 1)) throw markerRepeated(name);
@@ -51,7 +52,7 @@ function replaceOnce(html: string, pattern: RegExp, replace: (...match: string[]
 }
 
 /** The whole `<div …>…</div>` element starting at `start` (nested divs balanced). */
-function divAt(html: string, start: number, name: string) {
+export function divAt(html: string, start: number, name: string) {
   const tags = /<div\b|<\/div>/g;
   tags.lastIndex = start;
   let depth = 0;
