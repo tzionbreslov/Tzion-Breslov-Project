@@ -1142,6 +1142,60 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(2);
     expect(outbound.emails().map((call) => call.headers.get("idempotency-key")).sort())
       .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+
+    // The same idempotency key carries the identical guest email (Resend refuses a reused key
+    // with another body), because the confirmation id comes from the requestId.
+    const { confirmationId } = await retried.json<RsvpSuccess>();
+    const firstGuest = failing.emails()[0];
+    const retriedGuest = sentTo(outbound, payload.email)[0];
+    expect(retriedGuest.body).toEqual(firstGuest.body);
+    expect(retriedGuest.headers.get("idempotency-key")).toBe(firstGuest.headers.get("idempotency-key"));
+    expect((firstGuest.body as SentEmail).text).toContain(`Confirmation ID: ${confirmationId}`);
+  });
+
+  it("derives the confirmation id from the requestId: same request, same id; never the requestId itself", async () => {
+    mockProviders("rsvp");
+    const ids = new Set<string>();
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const payload = rsvpPayload();
+      const { confirmationId } = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+      expect(confirmationId).toMatch(UUID);
+      expect(confirmationId).not.toBe(payload.requestId);
+      expect(confirmationId.replaceAll("-", "")).not.toContain(payload.requestId.replaceAll("-", "").slice(0, 8));
+      ids.add(confirmationId);
+      const again = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+      expect(again.confirmationId).toBe(confirmationId);
+    }
+    expect(ids.size).toBe(3);
+    expect(await count("rsvps")).toBe(3);
+  });
+
+  it("logs a failed seat release after a failed guest email (code and request id only)", async () => {
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    mockProviders("rsvp", { emailStatus: (to) => (to === payload.email ? 500 : 200) });
+    // A database whose DELETE of the new row fails (everything else works).
+    const db = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (sql: string) => {
+            if (sql.startsWith("DELETE FROM rsvps WHERE id")) throw new Error("D1 unavailable");
+            return target.prepare(sql);
+          };
+        }
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+    });
+    const failed = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(failed.status).toBe(502);
+    expect((await errorBody(failed)).error).toBe("UPSTREAM_FAILURE");
+    // The row stays (nothing could delete it), which only the log tells anyone about.
+    expect(await count("rsvps")).toBe(1);
+    const logged = logs.mock.calls.map((args) => String(args[0]));
+    const line = logged.find((entry) => entry.includes("RSVP_CANCEL_FAILED"));
+    expect(line && JSON.parse(line)).toEqual({ code: "RSVP_CANCEL_FAILED", requestId: payload.requestId, error: "Error" });
+    expect(logged.join("\n")).not.toMatch(/example\.test|Ada|Lovelace|Step-free/);
   });
 
   it("keeps the booking the guest was told about when only the organizer's email fails", async () => {

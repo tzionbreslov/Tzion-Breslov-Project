@@ -49,6 +49,10 @@
       "RESEND_WEBHOOK_SECRET"
     ]
   },
+  // Workers Logs: keep the Worker's console output (kept 7 days, dashboard → Worker → Logs), so
+  // RSVP_ORGANIZER_EMAIL_FAILED, RSVP_CANCEL_FAILED and EVENTS_FEED_EVENT_SKIPPED can be found
+  // later, not only in a live `wrangler tail`. Takes effect with the next deploy.
+  "observability": { "enabled": true },
   // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [

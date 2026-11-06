@@ -1,6 +1,7 @@
 import type { SubscribeTopic } from "../../lib/api-contract";
+import { sha256Hex } from "./crypto";
 import type { FeedEvent } from "./events";
-import { PublicError, type Env } from "./types";
+import { PublicError, requireBinding, type Env } from "./types";
 import type { RsvpInput } from "./validation";
 
 type RequestRow = {
@@ -140,6 +141,20 @@ async function rsvpForRequest(env: Env, requestId: string, eventId: string, emai
   return row ? { id: row.id, created: false } : null;
 }
 
+/**
+ * The RSVP's confirmation id (rsvps.id, shown to the guest), derived from its
+ * requestId: a retry of the same request gets the same id, so its guest email
+ * is identical and Resend's idempotency key (rsvp-guest/{requestId}) accepts
+ * it. A RATE_LIMIT_SALT-keyed SHA-256, so it reveals nothing and can't be
+ * guessed from the requestId, shaped like a UUID (version 8, "custom"): 122
+ * random-looking bits, unique as long as requestIds are (request_id is UNIQUE).
+ */
+export async function rsvpConfirmationId(env: Env, requestId: string) {
+  const hex = await sha256Hex(`${requireBinding(env, "RATE_LIMIT_SALT")}:rsvp-confirmation:${requestId}`);
+  const variant = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+
 /** SQLite's "YYYY-MM-DD HH:MM:SS" (UTC), so the cleanup can compare it with datetime('now', …). */
 const sqliteTime = (iso: string) => new Date(Date.parse(iso)).toISOString().slice(0, 19).replace("T", " ");
 
@@ -158,7 +173,7 @@ export async function reserveRsvp(
   const existing = await rsvpForRequest(env, input.requestId, event.id, emailHash);
   if (existing) return existing;
 
-  const id = crypto.randomUUID();
+  const id = await rsvpConfirmationId(env, input.requestId);
   // ?11 (the limit) is NULL when the event has no limit.
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO rsvps

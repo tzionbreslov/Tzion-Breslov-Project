@@ -369,7 +369,14 @@ async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, conf
     organizer = emails.organizer;
     await sendEmail(env, emails.guest);
   } catch (error) {
-    await cancelRsvp(env, confirmationId).catch(() => undefined);
+    await cancelRsvp(env, confirmationId).catch((cancelError: unknown) => {
+      // The seats stay taken and a replay would answer 202 without any email: say so in the logs.
+      console.error(JSON.stringify({
+        code: "RSVP_CANCEL_FAILED",
+        requestId: input.requestId,
+        error: cancelError instanceof PublicError ? cancelError.code : cancelError instanceof Error ? cancelError.name : "UnknownError"
+      }));
+    });
     throw error;
   }
   try {

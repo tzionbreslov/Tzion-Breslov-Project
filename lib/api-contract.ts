@@ -235,7 +235,7 @@ export type SubscribeConfirmSuccessResponse = {
 export type RsvpSuccessResponse = {
   ok: true;
   requestId: string;
-  /** Also in the guest's "RSVP received" email. */
+  /** Also in the guest's "RSVP received" email. UUID-shaped; the same for every retry of one requestId. */
   confirmationId: string;
 };
 
