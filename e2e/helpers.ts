@@ -1,0 +1,66 @@
+import { expect, type Page } from "@playwright/test";
+import { CSP } from "../config/security-headers.mjs";
+
+// A pre-existing bug in the original theme, kept for fidelity: its number
+// counter (isScrolledIntoView in global.js) throws on scroll on pages without
+// `.numbers`. Only that function is tolerated — any other error from global.js
+// (menu toggles, header scroll class, GSAP setup) still fails the test.
+const KNOWN_THEME_SCRIPT = "/themes/tzionbreslov/js/global.js";
+const KNOWN_THEME_FUNCTION = "isScrolledIntoView";
+const isKnownThemeError = (error: Error) => {
+  const stack = error.stack ?? "";
+  return stack.includes(KNOWN_THEME_SCRIPT) && stack.includes(KNOWN_THEME_FUNCTION);
+};
+
+// Chromium logs every CSP violation on the console, quoting the directive it
+// broke: `… violates the following Content Security Policy directive: "img-src 'self' …"`.
+// Embedded third-party frames (e.g. the YouTube player, which has its own
+// report-only policy) log violations of *their* policies to the same console,
+// so only messages quoting one of our directives count. A CSP message whose
+// directive can't be read counts too, so nothing is ever silently dropped.
+const OUR_DIRECTIVES = new Set<string>((CSP as string).split(";").map((directive) => directive.trim()));
+const QUOTED_DIRECTIVE = /Content Security Policy directive[^"]*"([^"]*)"/;
+const violatesOurPolicy = (text: string) => {
+  if (!/Content Security Policy/i.test(text)) return false;
+  const directive = QUOTED_DIRECTIVE.exec(text)?.[1];
+  return directive === undefined || OUR_DIRECTIVES.has(directive);
+};
+
+// page.consoleMessages() keeps only the last 200 messages, and a YouTube embed
+// alone can log ~200, so a tracked page records our violations as they happen.
+const recorded = new WeakMap<Page, string[]>();
+
+/** Collects the page's uncaught errors (minus the known theme bug), and its CSP violations. Call before the first goto. */
+export function trackPageErrors(page: Page): () => Error[] {
+  const errors: Error[] = [];
+  page.on("pageerror", (error) => {
+    if (!isKnownThemeError(error)) errors.push(error);
+  });
+  const violations: string[] = [];
+  recorded.set(page, violations);
+  page.on("console", (message) => {
+    if (violatesOurPolicy(message.text())) violations.push(message.text());
+  });
+  return () => errors;
+}
+
+/** Every violation of the site's CSP that Chromium reported on this page so far (all navigations). */
+export async function cspViolations(page: Page): Promise<string[]> {
+  const violations = recorded.get(page);
+  if (violations) {
+    // A round trip to the page first, so messages it logged before now have arrived.
+    await page.evaluate(() => 0).catch(() => undefined);
+    return [...violations];
+  }
+  // Untracked page: fall back to the console's (capped) history.
+  const messages = await page.consoleMessages({ filter: "all" });
+  return messages.map((message) => message.text()).filter(violatesOurPolicy);
+}
+
+/** No page errors and no CSP violations. Every spec calls this at the end. */
+export async function expectClean(page: Page, errors: () => Error[]): Promise<void> {
+  expect({
+    pageErrors: errors().map((error) => error.stack ?? String(error)),
+    cspViolations: await cspViolations(page)
+  }).toEqual({ pageErrors: [], cspViolations: [] });
+}

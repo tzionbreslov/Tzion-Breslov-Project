@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 // Pixel-compares the WordPress reference (local Docker copy) with the Next export.
 //
-//   REF=http://localhost:8088 NEXT=http://localhost:3100 node scripts/visual-diff.mjs [/path/ ...]
+//   REF=http://localhost:8088 NEXT=http://localhost:3100 node scripts/visual-diff.mjs [--mask-nav] [/path/ ...]
+//
+// --mask-nav hides the header, mobile menu and footer widgets on both sides and
+// compares only the part above the reference page's footer widgets — for
+// structure work, where the menu and footer links change on purpose.
 //
 // Writes ref/next/diff PNGs to .tmp/visual/ and prints the mismatch per page.
 import fs from "node:fs";
@@ -13,7 +17,11 @@ import { PNG } from "pngjs";
 const REF = process.env.REF ?? "http://localhost:8088";
 const NEXT = process.env.NEXT ?? "http://localhost:3100";
 const OUT = path.resolve(".tmp/visual");
-const PAGES = process.argv.slice(2).length ? process.argv.slice(2) : [
+const args = process.argv.slice(2);
+const MASK_NAV = args.includes("--mask-nav");
+const pageArgs = args.filter((arg) => !arg.startsWith("--"));
+const NAV_SELECTORS = "header.site-header, .mobile-menu-wrap, #genesis-footer-widgets";
+const PAGES = pageArgs.length ? pageArgs : [
   "/", "/about-us/", "/contact/", "/donate/", "/resources/", "/resources/page/2/",
   "/parshat-noach-october-8-9-2021/", "/video/video-1/", "/category/uncategorized/",
   "/author/esti-wolo/", "/no-such-page/"
@@ -51,7 +59,24 @@ async function capture(page, url) {
   await page.waitForTimeout(800);
   // Third-party embeds and the feed thumbnails render differently per load.
   await page.addStyleTag({ content: "iframe{visibility:hidden!important}" });
-  return PNG.sync.read(await page.screenshot({ fullPage: true, animations: "disabled" }));
+  let footerTop = null;
+  if (MASK_NAV) {
+    await page.addStyleTag({ content: `${NAV_SELECTORS}{visibility:hidden!important}` });
+    // Where the footer widgets start, in page coordinates (null if the page has none).
+    footerTop = await page.evaluate(() => {
+      const footer = document.querySelector("#genesis-footer-widgets");
+      return footer ? Math.round(footer.getBoundingClientRect().top + window.scrollY) : null;
+    });
+  }
+  return { png: PNG.sync.read(await page.screenshot({ fullPage: true, animations: "disabled" })), footerTop };
+}
+
+// Keeps the top `height` pixels of a capture (all of it when height is null).
+function cropTo(png, height) {
+  if (height == null || height <= 0 || height >= png.height) return png;
+  const out = new PNG({ width: png.width, height });
+  PNG.bitblt(png, out, 0, 0, png.width, height, 0, 0);
+  return out;
 }
 
 function compare(a, b) {
@@ -80,8 +105,12 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
     // pages (on either side), so keep the best of a few attempts.
     let best;
     for (let attempt = 0; attempt < 3 && !(best && best.ratio < 0.0005); attempt++) {
-      const ref = await capture(page, REF + p);
-      const next = await capture(page, NEXT + p);
+      const refShot = await capture(page, REF + p);
+      const nextShot = await capture(page, NEXT + p);
+      // With --mask-nav both sides stop where the reference page's footer widgets start.
+      const clip = MASK_NAV ? refShot.footerTop : null;
+      const ref = cropTo(refShot.png, clip);
+      const next = cropTo(nextShot.png, clip);
       const result = { ref, next, ...compare(ref, next) };
       if (!best || result.ratio < best.ratio) best = result;
     }
