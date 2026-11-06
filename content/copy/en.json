@@ -132,7 +132,7 @@
         "heading": "How long we keep it",
         "paragraphs": [
           "Contact messages are delivered to our inbox by email; our forms service does not keep them.",
-          "A sign-up you don’t confirm within 24 hours expires. The forms service deletes every sign-up request, confirmed or not, at its daily clean-up once those 24 hours are over, so within about two days. Once you confirm, Resend keeps your subscription until you unsubscribe or ask us to delete it.",
+          "A sign-up you don’t confirm within 24 hours expires. The forms service deletes every sign-up request, confirmed or not, at its daily clean-up once those 24 hours are over, so within about two days. Once you confirm, Resend keeps your email address and the lists you chose. Unsubscribing stops the emails, but Resend keeps your address, marked as unsubscribed so you are not emailed again, until you ask us to delete it; an address that bounces or reports an email as spam stays on its do-not-send list the same way.",
           "RSVPs are kept by the forms service until 90 days after the event starts, then deleted. Each RSVP is also emailed to our inbox.",
           "Security records: a log of contact and sign-up requests (a reference number and whether it went through, not what you wrote) is kept for 30 days; the reports Resend sends us about email delivery and subscriptions (for example a bounce, a complaint or a change to your lists), which include the email address concerned and, for an email, its subject, for 90 days; the scrambled records that limit repeated submissions for about a day; and error records from the forms service, designed to contain no personal details, for up to 7 days."
         ]
