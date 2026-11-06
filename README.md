@@ -197,9 +197,10 @@ TXT record forever** — removing it can drop the verification.
 6. **RSVPs and "Event announcements" (Task 8, owner go-ahead), in this order.** Migration 0002 must come before the
    deploy: the new Worker writes `subscription_confirmations.topics_json` and its daily cleanup deletes from `rsvps`.
    SQL below runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
-   dashboard's D1 console).
+   dashboard's D1 console). Every statement here holds only single quotes (no `"`, `$`, backtick or `!`), so it
+   reaches D1 unchanged inside `--command "…"` in bash and in PowerShell; each was rehearsed that way with `--local`.
    1. **Any time before:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
-      `lib/events.mjs` and its `content/copy/en.json` import) and lists its bindings; it changes nothing live.
+      `lib/events.mjs` and its `content/copy/en.json` import) and checks `wrangler.jsonc`; it changes nothing live.
    2. **Topic:** `node scripts/setup-resend.mjs` (the full-access key in `.env.worker`) creates "Event announcements"
       and writes `RESEND_EVENTS_TOPIC_ID` to `.env.worker`. *Undo:* delete the topic in Resend (Audience → Topics, or
       `DELETE https://api.resend.com/topics/<id>`) and that line.
@@ -207,22 +208,27 @@ TXT record forever** — removing it can drop the verification.
       Cloudflare). *Undo (after step 5's undo):* `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
    4. **Migration:** note a bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then
       `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
-      ignores it). *Undo (only after step 5's undo, including its DELETE):* either
-      - without losing anything but the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN
-        topics_json; DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (dropping the table drops its
-        two indexes; SQLite drops a column that no index, key, check, foreign key, trigger or view uses, as here — not
-        run yet: rehearse it with `--local` first), or
+      ignores it). *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
+      - losing only the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json;
+        DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (also drops the table's two indexes; every
+        other row stays; 0002 can be applied again later), or
       - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
         database and loses every contact, signup and RSVP row written since.
    5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
-      `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it (`wrangler.jsonc`). *Undo:*
-      `npx wrangler rollback <version>`, then at once
-      `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = '["events"]';` — the previous
-      Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would land on a
-      list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the Newsletter.
-   6. **After the switch:** `curl -i https://api.tzionbreslov.org/v1/rsvp/availability` must answer **200**. A 503
-      `EVENTS_UNAVAILABLE` means the Worker can't read `https://tzionbreslov.org/events.json` as a plain 200 (it never
-      follows a redirect), and every RSVP would fail. Then turn the site's forms on (launch checklist, step 3).
+      `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it, and so do **Workers Logs** (`observability` in
+      `wrangler.jsonc`): from then on `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and
+      `EVENTS_FEED_EVENT_SKIPPED` are kept 7 days (dashboard → the Worker → Logs), each with a request id or a
+      reason, never personal data. *Undo:* `npx wrangler rollback <version>`, then at once
+      `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');` — the
+      previous Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would
+      land on a list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the
+      Newsletter.
+   6. **After the switch:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK": every upcoming event
+      that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
+      `https://api.tzionbreslov.org/v1/rsvp/availability` (a 200 alone isn't enough: with every event skipped it would
+      list none). It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect), and exits
+      with 2 when no upcoming event takes RSVPs (add one to the calendar, redeploy, check again). Then turn the site's
+      forms on (launch checklist, step 3).
 
 ## Security headers
 
