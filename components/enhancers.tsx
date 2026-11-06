@@ -4,6 +4,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import type { Island } from "@/lib/content";
 import { enhanceForms } from "@/lib/client/forms";
+import { enhanceSubscriptionConfirmation } from "@/lib/client/subscription-confirm";
 import { enhanceYoutubeFeeds } from "@/lib/client/youtube";
 import { enhancePostGrids } from "@/lib/client/post-grid";
 import { enhanceInstagramFeeds } from "@/lib/client/instagram";
@@ -30,6 +31,7 @@ export function Enhancers({ islands }: { islands: Island[] }) {
 
   useEffect(() => {
     const cleanups: Array<() => void> = [];
+    cleanups.push(enhanceSubscriptionConfirmation(document));
     if (islands.includes("signup") || islands.includes("contact")) cleanups.push(enhanceForms(document));
     if (islands.includes("youtube-feed")) cleanups.push(enhanceYoutubeFeeds(document));
     if (islands.includes("post-grid")) cleanups.push(enhancePostGrids(document));

@@ -1,4 +1,5 @@
 import {
+  CONFIRMATION_TOKEN_PATTERN,
   ENVELOPE_FIELDS,
   FIELD_LIMITS,
   MAX_FILL_TIME_MS,
@@ -119,4 +120,11 @@ export function validateContact(input: JsonRecord) {
 export function validateSubscription(input: JsonRecord) {
   const result = envelope(input);
   return { ...result, email: email(input) };
+}
+
+/** `POST /v1/subscribe/confirm`: just the emailed single-use token (no envelope). */
+export function validateSubscriptionConfirmation(input: JsonRecord) {
+  const token = input.token;
+  if (typeof token !== "string" || !CONFIRMATION_TOKEN_PATTERN.test(token)) invalidInput("token");
+  return { token };
 }

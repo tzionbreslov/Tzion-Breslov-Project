@@ -3,7 +3,8 @@
 # Never commit .dev.vars and never put production secrets in it.
 ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:3100
 PUBLIC_API_URL=http://localhost:8787
-# Must be on one of ALLOWED_ORIGINS; `?subscription=confirmed` is appended.
+# Must be on one of ALLOWED_ORIGINS; the emailed link 303s here with `?subscription=…`
+# appended (confirm#token=…, confirmed, invalid or error; see lib/api-contract.ts).
 SUBSCRIPTION_CONFIRMATION_REDIRECT_URL=http://localhost:3000/
 ORGANIZATION_NAME=Tzion Breslov
 
@@ -16,6 +17,8 @@ RATE_LIMIT_SALT=replace-with-at-least-32-random-characters
 RESEND_TRANSACTIONAL_API_KEY=re_replace_me
 RESEND_CONTACTS_API_KEY=re_replace_me
 RESEND_FROM_EMAIL=Tzion Breslov <no-reply@example.com>
+# Optional Reply-To for the subscription confirmation email (production value is in wrangler.jsonc vars).
+RESEND_REPLY_TO_EMAIL=you@example.com
 # Production value is tzionbreslovproject@gmail.com (installed as a Worker secret).
 CONTACT_TO_EMAIL=you@example.com
 RESEND_NEWSLETTER_TOPIC_ID=replace-me

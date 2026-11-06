@@ -127,7 +127,9 @@ Cloudflare rule.
 ## Launch checklist (not done yet)
 
 1. **Resend:** verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter"
-   topic, and a webhook to `https://api.tzionbreslov.org/webhooks/resend`.
+   topic, and a webhook to `https://api.tzionbreslov.org/webhooks/resend`. tzionbreslov.org has no MX (by choice), so
+   also set Reply-To `tzionbreslovproject@gmail.com` in Resend's broadcast settings; the Worker already sets it on
+   confirmation emails (`RESEND_REPLY_TO_EMAIL` in `wrangler.jsonc`).
 2. **Worker secrets** — all 8 in `wrangler.jsonc` → `secrets.required`, via `npx wrangler secret put NAME` (or
    `npx wrangler deploy --secrets-file <uncommitted file>`): `RATE_LIMIT_SALT` (random, ≥ 32 chars, e.g.
    `openssl rand -hex 32` — shorter makes every form return 503), `TURNSTILE_SECRET_KEY` (widget "Tzion Breslov

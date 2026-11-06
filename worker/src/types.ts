@@ -12,6 +12,8 @@ export interface Env {
   RESEND_TRANSACTIONAL_API_KEY: string;
   RESEND_CONTACTS_API_KEY: string;
   RESEND_FROM_EMAIL: string;
+  /** Optional, non-secret Reply-To for the subscription confirmation email (blank = none). */
+  RESEND_REPLY_TO_EMAIL?: string;
   CONTACT_TO_EMAIL: string;
   RESEND_NEWSLETTER_TOPIC_ID: string;
   RESEND_WEBHOOK_SECRET: string;
