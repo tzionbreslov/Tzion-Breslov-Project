@@ -1,0 +1,55 @@
+/*
+ * Modal dialog (lib/client/dialog.ts): Ruach Breslov's player animation in
+ * Tzion's colours. The theme's CSS loads after this file, so every rule that
+ * must beat a theme rule (button, button:hover, a:hover; 0,1,1) is at 0,2,0 or more.
+ * The theme sets html{font-size:62.5%}: sizes are in px.
+ */
+
+html.tz-dialog-open { overflow: hidden; }
+
+.tz-dialog-overlay {
+  position: fixed; inset: 0; z-index: 100000;
+  background: rgb(12 33 54 / .86);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.tz-dialog-overlay[data-state="open"] { animation: tz-dialog-fade-in .2s ease both; }
+.tz-dialog-overlay[data-state="closed"] { animation: tz-dialog-fade-out .2s ease both; }
+
+.tz-dialog {
+  position: fixed; top: 50%; left: 50%; z-index: 100001;
+  width: min(1120px, 100% - 32px);
+  max-height: calc(100dvh - 32px);
+  transform: translate(-50%, -50%);
+  outline: none;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+}
+.tz-dialog[data-state="open"] { animation: tz-dialog-in .48s cubic-bezier(.16, 1, .3, 1) both; }
+.tz-dialog[data-state="closed"] { animation: tz-dialog-out .22s ease both; }
+
+/* Tab wraps around through these (they hand focus on at once). */
+.tz-dialog .tz-dialog__guard { position: fixed; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; outline: none; }
+
+/* Close: a 42px circle that turns turquoise. */
+.tz-dialog .tz-dialog__close {
+  all: unset; box-sizing: border-box;
+  position: absolute; top: 9px; right: 10px; z-index: 2;
+  width: 42px; height: 42px; display: grid; place-items: center;
+  border: 1px solid rgb(255 255 255 / .24); border-radius: 50%;
+  background: rgb(255 255 255 / .08); color: #fff; cursor: pointer;
+  transition: background-color .2s ease, border-color .2s ease;
+}
+.tz-dialog .tz-dialog__close svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.tz-dialog .tz-dialog__close:hover {
+  background: var(--wp--preset--color--turquoise, #70b9bc); border-color: var(--wp--preset--color--turquoise, #70b9bc);
+}
+.tz-dialog .tz-dialog__close:focus-visible { outline: 3px solid var(--wp--preset--color--turquoise, #70b9bc); outline-offset: 2px; }
+
+@keyframes tz-dialog-fade-in { from { opacity: 0; } }
+@keyframes tz-dialog-fade-out { to { opacity: 0; } }
+@keyframes tz-dialog-in { from { opacity: 0; transform: translate(-50%, -47%) scale(.84); } }
+@keyframes tz-dialog-out { to { opacity: 0; transform: translate(-50%, -48%) scale(.94); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-dialog-overlay[data-state], .tz-dialog[data-state] { animation: none; }
+  .tz-dialog .tz-dialog__close { transition: none; }
+}

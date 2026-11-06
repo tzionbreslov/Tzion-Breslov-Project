@@ -9,10 +9,11 @@ const paths = (index) => index.routes.map((route) => route.path);
 test("siteRoutes appends the new pages after the routes.json routes", () => {
   const raw = routesJson();
   const index = siteRoutes(raw);
-  assert.deepEqual(paths(index), [...paths(raw), "/articles/", "/articles/page/2/"]);
-  assert.deepEqual(index.routes.slice(-2), [
+  assert.deepEqual(paths(index), [...paths(raw), "/articles/", "/articles/page/2/", "/classes/"]);
+  assert.deepEqual(index.routes.slice(-3), [
     { path: "/articles/", key: "tz:articles" },
-    { path: "/articles/page/2/", key: "tz:articles__page__2" }
+    { path: "/articles/page/2/", key: "tz:articles__page__2" },
+    { path: "/classes/", key: "tz:classes" }
   ]);
   assert.equal(index.site, raw.site);
   assert.deepEqual(index.redirects, raw.redirects);

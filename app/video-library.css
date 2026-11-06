@@ -1,0 +1,178 @@
+/*
+ * Classes page video library (lib/pages/classes.ts, lib/client/video-library.ts):
+ * Ruach Breslov's channel page in Tzion's look. The theme's CSS loads after this
+ * file and lifts every button on hover (button:hover, 0,1,1), so buttons start
+ * from all:unset and the lift is cancelled at 0,2,1. Sizes are in px (the theme
+ * sets html{font-size:62.5%}).
+ *
+ * Thumbnails keep the Resources "Classes" tab's size: the plugin grid sat 16px
+ * inside the content box with 16px between columns, three across above 480px.
+ */
+
+.tz-vl {
+  --tz-vl-blue: var(--wp--preset--color--dark-blue, #1e61a1);
+  --tz-vl-turquoise: var(--wp--preset--color--turquoise, #70b9bc);
+  --tz-vl-light: var(--wp--preset--color--light-blue, #f2f9ff);
+  --tz-vl-muted: #5b6878;
+  --tz-vl-line: rgb(30 97 161 / .18);
+  padding: 24px 16px 0;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+  color: var(--wp--preset--color--black, #000);
+}
+.tz-vl [hidden] { display: none !important; }
+.tz-vl .tz-vl__sr-only {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+.tz-vl svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Buttons and the search box: none of the theme's pill styling. */
+.tz-vl button { all: unset; box-sizing: border-box; cursor: pointer; }
+.tz-vl button:is(:hover, :focus) { transform: none; }
+.tz-vl button:focus-visible { outline: 3px solid var(--tz-vl-blue); outline-offset: 2px; }
+
+/* ------------------------------------------------------------ Channel header */
+.tz-vl .tz-vl__profile { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 32px; align-items: center; }
+.tz-vl .tz-vl__avatar {
+  width: 160px; height: 160px; display: grid; place-items: center;
+  border-radius: 50%; background: var(--tz-vl-blue); box-shadow: 3px 5px 15px #00000029;
+}
+.tz-vl .tz-vl__avatar img { width: 134px; height: 134px; }
+.tz-vl .tz-vl__title {
+  margin: 0 0 6px; color: var(--tz-vl-blue);
+  font-family: var(--font-secondary, "Newsreader", serif); font-size: 60px; font-weight: 500; line-height: 1;
+}
+.tz-vl .tz-vl__meta { margin: 0; color: var(--tz-vl-muted); font-size: 15px; line-height: 1.5; }
+.tz-vl .tz-vl__meta strong { color: var(--tz-vl-blue); font-weight: 700; }
+.tz-vl .tz-vl__channel {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 11px 22px;
+  border-radius: 40px; background: var(--tz-vl-blue); color: #fff; box-shadow: 3px 5px 15px #00000029;
+  font-size: 14px; font-weight: 700; letter-spacing: .6px; line-height: 1.2; text-transform: uppercase; text-decoration: none;
+  transition: background-color .2s ease;
+}
+.tz-vl .tz-vl__channel:hover, .tz-vl .tz-vl__channel:focus { background: var(--tz-vl-turquoise); color: #fff; }
+.tz-vl .tz-vl__channel:focus-visible { outline: 3px solid var(--tz-vl-blue); outline-offset: 3px; }
+.tz-vl .tz-vl__channel svg { width: 16px; height: 16px; flex: none; }
+
+/* ------------------------------------------------------- Tabs, search, sort */
+.tz-vl .tz-vl__bar { display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 44px 0 28px; }
+.tz-vl .tz-vl__tabs, .tz-vl .tz-vl__search { grid-row: 1; min-height: 58px; border-bottom: 1px solid var(--tz-vl-line); }
+.tz-vl .tz-vl__tabs { display: flex; gap: 32px; }
+.tz-vl .tz-vl__tabs button {
+  position: relative; display: flex; align-items: center; padding: 0 2px;
+  color: var(--tz-vl-muted); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  transition: color .2s ease;
+}
+.tz-vl .tz-vl__tabs button:hover, .tz-vl .tz-vl__tabs button[aria-pressed="true"] { color: var(--tz-vl-blue); }
+.tz-vl .tz-vl__tabs button[aria-pressed="true"]::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 3px;
+  border-radius: 3px 3px 0 0; background: var(--tz-vl-turquoise);
+}
+.tz-vl .tz-vl__tabs button:focus-visible { outline-offset: -3px; }
+
+.tz-vl .tz-vl__search { display: flex; align-items: center; justify-content: flex-end; }
+.tz-vl .tz-vl__search-open, .tz-vl .tz-vl__search-clear {
+  width: 42px; height: 42px; display: grid; place-items: center; flex: none;
+  border-radius: 50%; color: var(--tz-vl-blue); transition: background-color .2s ease;
+}
+.tz-vl .tz-vl__search-open:hover, .tz-vl .tz-vl__search-clear:hover { background: var(--tz-vl-light); }
+.tz-vl .tz-vl__search svg { width: 20px; height: 20px; flex: none; }
+.tz-vl .tz-vl__search-field {
+  display: flex; align-items: center; gap: 8px; width: min(320px, 42vw); height: 44px;
+  border-bottom: 2px solid var(--tz-vl-blue); color: var(--tz-vl-blue);
+}
+/* Focus in the box: a thicker turquoise rule under it. */
+.tz-vl .tz-vl__search-field:focus-within { border-bottom-color: var(--tz-vl-turquoise); box-shadow: 0 2px 0 var(--tz-vl-turquoise); }
+.tz-vl .tz-vl__input {
+  all: unset; box-sizing: border-box; flex: 1; min-width: 0; height: 100%;
+  color: #000; font-size: 16px; line-height: 1.2;
+}
+.tz-vl .tz-vl__input::placeholder { color: var(--tz-vl-muted); opacity: 1; }
+.tz-vl .tz-vl__input::-webkit-search-cancel-button { display: none; }
+
+.tz-vl .tz-vl__sort { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 24px; }
+.tz-vl .tz-vl__sort button {
+  display: inline-flex; align-items: center; min-height: 36px; padding: 8px 18px;
+  border: 1px solid var(--tz-vl-line); border-radius: 30px; background: var(--tz-vl-light); color: var(--tz-vl-blue);
+  font-size: 13px; font-weight: 700; line-height: 1.2;
+  transition: background-color .2s ease, color .2s ease, border-color .2s ease;
+}
+.tz-vl .tz-vl__sort button:hover { border-color: var(--tz-vl-turquoise); }
+.tz-vl .tz-vl__sort button[aria-pressed="true"] { border-color: var(--tz-vl-blue); background: var(--tz-vl-blue); color: #fff; }
+
+/* -------------------------------------------------------------------- Grid */
+.tz-vl .tz-vl__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px 16px; }
+.tz-vl .tz-vl__card { min-width: 0; }
+.tz-vl .tz-vl__trigger { display: grid; gap: 14px; color: inherit; text-decoration: none; border-radius: 30px 30px 0 30px; }
+.tz-vl .tz-vl__trigger:hover, .tz-vl .tz-vl__trigger:focus { color: inherit; }
+.tz-vl .tz-vl__trigger:focus-visible { outline: 3px solid var(--tz-vl-blue); outline-offset: 4px; }
+.tz-vl .tz-vl__thumb {
+  position: relative; display: block; aspect-ratio: 16 / 9; overflow: hidden;
+  border-radius: 30px 30px 0 30px; background: var(--tz-vl-blue); box-shadow: 3px 5px 15px #00000029;
+}
+.tz-vl .tz-vl__thumb img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  transition: transform .35s cubic-bezier(.22, 1, .36, 1), filter .35s ease;
+}
+.tz-vl .tz-vl__play {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgb(12 33 54 / .22); color: #fff; opacity: 0; transition: opacity .25s ease;
+}
+.tz-vl .tz-vl__play svg {
+  width: 56px; height: 56px; padding: 16px 14px 16px 18px; box-sizing: border-box;
+  border-radius: 50%; background: rgb(112 185 188 / .94); fill: currentColor; stroke: none;
+}
+.tz-vl .tz-vl__trigger:is(:hover, :focus-visible) .tz-vl__thumb img { transform: scale(1.025); filter: saturate(1.08); }
+.tz-vl .tz-vl__trigger:is(:hover, :focus-visible) .tz-vl__play { opacity: 1; }
+.tz-vl .tz-vl__details { display: grid; gap: 4px; min-width: 0; padding: 0 4px; }
+.tz-vl .tz-vl__details strong {
+  display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  color: var(--tz-vl-blue); font-size: 16px; font-weight: 600; line-height: 1.4;
+}
+.tz-vl .tz-vl__grid[data-kind="short"] .tz-vl__details strong { -webkit-line-clamp: 3; }
+.tz-vl .tz-vl__details span { color: var(--tz-vl-muted); font-size: 13px; line-height: 1.4; }
+.tz-vl .tz-vl__empty { min-height: 200px; display: grid; place-items: center; margin: 0; color: var(--tz-vl-muted); font-size: 16px; text-align: center; }
+
+/* ---------------------------------------------------------------- Player */
+.tz-dialog.tz-vl-player { width: min(1120px, 100% - 32px, (100dvh - 112px) * 16 / 9); }
+.tz-dialog .tz-vl-player__title {
+  margin: 0; padding: 18px 68px 18px 24px; border-radius: 30px 30px 0 0;
+  background: var(--wp--preset--color--dark-blue, #1e61a1); color: #fff;
+  font-family: var(--font-main, "Montserrat", sans-serif); font-size: 17px; font-weight: 600; line-height: 1.35;
+}
+.tz-dialog .tz-vl-player__frame {
+  aspect-ratio: 16 / 9; overflow: hidden; border-radius: 0 0 0 30px;
+  background: #000; box-shadow: 0 35px 100px rgb(0 0 0 / .5);
+}
+.tz-dialog .tz-vl-player__frame iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+/* ---------------------------------------------------------------- Smaller */
+@media (max-width: 767px) {
+  /* Logo beside the heading and handle; the channel button gets its own row. */
+  .tz-vl .tz-vl__profile { grid-template-columns: 84px minmax(0, 1fr); gap: 0 16px; }
+  .tz-vl .tz-vl__intro { display: contents; }
+  .tz-vl .tz-vl__avatar { grid-row: 1 / span 2; width: 84px; height: 84px; }
+  .tz-vl .tz-vl__avatar img { width: 70px; height: 70px; }
+  .tz-vl .tz-vl__title { grid-column: 2; align-self: end; font-size: 40px; }
+  .tz-vl .tz-vl__meta { grid-column: 2; align-self: start; font-size: 14px; }
+  .tz-vl .tz-vl__channel { grid-column: 1 / -1; justify-self: start; margin-top: 20px; }
+  .tz-vl .tz-vl__bar { margin-top: 32px; }
+  .tz-vl .tz-vl__tabs { gap: 20px; }
+  .tz-vl .tz-vl__search-field { width: min(200px, 48vw); }
+  .tz-vl .tz-vl__sort { padding-top: 18px; }
+  .tz-vl .tz-vl__sort button { padding: 8px 14px; }
+  .tz-dialog .tz-vl-player__title { padding: 14px 60px 14px 18px; border-radius: 20px 20px 0 0; font-size: 15px; }
+  .tz-dialog .tz-vl-player__frame { border-radius: 0 0 0 20px; }
+}
+@media (max-width: 480px) {
+  .tz-vl .tz-vl__grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  /* Keeps "Visit our YouTube channel" on one line down to 360px. */
+  .tz-vl .tz-vl__channel { padding: 10px 16px; font-size: 12px; letter-spacing: .4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tz-vl .tz-vl__thumb img, .tz-vl .tz-vl__play, .tz-vl .tz-vl__channel,
+  .tz-vl .tz-vl__tabs button, .tz-vl .tz-vl__sort button,
+  .tz-vl .tz-vl__search-open, .tz-vl .tz-vl__search-clear { transition: none; }
+  .tz-vl .tz-vl__trigger:is(:hover, :focus-visible) .tz-vl__thumb img { transform: none; }
+}

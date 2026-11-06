@@ -6,7 +6,8 @@
 /** Pages composed in code (lib/pages/registry.ts); their keys start with "tz:". */
 export const NEW_ROUTES = [
   { path: "/articles/", key: "tz:articles" },
-  { path: "/articles/page/2/", key: "tz:articles__page__2" }
+  { path: "/articles/page/2/", key: "tz:articles__page__2" },
+  { path: "/classes/", key: "tz:classes" }
 ];
 
 /** Imported pages (and redirect pages) that no longer exist on the site. */

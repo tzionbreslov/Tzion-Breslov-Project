@@ -112,6 +112,14 @@ await visit(BASE + "/resources/", async () => {
   }
 });
 
+await visit(BASE + "/classes/", async () => {
+  await page.waitForSelector("[data-tz-video-library=ready]");
+  await page.click(".tz-vl__grid[data-kind=video] .tz-vl__trigger >> nth=0");
+  await page.waitForSelector(".tz-vl-player iframe");
+  await page.waitForTimeout(2500);
+  await page.keyboard.press("Escape");
+});
+
 const apiBase = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
 await visit(BASE + "/contact/", async () => {
   const contactForm = page.locator("form[data-tz-form=contact]");

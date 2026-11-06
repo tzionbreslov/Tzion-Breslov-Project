@@ -6,6 +6,8 @@ import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
 import "@/app/enhancements.css";
 import "@/app/instagram.css";
+import "@/app/dialog.css";
+import "@/app/video-library.css";
 
 /**
  * Renders a WordPress-imported page as a full HTML document. The markup,
