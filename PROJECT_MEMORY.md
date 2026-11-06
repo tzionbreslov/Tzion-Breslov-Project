@@ -33,7 +33,10 @@
   every template at 1440px and 390px; Resources is 0.00% vs the live site (local WordPress feed cache is stale).
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
-- Worker: 26 tests pass; local end-to-end (CORS → Turnstile → validation) verified; real email untested (no Resend key).
+- Worker: 34 tests pass; local end-to-end (CORS → Turnstile → validation) verified; real email untested (no Resend key).
+  The emailed confirmation link (GET) only redirects to the site (`?subscription=confirm#token=…`); the visitor's
+  "Confirm my subscription" click POSTs the token (mail scanners can't confirm). Confirmation emails reply to
+  `RESEND_REPLY_TO_EMAIL` (tzionbreslovproject@gmail.com) because tzionbreslov.org has no MX by choice.
 - Known pre-existing theme bug kept for fidelity: `global.js` number counter throws on pages without `.numbers`
   (also on the live site).
 

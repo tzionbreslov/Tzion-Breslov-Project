@@ -20,7 +20,11 @@
     "PUBLIC_API_URL": "https://api.tzionbreslov.org",
     "SUBSCRIPTION_CONFIRMATION_REDIRECT_URL": "https://tzionbreslov.org/",
     "ORGANIZATION_NAME": "Tzion Breslov",
-    "TURNSTILE_EXPECTED_HOSTNAMES": "tzionbreslov.org,www.tzionbreslov.org"
+    "TURNSTILE_EXPECTED_HOSTNAMES": "tzionbreslov.org,www.tzionbreslov.org",
+    // Optional, not a secret: Reply-To on the subscription confirmation email. tzionbreslov.org
+    // has no MX (by choice), so without it a subscriber's reply would sit deferred for days
+    // before bouncing. Blank/absent = no Reply-To. Contact notifications reply to the visitor.
+    "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
   // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget

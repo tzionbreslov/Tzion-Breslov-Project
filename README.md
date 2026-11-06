@@ -109,5 +109,7 @@ Cloudflare rule.
 1. Resend: verify the sending domain tzionbreslov.org (adds its DKIM + `send.` records), create the "newsletter" topic,
    then set the Worker's Resend secrets and `npm run worker:deploy`. Only then set `NEXT_PUBLIC_API_BASE_URL` and
    `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (until then the forms show "temporarily unavailable — email us").
+   tzionbreslov.org has no MX (by choice), so also set Reply-To `tzionbreslovproject@gmail.com` in Resend's broadcast
+   settings; the Worker already sets it on confirmation emails (`RESEND_REPLY_TO_EMAIL` in `wrangler.jsonc`).
 2. Switch day (above), plus a Cloudflare redirect `/about/` → `/about-us/` (301).
 3. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs`).
