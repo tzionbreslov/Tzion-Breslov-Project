@@ -80,6 +80,12 @@
   touch `request_log`. Migration 0002 (additive), secret `RESEND_EVENTS_TOPIC_ID` (9 secrets), the Resend topic and
   the Worker deploy wait for switch day (Task 11; steps + undo in the Task 8 PR). RSVP retention 90 days after the
   event is **pending the owner's confirmation** (Ruach used 365).
+- Site structure, Task 9 (2026-11-07): `/privacy/`, the privacy notice ("Last updated November 7, 2026"), linked last in
+  the footer Quick Links (footer only) and from "privacy notice" in the RSVP and "Get event announcements" consent
+  lines. Its text describes the site as built, checked against the code and a network capture of every page (e.g. the
+  Classes thumbnails come from i.ytimg.com when the page opens, the Contact map loads with the page, Turnstile loads on
+  every page once the forms are on). **The owner reads and approves the text before launch**; RSVP retention (90 days)
+  is still pending the owner's confirmation.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

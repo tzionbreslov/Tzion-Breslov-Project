@@ -4,13 +4,17 @@
 // and every check script read it, so a re-import can't bring old pages back.
 import { IMPORTED_ORIGINS } from "./site-url.mjs";
 
+/** The privacy notice: the footer Quick Links and the forms' consent lines link to it. */
+export const PRIVACY_PATH = "/privacy/";
+
 /** Pages composed in code (lib/pages/registry.ts); their keys start with "tz:". */
 export const NEW_ROUTES = [
   { path: "/articles/", key: "tz:articles" },
   { path: "/articles/page/2/", key: "tz:articles__page__2" },
   { path: "/classes/", key: "tz:classes" },
   { path: "/gallery/", key: "tz:gallery" },
-  { path: "/events/", key: "tz:events" }
+  { path: "/events/", key: "tz:events" },
+  { path: PRIVACY_PATH, key: "tz:privacy" }
 ];
 
 /**

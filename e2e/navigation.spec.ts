@@ -23,7 +23,7 @@ const isOnTop = (link: Locator) => link.evaluate((node) => {
   return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
 });
 
-const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Events", "Gallery", "Contact", "Donate", "Taste a Class"];
+const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Events", "Gallery", "Contact", "Donate", "Taste a Class", "Privacy"];
 
 test.describe("desktop menu", () => {
   test.skip(({ isMobile }) => isMobile, "the desktop menu shows from 1280px");
@@ -323,6 +323,9 @@ test("the footer Quick Links follow the menu", async ({ page }) => {
   await expect(quickLinks.getByRole("link", { name: "Classes", exact: true })).toHaveAttribute("href", "/classes/");
   await expect(quickLinks.getByRole("link", { name: "Articles", exact: true })).toHaveAttribute("href", "/articles/");
   await expect(quickLinks.getByRole("link", { name: "Home", exact: true })).toHaveAttribute("href", "/");
+  // Footer only: the privacy notice.
+  await expect(quickLinks.getByRole("link", { name: "Privacy", exact: true })).toHaveAttribute("href", "/privacy/");
+  await expect(page.locator("#menu-main-menu-links, #menu-mobile-menu").getByRole("link", { name: "Privacy", exact: true })).toHaveCount(0);
   await expect(quickLinks.locator("[aria-current]")).toHaveText("Contact");
   await expectClean(page, errors);
 });

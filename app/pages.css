@@ -1,9 +1,10 @@
 /*
- * Additions to Tzion's imported pages: the Contact page's map
- * (lib/pages/contact-map.ts). The theme's CSS loads after this file: every
- * rule that must beat a theme rule (its button rules are 0,4,0 at most) is
- * scoped under .tz-map at a higher specificity. Sizes are in px (the theme
- * sets html{font-size:62.5%}).
+ * Additions to Tzion's pages: the Contact page's map (lib/pages/contact-map.ts)
+ * and the privacy notice (lib/pages/privacy.ts). The theme's CSS loads after
+ * this file: every rule that must beat a theme rule (its button rules are
+ * 0,4,0 at most) is scoped under .tz-map or .tz-legal at a higher specificity.
+ * The theme sets html{font-size:62.5%}, so 1rem is 10px (the map is sized in
+ * px, the notice's text in rem like the theme's own 1.8rem body text).
  */
 
 /* ---------------------------------------------------------------- Contact map */
@@ -76,4 +77,54 @@
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link { transition: none; }
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link:hover,
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link:focus { transform: none; }
+}
+
+/* ------------------------------------------------------------- Privacy notice */
+/* lib/pages/privacy.ts: one column of text under the hero, 760px at most, in
+ * the site's type: Newsreader dark-blue section headings over 18px (1.8rem)
+ * Montserrat text, with a light-blue rule between sections. The theme's own
+ * light blue (#F2F9FF) is a background colour and would not show as a line on
+ * white, so the rule is the site's dark blue, faint (as the Classes page's
+ * --tz-vl-line). The page's own wrapper gives the column its side margins on
+ * small screens (as on Articles and Gallery). */
+.tz-legal { --tz-legal-line: rgb(30 97 161 / .2); }
+.tz-legal .tz-legal__body {
+  max-width: 760px; margin: 0 auto;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+  font-size: 1.8rem; line-height: 1.7;
+}
+.tz-legal .tz-legal__updated {
+  margin: 0 0 12px;
+  font-size: 1.5rem; font-weight: 600; letter-spacing: .02em;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-legal .tz-legal__intro { margin: 0; font-size: 2rem; line-height: 1.6; }
+.tz-legal .tz-legal__section { margin-top: 40px; }
+.tz-legal .tz-legal__section + .tz-legal__section {
+  padding-top: 40px;
+  border-top: 2px solid var(--tz-legal-line);
+}
+.tz-legal .tz-legal__heading {
+  margin: 0 0 16px;
+  font-family: var(--font-secondary, "Newsreader", serif);
+  font-size: 3.4rem; font-weight: 500; line-height: 1.2;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-legal .tz-legal__section p { margin: 0; overflow-wrap: anywhere; }
+.tz-legal .tz-legal__section p + p { margin-top: 16px; }
+.tz-legal .tz-legal__body a {
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.tz-legal .tz-legal__body a:hover { text-decoration-thickness: 2px; }
+.tz-legal .tz-legal__body a:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px; border-radius: 4px;
+}
+
+@media (max-width: 600px) {
+  .tz-legal .tz-legal__intro { font-size: 1.8rem; }
+  .tz-legal .tz-legal__section { margin-top: 32px; }
+  .tz-legal .tz-legal__section + .tz-legal__section { padding-top: 32px; }
+  .tz-legal .tz-legal__heading { font-size: 2.8rem; }
 }

@@ -240,6 +240,28 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
+  test("the consent line links \"privacy notice\" to /privacy/ and still reads as it did", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await stubServices(page);
+    await openEvents(page);
+    await openRsvp(page);
+    const box = dialog(page);
+    const consent = box.getByLabel(TEXT.consent);
+    await expect(consent).not.toBeChecked();
+    const label = box.locator("label.tz-consent");
+    await expect(label).toHaveText(TEXT.consent);
+    const link = label.getByRole("link", { name: "privacy notice", exact: true });
+    await expect(link).toHaveAttribute("href", "/privacy/");
+    // Inside the dialog's focus order, right after the checkbox.
+    await consent.focus();
+    await page.keyboard.press("Tab");
+    await expect(link).toBeFocused();
+    await link.click();
+    await page.waitForURL("**/privacy/");
+    await expect(page.locator(".tz-legal")).toHaveCount(1);
+    await expectClean(page, errors);
+  });
+
   // A calendar title is text: "$&", "$'" or "$$" in it are not replacement patterns.
   test("a calendar title with $&, $' or $$ shows in the dialog's title as written", async ({ page }) => {
     const errors = trackPageErrors(page);
@@ -272,6 +294,7 @@ test.describe("on the preview, without a forms API (TZ_E2E_EVENTS=preview)", () 
 
     await openRsvp(page);
     await expect(dialog(page).getByLabel("Name", { exact: true })).toBeFocused();
+    await expect(dialog(page).locator("label.tz-consent").getByRole("link", { name: "privacy notice", exact: true })).toHaveAttribute("href", "/privacy/");
     await fillRsvp(page);
     await dialog(page).getByRole("button", { name: "Send RSVP" }).click();
     const alert = dialog(page).getByRole("alert");

@@ -81,9 +81,15 @@ test("the mobile menu reads Home, About, Resources, Classes, Articles, Events, G
   assert.equal($("#tz-sub-resources-mobile").is("ul.tz-sub-menu"), true);
 });
 
-test("the footer Quick Links read Home, About, Resources, Classes, Articles, Events, Gallery, Contact, Donate, Taste a Class", () => {
+test("the footer Quick Links read Home, About, Resources, Classes, Articles, Events, Gallery, Contact, Donate, Taste a Class, Privacy", () => {
   const $ = page("/");
-  assert.deepEqual(labels($, "#menu-mobile-menu-1", "a, .tz-menu-group-label"), ["Home", "About", "Resources", "Classes", "Articles", "Events", "Gallery", "Contact", "Donate", "Taste a Class"]);
+  assert.deepEqual(labels($, "#menu-mobile-menu-1", "a, .tz-menu-group-label"), ["Home", "About", "Resources", "Classes", "Articles", "Events", "Gallery", "Contact", "Donate", "Taste a Class", "Privacy"]);
+  // Privacy is in the footer only, last, and goes to the privacy notice.
+  const privacy = $("#menu-mobile-menu-1 > li").last();
+  assert.equal(privacy.attr("class"), "menu-item menu-item-type-custom menu-item-object-custom menu-item-tz-privacy");
+  assert.equal(privacy.attr("id"), undefined);
+  assert.equal(privacy.children("a").attr("href"), "/privacy/");
+  assert.equal($("#menu-main-menu-links, #menu-mobile-menu, #menu-main-menu-buttons").find("a").filter((_, a) => $(a).text().trim() === "Privacy").length, 0);
   // Resources is a heading over its two pages here, not a link or a button, and it names their list.
   const label = $("#menu-mobile-menu-1 .tz-menu-group > .tz-menu-group-label");
   assert.equal(label.text(), "Resources");
@@ -133,7 +139,7 @@ test("every new id in the header is unique", () => {
   assert.equal(new Set(ids).size, ids.length);
 });
 
-test("Home is current on /, Articles on both Articles pages, Events on /events/, Gallery on /gallery/, and nothing on a page outside the menu", () => {
+test("Home is current on /, Articles on both Articles pages, Events on /events/, Gallery on /gallery/, Privacy (footer only) on /privacy/, and nothing on a page outside the menu", () => {
   const current = (path) => labels(page(path), "#menu-main-menu-links, #menu-mobile-menu, #menu-mobile-menu-1", "[aria-current]");
   assert.deepEqual(current("/"), ["Home", "Home", "Home"]);
   assert.deepEqual(current("/articles/"), ["Articles", "Articles", "Articles"]);
@@ -141,6 +147,7 @@ test("Home is current on /, Articles on both Articles pages, Events on /events/,
   assert.deepEqual(current("/events/"), ["Events", "Events", "Events"]);
   assert.deepEqual(current("/gallery/"), ["Gallery", "Gallery", "Gallery"]);
   assert.deepEqual(current("/donate/"), ["Donate", "Donate"]);
+  assert.deepEqual(current("/privacy/"), ["Privacy"]);
   // The 404 page and the Parasha posts.
   for (const path of ["", "/parshat-noach-october-8-9-2021/"]) {
     const $ = page(path);

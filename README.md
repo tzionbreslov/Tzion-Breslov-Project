@@ -29,15 +29,22 @@ WordPress backup (.wpress, private, not in git)
   YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
   the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Events ·
-  Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress
-  menu, which `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
+  Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer, and Privacy last in the footer
+  only). `ORIGINAL_NAV` is the WordPress menu, which `scripts/navigation.test.mjs` proves renders every imported
+  fragment byte for byte. The Resources dropdown runs on
   `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
-- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/` and
-  `/events/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/`, `/events/`
+  and `/privacy/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
   description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. `contact-map.ts` adds the map
   (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
   Their new English text lives only in `content/copy/en.json`.
+- `/privacy/` (`lib/pages/privacy.ts`) — the privacy notice, linked from the footer Quick Links and from the
+  "privacy notice" words in the RSVP and "Get event announcements" consent lines. Its text (`content/copy/en.json`
+  `privacy`) describes the site as built: the forms and what they collect, the Worker's database and how long it keeps
+  each record, and every third party a page contacts (when, and from which host). Change it with the site: a new
+  third-party origin, form field or retention period changes the notice too, and its `date` ("Last updated …") is set
+  by hand when the text changes, never by the build. The owner reads and approves it before launch.
 - `app/[[...slug]]` — one catch-all route renders every page; `app/global-not-found.tsx` is the 404.
 - The original theme scripts (jQuery, GSAP animations, Spectra blocks, slick carousel) still run unchanged.
   React only adds the interactive pieces in `components/enhancers.tsx`:
@@ -184,6 +191,32 @@ TXT record forever** — removing it can drop the verification.
       same way. Do not put these hosts back on strict unless
       `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
       tzionbreslov.org with > 30 days left.
+   4. **Privacy check at the edge, right after proxying.** The privacy notice (`/privacy/`, `content/copy/en.json` `privacy`)
+      says the site sets no cookies of its own and uses no analytics or tracking. Some Cloudflare features would make
+      that untrue once the records are proxied:
+      - a `__cf_bm` cookie (Bot Fight Mode / bot management);
+      - the Web Analytics beacon (`static.cloudflareinsights.com`);
+      - Network Error Logging (`Nel` and `Report-To` headers, which make browsers send error reports to
+        `a.nel.cloudflare.com`; `.org` already sends them today);
+      - anything else Cloudflare injects under `/cdn-cgi/` (e.g. email address obfuscation).
+
+      Read the headers and the HTML the edge serves. Run each command as written, with the quotes.
+      - **bash:**
+        - `curl -sI "https://tzionbreslov.org/" | grep -iE "^(set-cookie|nel|report-to):"`
+        - `curl -s "https://tzionbreslov.org/contact/" | grep -oiE "cdn-cgi|cloudflareinsights"`
+      - **PowerShell:** use `curl.exe`, because in Windows PowerShell 5.1 plain `curl` is `Invoke-WebRequest`.
+        - `curl.exe -sI "https://tzionbreslov.org/" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
+        - `curl.exe -s "https://tzionbreslov.org/contact/" | Select-String -Pattern "cdn-cgi|cloudflareinsights"`
+
+      Repeat with `https://www.tzionbreslov.org/`.
+      - **The check passes** when all four commands print nothing.
+      - **For each hit, choose one, with the owner's go-ahead:**
+        - turn the feature off (Security → Bots for Bot Fight Mode; Web Analytics for the beacon; Scrape Shield
+          for email obfuscation; the zone's Network Error Logging setting for `Nel`/`Report-To`), note its previous
+          value as the undo, and run the check again;
+        - or, if it stays on (or the plan can't turn it off), add a sentence about it to the notice and update its
+          `date` before the forms are turned on (launch checklist, step 3).
+      - This step changes nothing by itself: only the owner-approved setting change does.
 4. **Cloudflare 'Tzion security headers' rule must gain `https://www.google.com` in frame-src on switch day (owner
    go-ahead)** — the Contact page's map; copy the policy from `config/security-headers.mjs` (`CSP_REPORT_ONLY` while
    the header is still report-only). Undo: put back the rule's previous value.
