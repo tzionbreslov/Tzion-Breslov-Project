@@ -43,8 +43,8 @@ currently scheduled".
   - `No RSVP` — no RSVP button for this event (for example a talk at another venue).
   - `RSVP limit: 40` — at most 40 people in total; the page shows when the event is full. The limit must be a whole
     number of 1 or more; anything else (`RSVP limit: 0`, `RSVP limit: forty`) means no limit, and the deploy shows a
-    warning naming the event. Without its colon (`RSVP limit 40`) the line is not a marker: it stays on the card as
-    written, sets no limit, and the deploy warns too.
+    warning naming the event. Any other line that starts with "RSVP limit" (`RSVP limit 40`, `RSVP limits: 40`) is
+    not a marker: it stays on the card as written, sets no limit, and the deploy warns too.
 - **Repeating classes:** every date takes its own RSVPs. Changing one date ("This event") keeps that date's RSVPs, and
   so does moving a one-off event. Changing the time of the whole series, or "This and following events", starts those
   dates afresh.
@@ -65,9 +65,9 @@ by itself, re-enable **Deploy GitHub Pages** in the Actions tab (or run it once 
   hasn't ended within the horizon, and reads the markers. Each event's `id` is stable: a one-off event's comes from
   its UID, each date of a repeating event's from its UID and that date's RECURRENCE-ID.
 - `content/events.json` is never committed: git holds only the empty default (`{ "syncedAt": null, "events": [] }`,
-  checked by `scripts/events.test.mjs`). The deploy restores the last list from the Actions cache (`events-<run id>`),
-  syncs, and saves it again before the build. Outage-tolerant by default; `npm run sync:events -- --strict` fails on an
-  unreachable calendar instead.
+  checked by `scripts/events.test.mjs`). The deploy restores the last list from the Actions cache
+  (`events-<run id>-<attempt>`), syncs, and saves it again before the build. Outage-tolerant by default;
+  `npm run sync:events -- --strict` fails on an unreachable calendar instead.
 - `lib/pages/events.ts` renders the page with `lib/events.mjs` (cards, dates, the empty state), leaving out events that
   ended since the last sync. `scripts/write-site-files.mjs` publishes the same events as `/events.json`
   (`id, title, startsAt, endsAt, timeZone, allDay, rsvp, limit`, via `publishedEvents`) for the forms Worker's RSVPs.

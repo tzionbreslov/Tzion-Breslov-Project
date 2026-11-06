@@ -208,15 +208,17 @@ test('"RSVP limit: 0" or a limit that is not a number means no limit, with a war
   }
 });
 
-test('a line that starts like "RSVP limit" without its colon is shown as written, with a warning', () => {
-  const { event, warnings } = one({ summary: "Melave Malka", description: ["Come early", "RSVP limit 40"].join("\n") });
-  assert.equal(event.limit, null);
-  assert.equal(event.summary, ["Come early", "RSVP limit 40"].join("\n"));
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /Melave Malka/);
-  assert.match(warnings[0], /RSVP limit 40/);
-  // Another word is not a marker.
-  assert.deepEqual(one({ description: "RSVP limited to members" }).warnings, []);
+test('any other line that starts with "RSVP limit" is shown as written, with a warning', () => {
+  // A missing colon, a plural, a missing space, another word: none sets a limit, each is reported.
+  for (const line of ["RSVP limit 40", "RSVP limits: 40", "RSVP Limits 40", "RSVP limit40", "RSVP Limited: 40", "RSVP limited to members"]) {
+    const { event, warnings } = one({ summary: "Melave Malka", description: ["Come early", line].join("\n") });
+    assert.equal(event.limit, null, line);
+    assert.equal(event.rsvp, "open", line);
+    assert.equal(event.summary, ["Come early", line].join("\n"), line);
+    assert.equal(warnings.length, 1, line);
+    assert.match(warnings[0], /Melave Malka/, line);
+    assert.ok(warnings[0].includes(line), line);
+  }
 });
 
 test("a weekly class with a bad limit warns once, not once per date", () => {
