@@ -216,9 +216,12 @@ TXT record forever** — removing it can drop the verification.
         database and loses every contact, signup and RSVP row written since.
    5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
       `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it, and so do **Workers Logs** (`observability` in
-      `wrangler.jsonc`): from then on `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and
-      `EVENTS_FEED_EVENT_SKIPPED` are kept 7 days (dashboard → the Worker → Logs), each with a request id or a
-      reason, never personal data. *Undo:* `npx wrangler rollback <version>`, then at once
+      `wrangler.jsonc`). They keep only the Worker's own log lines, for 7 days (dashboard → the Worker → Logs): codes
+      such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and `EVENTS_FEED_EVENT_SKIPPED` with request or
+      correlation ids, no personal data. **Invocation logs are off** (`"invocation_logs": false`): they would
+      store every request's URL (confirmation tokens included), its headers and the visitor's IP. After the deploy,
+      open one stored line in the dashboard and check it shows no request URL or IP. *Undo:* `npx wrangler rollback
+      <version>`, then at once
       `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');` — the
       previous Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would
       land on a list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the

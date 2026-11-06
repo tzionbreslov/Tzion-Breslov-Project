@@ -49,10 +49,12 @@
       "RESEND_WEBHOOK_SECRET"
     ]
   },
-  // Workers Logs: keep the Worker's console output (kept 7 days, dashboard → Worker → Logs), so
-  // RSVP_ORGANIZER_EMAIL_FAILED, RSVP_CANCEL_FAILED and EVENTS_FEED_EVENT_SKIPPED can be found
-  // later, not only in a live `wrangler tail`. Takes effect with the next deploy.
-  "observability": { "enabled": true },
+  // Workers Logs keep only the Worker's own log lines for 7 days (dashboard → Worker → Logs), so
+  // RSVP_ORGANIZER_EMAIL_FAILED, RSVP_CANCEL_FAILED, EVENTS_FEED_EVENT_SKIPPED and the error lines
+  // (codes, request or correlation ids, never personal data) can be found later, not only in a
+  // live `wrangler tail`. Invocation logs stay OFF: they would store every request's method + URL
+  // (e.g. /v1/subscribe/confirm?token=…), headers and the visitor's IP. Takes effect at deploy.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
   // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
