@@ -182,6 +182,15 @@ function processPage(file) {
       else if (KEEP_SCRIPT.test(scriptId(el))) headScripts.push(scriptEntry($, el));
     }
   });
+  // WordPress never enqueued the cover-block stylesheet on the 18 Parasha posts,
+  // so their "Breeze of Breslov" hero rendered as a plain 554px image with the
+  // title pushed underneath it (hidden while the image was a 404 on the live
+  // site). Add it where WordPress puts it on the other pages: after the block
+  // library styles.
+  if ($(".wp-block-cover").length && !head.some((h) => h.t === "link" && h.attrs.id === "wp-block-cover-css")) {
+    const after = head.findIndex((h) => h.t === "style" && h.id === "wp-block-library-inline-css");
+    head.splice(after + 1, 0, { t: "link", attrs: { rel: "stylesheet", id: "wp-block-cover-css", href: "/wp-includes/blocks/cover/style.min.css?ver=7.1.4", media: "all" } });
+  }
   // Scripts keep their original relative order, head ones first.
   for (const s of headScripts) head.push({ t: "script", ...s });
 
