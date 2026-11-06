@@ -20,6 +20,15 @@
 - 2026-11-06 — Instagram: owner wants a 4th Resources tab ("same idea as YouTube") with an in-site preview that leads
   to instagram.com; data via **Meta's official API** at build time. Account access pending ("waiting for full access");
   unknown whether it is Business/Creator or still posted to (44 posts; newest possibly Aug 2023, unverified).
+- 2026-11-06 — **Owner rule: don't change any wording currently on the website.** New pages reuse existing wording where
+  they say the same thing (Classes/Articles open with the Resources header); only removed pages lose text.
+- 2026-11-06 — **Owner rule: a real checkpoint with every change.** Each merge into main is tagged `checkpoint-NNN`
+  (workflow "Checkpoint") with a Release; ruleset "Protect checkpoints" (id 26672363, owner may bypass) blocks moving or
+  deleting them (proven: a collaborator delete and a force-move were both rejected). The github-pages environment also
+  accepts `checkpoint-*` tags, so a checkpoint can be redeployed right away. `checkpoint-001` = main at 071cdf6, before
+  the site-structure work. Rollback for good: `npm run rollback -- checkpoint-NNN` (ROLLBACK.md).
+- 2026-11-06 — Site structure design approved (docs/superpowers/specs/2026-11-06-site-structure-design.md); phase 1 =
+  everything except translations, which come last.
 - 2026-11-06 — Dependabot: TypeScript 7 ignored (typescript-eslint 8 supports TS < 7 only); revisit later.
 
 ## Cloudflare state (2026-11-06)
