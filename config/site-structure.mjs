@@ -9,7 +9,8 @@ export const NEW_ROUTES = [
   { path: "/articles/", key: "tz:articles" },
   { path: "/articles/page/2/", key: "tz:articles__page__2" },
   { path: "/classes/", key: "tz:classes" },
-  { path: "/gallery/", key: "tz:gallery" }
+  { path: "/gallery/", key: "tz:gallery" },
+  { path: "/events/", key: "tz:events" }
 ];
 
 /**

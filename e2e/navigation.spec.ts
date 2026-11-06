@@ -23,7 +23,7 @@ const isOnTop = (link: Locator) => link.evaluate((node) => {
   return node.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
 });
 
-const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Gallery", "Contact", "Donate", "Taste a Class"];
+const QUICK_LINKS = ["Home", "About", "Resources", "Classes", "Articles", "Events", "Gallery", "Contact", "Donate", "Taste a Class"];
 
 test.describe("desktop menu", () => {
   test.skip(({ isMobile }) => isMobile, "the desktop menu shows from 1280px");
@@ -73,7 +73,7 @@ test.describe("desktop menu", () => {
     await page.keyboard.press("Space");
     await expect(desktopPanel(page)).toBeVisible();
     for (let i = 0; i < 3; i++) await page.keyboard.press("Tab");
-    await expect(page.locator("#menu-item-tz-gallery > a")).toBeFocused();
+    await expect(page.locator("#menu-item-tz-events > a")).toBeFocused();
     await expect(desktopPanel(page)).toBeHidden();
     await expectClean(page, errors);
   });
@@ -170,40 +170,65 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
-  test("at 1280px and 1440px the menu stays on one line, clear of the logo (still centred) and the buttons", async ({ page }) => {
-    const errors = trackPageErrors(page);
-    // On /classes/ Resources is bold, on /gallery/ Gallery: the widest the menu gets.
-    for (const width of [1280, 1440]) {
-      await page.setViewportSize({ width, height: 800 });
-      for (const path of ["/", "/classes/", "/gallery/"]) {
+  // From 1280px to 1920px (app/navigation.css narrows the items' padding below 1920px): the six
+  // items on one line, the logo in the middle of the page, and at least 12px between the menu
+  // and the logo, and between the logo and the buttons. Measured with real scrollbars (headless
+  // Chromium hides them; a 15px one moves the page's centre), at rest on each page (its current
+  // item bold), and on /events/ also with the Resources panel open over the hero, which makes
+  // Resources bold too: the widest the menu gets (on /classes/ Resources is bold already).
+  const FIT_WIDTHS = [1280, 1300, 1339, 1340, 1366, 1440, 1536, 1600, 1680, 1850, 1910, 1919, 1920];
+  for (const path of ["/", "/events/", "/classes/"]) {
+    test(`on ${path} the menu fits beside the centred logo from 1280px to 1920px, with real scrollbars`, async ({ playwright, browserName, baseURL }) => {
+      test.slow();
+      const browser = await playwright[browserName].launch({ ignoreDefaultArgs: ["--hide-scrollbars"] });
+      try {
+        const page = await browser.newPage({ baseURL, viewport: { width: 1280, height: 800 } });
+        const errors = trackPageErrors(page);
         await page.goto(path);
-        const layout = await page.evaluate(() => {
-          const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-          const items = [...document.querySelectorAll<HTMLElement>("#menu-main-menu-links > li")];
-          const title = box(".title-area");
+        await menusReady(page);
+        const measure = () => page.evaluate(() => {
+          const box = (element: Element) => element.getBoundingClientRect();
+          const items = [...document.querySelectorAll("#menu-main-menu-links > li")];
+          const title = box(document.querySelector(".title-area")!);
           return {
-            tops: items.map((item) => item.offsetTop),
-            lastRight: items.at(-1)!.getBoundingClientRect().right,
-            menuRight: box("#menu-main-menu-links").right,
+            scrollbar: window.innerWidth - document.documentElement.clientWidth,
+            tops: items.map((item) => Math.round(box(item).top)),
+            lastRight: Math.max(...items.map((item) => box(item).right)),
             titleLeft: title.left,
+            titleRight: title.right,
             titleCentre: title.left + title.width / 2,
-            // The page's own width: without a vertical scrollbar's, where scrollbars take up room.
             pageCentre: document.documentElement.clientWidth / 2,
-            buttonsLeft: box("#menu-main-menu-buttons").left
+            buttonsLeft: Math.min(...[...document.querySelectorAll("#menu-main-menu-buttons > li")].map((item) => box(item).left))
           };
         });
-        const at = `${path} at ${width}px`;
-        expect(layout.tops, at).toHaveLength(5);
-        expect(new Set(layout.tops).size, `one line on ${at}`).toBe(1);
-        expect(layout.menuRight, at).toBeLessThanOrEqual(layout.titleLeft);
-        expect(layout.lastRight, at).toBeLessThanOrEqual(layout.titleLeft);
-        expect(layout.lastRight, at).toBeLessThan(layout.buttonsLeft);
-        // The logo stays in the middle of the header, as on checkpoint-001: the menu never pushes it aside.
-        expect(Math.abs(layout.titleCentre - layout.pageCentre), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);
+        for (const width of FIT_WIDTHS) {
+          await page.setViewportSize({ width, height: 800 });
+          for (const open of path === "/events/" ? [false, true] : [false]) {
+            const at = `${path} at ${width}px${open ? " with the Resources panel open" : ""}`;
+            if (open) {
+              await desktopToggle(page).hover();
+              await expect(desktopPanel(page)).toBeVisible();
+              expect(await isOnTop(panelLink(desktopPanel(page), "Classes")), `Classes on top on ${at}`).toBe(true);
+            }
+            const layout = await measure();
+            expect(layout.scrollbar, `a real scrollbar on ${at}`).toBeGreaterThan(0);
+            expect(layout.tops, at).toHaveLength(6);
+            expect(new Set(layout.tops).size, `one line on ${at}`).toBe(1);
+            expect(Math.abs(layout.titleCentre - layout.pageCentre), `logo centred on ${at}`).toBeLessThanOrEqual(0.5);
+            expect(layout.titleLeft - layout.lastRight, `menu clear of the logo on ${at}`).toBeGreaterThanOrEqual(12);
+            expect(layout.buttonsLeft - layout.titleRight, `logo clear of the buttons on ${at}`).toBeGreaterThanOrEqual(12);
+            if (open) {
+              await page.mouse.move(5, 790);
+              await expect(desktopPanel(page)).toBeHidden();
+            }
+          }
+        }
+        await expectClean(page, errors);
+      } finally {
+        await browser.close();
       }
-    }
-    await expectClean(page, errors);
-  });
+    });
+  }
 });
 
 test.describe("touch tablet", () => {

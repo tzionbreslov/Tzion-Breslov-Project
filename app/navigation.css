@@ -92,13 +92,23 @@
   }
 }
 
-/* Below 1440px the five items at the theme's 15px a side are wider than the menu's half of the
- * header and push the centred logo aside: 10px a side there. The theme's own rule
- * (.nav-primary .genesis-nav-menu a, also the header buttons) loads later, so this one goes
- * through the menu's id, and touches the top-level links and the Resources toggle only. */
-@media only screen and (min-width: 1280px) and (max-width: 1439px) {
+/* The six items at the theme's 15px a side only fit the menu's half of the header from 1920px,
+ * where the header's content gets wider; below that they would push the centred logo aside.
+ * The header's content stops growing at about 1340px, so the items get 6px a side from 1340
+ * to 1919px and 4px below 1340px: every item stays on one line, the logo stays centred and
+ * the menu stays at least 12px clear of it, even with two items bold (the current one and the
+ * one under the mouse; e2e/navigation.spec.ts sweeps 1280–1920px with real scrollbars). The
+ * theme's own rule (.nav-primary .genesis-nav-menu a, also the header
+ * buttons) loads later, so these go through the menu's id, and touch the top-level links and
+ * the Resources toggle only; the toggle's focus ring stays inside its neighbours' padding. */
+@media only screen and (min-width: 1280px) and (max-width: 1919px) {
   .nav-primary #menu-main-menu-links > .menu-item > a,
-  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 10px; padding-right: 10px; }
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 6px; padding-right: 6px; }
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle:focus-visible { outline-offset: 0; }
+}
+@media only screen and (min-width: 1280px) and (max-width: 1339px) {
+  .nav-primary #menu-main-menu-links > .menu-item > a,
+  .nav-primary #menu-main-menu-links > .tz-menu-parent > .tz-submenu-toggle { padding-left: 4px; padding-right: 4px; }
 }
 
 @keyframes tz-menu-in {

@@ -3,6 +3,7 @@
     "home": "Home",
     "classes": "Classes",
     "articles": "Articles",
+    "events": "Events",
     "gallery": "Gallery"
   },
   "articles": {
@@ -40,6 +41,16 @@
     "next": "Next photo",
     "close": "Close",
     "counter": "{n} of {total}"
+  },
+  "events": {
+    "title": "Events",
+    "description": "Upcoming classes and gatherings with Tzion Breslov.",
+    "heading": "Upcoming events",
+    "untitled": "Tzion Breslov event",
+    "israelTime": "Israel time",
+    "emptyTitle": "No events are currently scheduled",
+    "emptyText": "{contact} to hear about the next gathering.",
+    "contactLink": "Contact us"
   },
   "map": {
     "heading": "Find us in Bet Shemesh",

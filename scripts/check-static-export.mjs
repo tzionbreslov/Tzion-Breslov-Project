@@ -51,6 +51,16 @@ const SITE_FILES = ["robots.txt", "sitemap_index.xml", "page-sitemap.xml", "post
 for (const file of ["404.html", ".nojekyll", ...SITE_FILES]) {
   if (!fs.existsSync(path.join(out, file))) fail(`missing ${file}`);
 }
+// The Events page's list for the forms Worker (scripts/write-site-files.mjs), served next to the pages.
+const eventsFile = path.join(out, "events.json");
+if (!fs.existsSync(eventsFile)) fail("missing events.json");
+else {
+  try {
+    if (!Array.isArray(JSON.parse(fs.readFileSync(eventsFile, "utf8")).events)) fail("events.json has no events list");
+  } catch (error) {
+    fail(`events.json is not JSON: ${error.message}`);
+  }
+}
 for (const file of SITE_FILES) {
   const text = fs.existsSync(path.join(out, file)) ? fs.readFileSync(path.join(out, file), "utf8") : "";
   if (!text.includes(PRODUCTION)) fail(`${file} does not reference ${PRODUCTION}`);

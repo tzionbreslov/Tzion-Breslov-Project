@@ -1,0 +1,83 @@
+/*
+ * Events page (lib/pages/events.ts; the cards come from lib/events.mjs). The
+ * theme's CSS loads after this file: every rule that must beat a theme rule
+ * (p + p, h1–h6, a; 0,0,2 at most) is at 0,2,0 or more. Sizes are in px (the
+ * theme sets html{font-size:62.5%}).
+ */
+
+.tz-events { padding: 0 16px; }
+.tz-events .tz-events__list {
+  display: grid; gap: 30px;
+  max-width: 880px; margin: 0 auto;
+}
+
+/* The Contact cards' look: light blue, a 1px dark-blue border, the square
+ * bottom-right corner and their shadow. */
+.tz-events .tz-event,
+.tz-events .tz-events__empty {
+  padding: 36px 44px;
+  background-color: var(--wp--preset--color--light-blue, #f2f9ff);
+  border: 1px solid var(--wp--preset--color--dark-blue, #1e61a1);
+  border-radius: 30px 30px 0 30px;
+  box-shadow: 3px 5px 15px #00000029;
+  font-family: var(--font-main, "Montserrat", sans-serif);
+}
+
+.tz-events .tz-event__title {
+  margin: 0 0 16px;
+  font-family: var(--font-secondary, "Newsreader", serif);
+  font-size: 34px; font-weight: 500; line-height: 1.2;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  overflow-wrap: anywhere;
+}
+
+/* When and where, each behind its icon. */
+.tz-events .tz-event__when,
+.tz-events .tz-event__where {
+  display: flex; align-items: flex-start; gap: 10px;
+  margin: 0;
+  font-size: 17px; line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.tz-events .tz-event__when { font-weight: 600; color: var(--wp--preset--color--dark-blue, #1e61a1); }
+.tz-events .tz-event__where { margin-top: 8px; color: #333; }
+.tz-events .tz-event__icon {
+  flex: none; width: 20px; height: 20px; margin-top: 3px;
+  fill: none; stroke: var(--wp--preset--color--dark-blue, #1e61a1);
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+
+.tz-events .tz-event__summary {
+  margin: 20px 0 0;
+  font-size: 16px; line-height: 1.7; color: #333;
+  overflow-wrap: anywhere;
+}
+
+/* Nothing scheduled: one card, centred. */
+.tz-events .tz-events__empty { max-width: 720px; margin: 0 auto; text-align: center; }
+.tz-events .tz-events__empty-title {
+  margin: 0 0 12px;
+  font-family: var(--font-secondary, "Newsreader", serif);
+  font-size: 36px; font-weight: 500; line-height: 1.2;
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+}
+.tz-events .tz-events__empty-text { margin: 0; font-size: 18px; line-height: 1.6; color: #333; }
+.tz-events .tz-events__empty-text a {
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.tz-events .tz-events__empty-text a:hover { text-decoration-thickness: 2px; }
+.tz-events .tz-events__empty-text a:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px; border-radius: 4px;
+}
+
+@media (max-width: 600px) {
+  .tz-events { padding: 0; }
+  .tz-events .tz-event,
+  .tz-events .tz-events__empty { padding: 28px 22px; }
+  .tz-events .tz-event__title { font-size: 28px; }
+  .tz-events .tz-events__empty-title { font-size: 28px; }
+  .tz-events .tz-event__when,
+  .tz-events .tz-event__where { font-size: 16px; }
+}

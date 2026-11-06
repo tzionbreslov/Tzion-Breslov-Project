@@ -28,12 +28,12 @@ WordPress backup (.wpress, private, not in git)
   check fails on any link, sitemap entry or structured-data URL that still points at a removed page, and on any plain
   YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
-  the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Gallery ·
-  Contact, then Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress menu, which
-  `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
+  the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Events ·
+  Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer). `ORIGINAL_NAV` is the WordPress
+  menu, which `scripts/navigation.test.mjs` proves renders every imported fragment byte for byte. The Resources dropdown runs on
   `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
-- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/` and `/gallery/`), built from
-  Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/` and
+  `/events/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
   description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. `contact-map.ts` adds the map
   (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
@@ -52,6 +52,8 @@ WordPress backup (.wpress, private, not in git)
   - Gallery photo viewer (whole photo, caption, "3 of 7", previous/next, arrow keys, swipe) → `lib/client/gallery.ts` +
     `lib/client/dialog.ts`; the photos are the files in `public/media/gallery` (see "Gallery photos" below)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
+- Events page (`lib/pages/events.ts`, cards from `lib/events.mjs`): no script, the list is rendered at build time from
+  the Google Calendar (see "Events" below).
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), and Yoast's sitemaps and `robots.txt` are
 republished at the same paths, minus the removed pages. Removed addresses (`/resources/`, `/video/…`, the archives,
@@ -68,6 +70,7 @@ Cloudflare redirect rules send them to their new homes.
 | `npm run check` | Typecheck (site + Worker), lint, unit tests (`scripts/**/*.test.mjs`), Worker tests, build, export check, wording check against checkpoint-001, browser tests (Playwright on `out/` with the enforced CSP) |
 | `npm run sync:instagram` | Dormant (Instagram is switched off): pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
+| `npm run sync:events` | Pull the upcoming events from the Google Calendar at `GOOGLE_CALENDAR_ICAL_URL` into `content/events.json` (outage-tolerant; `-- --strict` to fail instead; never commit the result) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
 | `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
 | `node scripts/compare-live.mjs` | Compare the WordPress reference's text/images/links with the live site |
@@ -91,10 +94,20 @@ photos are placeholders from the old site (`scripts/convert-gallery-placeholders
 
 Source: the channel's public RSS feed,
 `https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).
-The deploy workflow refreshes it at build time and runs daily (04:41 UTC), so new uploads appear within a day without a
-commit. Videos that scroll out of the feed's 15-entry window only stay listed if they are in the committed
-`content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
+The deploy workflow refreshes it at build time and runs twice a day (07:00 and 21:00 Israel time), so new uploads
+appear within half a day without a commit. Videos that scroll out of the feed's 15-entry window only stay listed if they
+are in the committed `content/youtube.json` — run `npm run sync:youtube` and commit occasionally to archive them. YouTube's RSS endpoint is
 intermittently unavailable (it returned 404 on 2026-11-06); the sync then keeps the committed list and only warns.
+
+## Events (Google Calendar)
+
+The Events page lists the upcoming events of one public Google Calendar, "Tzion Breslov Events": whoever manages
+events only uses the calendar. Every deploy (and the rebuilds at 07:00 and 21:00 Israel time) reads its public iCal
+address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/events.json`, carried between deploys in
+the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
+scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
+publishes the list as `/events.json` for the forms Worker. Owner steps and details:
+[docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
 
 ## Instagram (switched off)
 
@@ -121,6 +134,8 @@ All public, build-time values:
 - `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.org` once the Worker has its Resend secrets
 - `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `0x4AAAAAAF1kfPJ0qES50FAh` (widget "Tzion Breslov forms", tzionbreslov.org + www)
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID` — when PayPal checkout is wired
+- `GOOGLE_CALENDAR_ICAL_URL` — the Events calendar's public iCal address (`…/public/basic.ics`, docs/EVENT_CALENDAR.md);
+  read by the deploy's calendar sync, not by the site itself
 
 Without the first two, the forms show a "temporarily unavailable — email us" message instead of failing silently.
 Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. See `SECURITY.md`.

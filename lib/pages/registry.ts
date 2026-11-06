@@ -2,6 +2,7 @@ import { NEW_ROUTES } from "@/config/site-structure.mjs";
 import type { PageContent } from "@/lib/content";
 import { articlesPage } from "@/lib/pages/articles";
 import { classesPage } from "@/lib/pages/classes";
+import { eventsPage } from "@/lib/pages/events";
 import { galleryPage } from "@/lib/pages/gallery";
 
 /** Builders for the pages composed in code, by route key (NEW_ROUTES in config/site-structure.mjs). */
@@ -9,7 +10,8 @@ const BUILDERS: Record<string, (path: string) => PageContent> = {
   "tz:articles": (path) => articlesPage(path, 1),
   "tz:articles__page__2": (path) => articlesPage(path, 2),
   "tz:classes": classesPage,
-  "tz:gallery": galleryPage
+  "tz:gallery": galleryPage,
+  "tz:events": eventsPage
 };
 
 export function buildPage(key: string): PageContent {
