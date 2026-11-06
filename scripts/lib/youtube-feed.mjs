@@ -33,7 +33,17 @@ function extractText(xml, tag) {
     .trim();
 }
 
-/** @returns {Array<{id: string, title: string, published: string}>} newest first, as YouTube lists them */
+/** The upload's public view count (`<media:statistics views="N">`), or undefined when the feed has none. */
+function extractViews(entry) {
+  // Number(undefined) is NaN: no statistics, or a count that isn't digits, means no count.
+  const views = Number(entry.match(/<media:statistics\b[^>]*\bviews="(\d+)"/i)?.[1]);
+  return Number.isSafeInteger(views) ? views : undefined;
+}
+
+/**
+ * @returns {Array<{id: string, title: string, published: string, views?: number}>} newest first, as YouTube
+ * lists them; `views` only when the feed gives a count
+ */
 export function parseYouTubeFeed(xml, expectedChannelId) {
   if (typeof xml !== "string" || !xml.trim()) throw new Error("YouTube returned an empty channel feed.");
   if (!CHANNEL_ID_PATTERN.test(expectedChannelId)) throw new Error("The configured YouTube channel ID is invalid.");
@@ -51,7 +61,8 @@ export function parseYouTubeFeed(xml, expectedChannelId) {
     if (!VIDEO_ID_PATTERN.test(id)) throw new Error("The channel feed contained an invalid video ID.");
     if (!title || title.length > 300) throw new Error(`Feed entry ${id} has an invalid title.`);
     if (!published || Number.isNaN(Date.parse(published))) throw new Error(`Feed entry ${id} has an invalid publication date.`);
-    return { id, title, published: new Date(published).toISOString() };
+    const views = extractViews(entry);
+    return { id, title, published: new Date(published).toISOString(), ...(views === undefined ? {} : { views }) };
   });
 
   if (new Set(videos.map((v) => v.id)).size !== videos.length) throw new Error("The channel feed contained duplicate video IDs.");
@@ -59,8 +70,9 @@ export function parseYouTubeFeed(xml, expectedChannelId) {
 }
 
 /**
- * Adds unseen uploads, refreshes titles of known ones (the feed is newer), and
- * keeps everything that has scrolled out of the feed's 15-entry window.
+ * Adds unseen uploads, refreshes the fields of known ones (titles, view counts:
+ * the feed is newer), and keeps everything that has scrolled out of the feed's
+ * 15-entry window, with its last known count.
  */
 export function mergeYouTubeVideos(current, incoming) {
   if (!Array.isArray(current)) throw new Error("content/youtube.json videos must be an array.");

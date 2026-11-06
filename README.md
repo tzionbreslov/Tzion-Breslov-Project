@@ -23,8 +23,8 @@ WordPress backup (.wpress, private, not in git)
   CSP checks and the browser smoke test take their route list from its `siteRoutes()`, so a re-import can't bring a
   removed page back; the wording check skips `isRemovedPath()` pages, and `page-sitemap.xml` gains the `NEW_ROUTES`.
   `visual-diff.mjs` and `compare-live.mjs` keep their own fixed page lists.
-- `lib/pages/` — the composed pages (today `/articles/` + `/articles/page/2/`), built from Tzion's own markup:
-  `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
+- `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/` and `/classes/`), built from Tzion's own
+  markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
   description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. Their new English text lives
   only in `content/copy/en.json`.
@@ -34,6 +34,9 @@ WordPress backup (.wpress, private, not in git)
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
   - Resources YouTube grid (lightbox, Load More) → `lib/client/youtube.ts`, data in `content/youtube.json`
   - Resources and Articles post-grid pagination → `lib/client/post-grid.ts` (no admin-ajax)
+  - Classes video library (Videos/Shorts tabs, search, sort, on-page player) → `lib/client/video-library.ts` +
+    `lib/client/dialog.ts`; ordering/search in `lib/video-library.mjs`, data in `content/youtube.json` (Videos, with
+    the feed's view counts for "Most popular") and `content/shorts.json` (the old `/video/video-N/` clips)
   - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
 
 URLs are identical to WordPress (trailing slashes, `/wp-content/uploads/...`), Yoast's sitemaps and `robots.txt` are
@@ -59,7 +62,7 @@ republished at the same paths, and `/about/` redirects to `/about-us/`.
 Every merge into `main` is tagged `checkpoint-NNN` with a Release listing its changes; checkpoints can't be moved or
 deleted. How to roll the preview back right away, or for good: [ROLLBACK.md](ROLLBACK.md).
 
-## YouTube feed (Resources page)
+## YouTube feed (Resources and Classes pages)
 
 Source: the channel's public RSS feed,
 `https://www.youtube.com/feeds/videos.xml?channel_id=UC69mDA498p7l9GGBdaUdkkA` (latest 15 uploads, no API key).

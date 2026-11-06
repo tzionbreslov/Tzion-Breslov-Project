@@ -3,5 +3,26 @@
     "heading": "Articles",
     "title": "Articles",
     "description": "Weekly Parasha articles from Tzion Breslov."
+  },
+  "classes": {
+    "title": "Classes",
+    "description": "Classes and short clips from Tzion Breslov on YouTube, to watch right here.",
+    "heading": "Classes",
+    "handle": "@tzionbreslovproject",
+    "videoCount": "{count} videos",
+    "channel": "Visit our YouTube channel",
+    "kindLabel": "Video type",
+    "videosTab": "Videos",
+    "shortsTab": "Shorts",
+    "searchLabel": "Search videos",
+    "clearSearch": "Clear search",
+    "sortLabel": "Sort videos",
+    "latest": "Latest",
+    "popular": "Most popular",
+    "oldest": "Oldest",
+    "noResults": "No videos match that search.",
+    "playVideo": "Play video",
+    "views": "views",
+    "closePlayer": "Close video player"
   }
 }

@@ -8,6 +8,7 @@ import { enhanceSubscriptionConfirmation } from "@/lib/client/subscription-confi
 import { enhanceYoutubeFeeds } from "@/lib/client/youtube";
 import { enhancePostGrids } from "@/lib/client/post-grid";
 import { enhanceInstagramFeeds } from "@/lib/client/instagram";
+import { enhanceVideoLibrary } from "@/lib/client/video-library";
 import { DonateForm } from "@/components/donate-form";
 
 const noop = () => () => undefined;
@@ -36,6 +37,7 @@ export function Enhancers({ islands }: { islands: Island[] }) {
     if (islands.includes("youtube-feed")) cleanups.push(enhanceYoutubeFeeds(document));
     if (islands.includes("post-grid")) cleanups.push(enhancePostGrids(document));
     if (islands.includes("instagram-feed")) cleanups.push(enhanceInstagramFeeds(document));
+    if (islands.includes("video-library")) cleanups.push(enhanceVideoLibrary(document));
     return () => cleanups.forEach((fn) => fn());
   }, [islands]);
 
