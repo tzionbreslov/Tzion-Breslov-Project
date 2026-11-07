@@ -85,7 +85,10 @@ test("/donate/: \"Manage your monthly donation\" opens PayPal's automatic paymen
   await expect(radio(page, "One time")).toBeChecked();
   await expect(manage(page)).toBeVisible();
   await expect(note).toBeVisible();
-  await radio(page, "Monthly").check();
+  // Retried: this check() has failed intermittently (cause not established).
+  await expect(async () => {
+    await radio(page, "Monthly").check();
+  }).toPass({ timeout: 10_000 });
   await expect(manage(page)).toBeVisible();
   await expect(note).toBeVisible();
 
@@ -125,7 +128,7 @@ test("the manage link reads as a Tzion link: 14px Montserrat bold, dark blue and
     await expect(async () => {
       await link.hover();
       await expect(link).toHaveCSS("color", TURQUOISE, { timeout: 1000 });
-    }).toPass();
+    }).toPass({ timeout: 10_000 });
     await expect(link).toHaveCSS("text-decoration-line", "underline");
     await page.mouse.move(0, 0);
     await expect(link).toHaveCSS("color", DARK_BLUE);

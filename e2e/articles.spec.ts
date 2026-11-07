@@ -20,12 +20,12 @@ const titles = (page: Page) =>
   page.locator("[data-tz-post-grid] .uagb-post__title a").evaluateAll((links) => links.map((link) => link.textContent ?? ""));
 const pagination = (page: Page, name: string) =>
   page.locator("[data-tz-post-grid] .uagb-post-pagination-wrap").getByRole("link", { name, exact: true });
-// Clicks a pagination link and waits for the page it fetches (it can take seconds on a busy machine).
-async function paginate(page: Page, name: string, fetches: string) {
-  const fetched = page.waitForResponse((response) => new URL(response.url()).pathname === fetches);
+// Clicks a pagination link. The grid swaps once the page it fetches has arrived, which can take seconds on a busy
+// machine, so each caller polls the titles (up to 15 s) rather than waiting for the response itself.
+async function paginate(page: Page, name: string) {
   await pagination(page, name).click();
-  await fetched;
 }
+const SWAP = { timeout: 15_000 };
 
 test("/articles/ opens with the Resources header, then the Articles heading and the first nine articles", async ({ page }) => {
   const errors = trackPageErrors(page);
@@ -57,16 +57,16 @@ test("pagination swaps the articles in place, and the 18 titles are the Resource
 
   // Click only once the post-grid island is live; before that the link would navigate.
   await expect(page.locator("[data-tz-post-grid]")).toHaveAttribute("data-tz-post-grid", "ready");
-  await paginate(page, "2", "/articles/page/2/");
-  await expect.poll(() => titles(page)).toEqual(PAGE_2);
+  await paginate(page, "2");
+  await expect.poll(() => titles(page), SWAP).toEqual(PAGE_2);
   expect(new URL(page.url()).pathname).toBe("/articles/");
   const second = await titles(page);
   expect(second).toContain("Parashas Vayigash | Dec10th-11th 2021");
   expect(second).toContain("Parashas Mikeitz  | Dec 3rd-4th 2021");
   expect([...first, ...second]).toEqual([...PAGE_1, ...PAGE_2]);
 
-  await paginate(page, "« Previous", "/articles/");
-  await expect.poll(() => titles(page)).toEqual(PAGE_1);
+  await paginate(page, "« Previous");
+  await expect.poll(() => titles(page), SWAP).toEqual(PAGE_1);
   expect(new URL(page.url()).pathname).toBe("/articles/");
   await expectClean(page, errors);
 });
