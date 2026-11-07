@@ -80,11 +80,17 @@ async function fetchFeed(url: string): Promise<FeedEvent[]> {
     // Includes the timeout (a TimeoutError).
     throw unavailable("fetch failed");
   }
-  if (response.status !== 200) throw unavailable(`HTTP ${response.status}`);
+  // Giving up before reading the body: cancel it, so the connection isn't left
+  // holding an unread stream (a failed cancel changes nothing here).
+  const giveUp = (reason: string) => {
+    response.body?.cancel().catch(() => undefined);
+    return unavailable(reason);
+  };
+  if (response.status !== 200) throw giveUp(`HTTP ${response.status}`);
   const type = response.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
-  if (type !== "application/json") throw unavailable("not JSON");
+  if (type !== "application/json") throw giveUp("not JSON");
   const declared = Number(response.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > MAX_FEED_BYTES) throw unavailable("too large");
+  if (Number.isFinite(declared) && declared > MAX_FEED_BYTES) throw giveUp("too large");
   let text: string;
   try {
     text = await response.text();
