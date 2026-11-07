@@ -93,11 +93,15 @@
   confirmation**; the rest of the form is unchanged.
 - Site structure, Task 10b (2026-11-07, owner decision; built and tested, **not deployed**): RSVPs deleted once the
   event is over. Each RSVP stores its event's end (`rsvps.event_ends_at`, from `/events.json` `endsAt`; an all-day
-  event ends at the UTC midnight of its exclusive end date) and the Worker's daily cleanup (cron 03:17 UTC) deletes it
-  once that end has passed, at most about a day later; the old 90-day Worker var is removed. Migration 0002 was
-  edited in place (only ever applied to local D1s, which must be re-created: move `.wrangler/state/v3/d1` aside and
-  run `npm run db:migrate:local`). The privacy notice's RSVP sentence says so (its date stays November 7, 2026); the
-  owner still approves the full text before launch. RSVP emails already in the organizer's inbox are not affected.
+  event ends at the UTC midnight of its exclusive end date). The Worker's daily cleanup (cron 03:17 UTC) first reads
+  `/events.json` and gives the RSVPs of every listed event its current end (Ruling R44: a moved event keeps its id
+  and so its RSVPs until its new end; an event no longer listed keeps its stored end), then deletes the RSVPs whose
+  end has passed, normally within a day. A day `/events.json` can't be read deletes no RSVP and logs
+  `RSVP_CLEANUP_FEED_UNAVAILABLE`. The old 90-day Worker var is removed. Migration 0002 was edited in place (only
+  ever applied to local D1s, which must be re-created: move `.wrangler/state/v3/d1` aside and run
+  `npm run db:migrate:local`). The privacy notice's RSVP sentence says "normally within a day" (its date stays
+  November 7, 2026); the owner still approves the full text before launch. RSVP emails already in the organizer's
+  inbox are not affected.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

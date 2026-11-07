@@ -120,8 +120,11 @@ the Actions cache and never committed (git keeps the empty default). Unset, the 
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
 publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
 (`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Each RSVP is deleted once its event is over (owner decision
-2026-11-07): it stores the event's end (`rsvps.event_ends_at`) and the Worker's daily cleanup deletes it once that
-end has passed, at most about a day later. The copies already emailed to the organizer's inbox stay there.
+2026-11-07): it stores the event's end (`rsvps.event_ends_at`). The Worker's daily cleanup first reads `/events.json`
+and gives the RSVPs of every event listed there that event's current end, so a moved event (it keeps its id) keeps its
+RSVPs until its new end; an event no longer listed keeps the end its RSVPs stored. Then it deletes the RSVPs whose end
+has passed, normally within a day. If `/events.json` can't be read, it logs `RSVP_CLEANUP_FEED_UNAVAILABLE` and
+deletes no RSVP that day (Ruling R44). The copies already emailed to the organizer's inbox stay there.
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
 they go live on switch day (step 6 below, with each step's undo). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
@@ -245,18 +248,20 @@ TXT record forever** — removing it can drop the verification.
       Cloudflare). *Undo (after step 5's undo):* `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
    4. **Migration:** note a bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then
       `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
-      ignores it). *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
+      ignores it). Then check that D1 takes the cleanup's `UPDATE … FROM` (it changes no row):
+      `UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;`
+      must answer success. *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
       - losing only the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json;
         DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (also drops the table's two indexes; every
         other row stays; 0002 can be applied again later), or
       - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
         database and loses every contact, signup and RSVP row written since.
    5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the var
-      `EVENTS_FEED_URL` ships with it, and so do **Workers Logs** (`observability` in
-      `wrangler.jsonc`). With **invocation logs off** (`"invocation_logs": false`; they would store every request's
-      URL, confirmation tokens included, its headers and the visitor's IP), Workers Logs are expected to keep only the
-      Worker's own log lines for up to 7 days (dashboard → the Worker → Logs): codes such as
-      `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED` and `EVENTS_FEED_EVENT_SKIPPED`, method and path (never the
+      `EVENTS_FEED_URL` ships with it, and so do **Workers Logs** (`observability` in `wrangler.jsonc`). With
+      **invocation logs off** (`"invocation_logs": false`; they would store every request's URL, confirmation tokens
+      included, its headers and the visitor's IP), Workers Logs are expected to keep only the Worker's own log lines
+      for up to 7 days (dashboard → the Worker → Logs): codes such as `RSVP_ORGANIZER_EMAIL_FAILED`,
+      `RSVP_CANCEL_FAILED`, `RSVP_CLEANUP_FEED_UNAVAILABLE` and `EVENTS_FEED_EVENT_SKIPPED`, method and path (never the
       query string), request or correlation ids; no personal data. Cloudflare's docs don't say whether a stored line
       still carries request fields with invocation logs off, so this is confirmed by the check below.
       `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.

@@ -49,8 +49,13 @@ currently scheduled".
 - **Repeating classes:** every date takes its own RSVPs. Changing one date ("This event") keeps that date's RSVPs, and
   so does moving a one-off event. Changing the time of the whole series, or "This and following events", starts those
   dates afresh.
-- **Cancelling or deleting** an event removes it at the next rebuild. Events that have ended are removed
-  automatically. The page lists at most the next 60 events within the coming 370 days.
+- **When RSVPs are deleted:** once the event is over. Every day the forms service reads the site's list of events and
+  gives each event's RSVPs the event's current end, then deletes the RSVPs whose end has passed. So a moved event
+  keeps its RSVPs until its new end, after the next rebuild has published the move. If that list can't be read, no RSVP
+  is deleted that day. The RSVP emails in our inbox are not affected.
+- **Cancelling or deleting** an event removes it at the next rebuild; its RSVPs are deleted once the end it had has
+  passed. Events that have ended are removed automatically. The page lists at most the next 60 events within the
+  coming 370 days.
 
 If Google Calendar can't be reached, the deploy warns and the page keeps the events it showed before. If the address
 isn't Google's public iCal address, or Google answers with something that isn't a calendar, the deploy stops and the

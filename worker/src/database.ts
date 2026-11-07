@@ -162,8 +162,9 @@ const sqliteTime = (iso: string) => new Date(Date.parse(iso)).toISOString().slic
  * Stores the RSVP if the event's limit still has room for its guests. The
  * check and the insert are ONE statement, so simultaneous RSVPs can't both
  * take the last seats. A repeated requestId returns its stored RSVP
- * (`created: false`, nothing new is sent). The event's end is stored with it:
- * the daily cleanup deletes the RSVP once that end has passed.
+ * (`created: false`, nothing new is sent). The event's end is stored with it
+ * (kept up to date from the feed by the daily cleanup, which deletes the RSVP
+ * once that end has passed).
  */
 export async function reserveRsvp(
   env: Env,
@@ -224,11 +225,30 @@ export async function rsvpGuestTotals(env: Env, eventIds: string[]): Promise<Map
 
 /**
  * Daily cron: expire rate-limit buckets, pending confirmations, webhook audit
- * rows, old request logs, and the RSVPs of events that are over (their stored
- * end has passed; owner decision 2026-11-07).
+ * rows, old request logs, and the RSVPs of events that are over (owner
+ * decision 2026-11-07).
+ *
+ * `feed` is the site's /events.json as read now. First, every RSVP of an
+ * event it lists takes that event's current end, so an event moved in the
+ * calendar keeps its RSVPs until its new end (it keeps its id when moved). An
+ * event the feed no longer lists (removed, or already over) keeps the end its
+ * RSVPs stored. Then the RSVPs whose end has passed are deleted. With no feed
+ * (null: it couldn't be read), no RSVP is deleted that day: losing a moved
+ * event's guest list, and reopening its seats, is worse than keeping RSVPs a
+ * day longer. The other clean-ups never depend on the feed.
  */
-export async function cleanExpiredData(env: Env) {
+export async function cleanExpiredData(env: Env, feed: FeedEvent[] | null) {
   const now = Date.now();
+  const rsvps = feed ? [
+    // UPDATE … FROM (SQLite 3.33+): proven by the Worker tests and on a local D1; README switch day
+    // step 4 checks the live D1. Rows whose end already matches aren't rewritten.
+    env.DB.prepare(
+      `UPDATE rsvps SET event_ends_at = feed.ends_at
+       FROM (SELECT json_extract(value, '$.id') AS id, json_extract(value, '$.end') AS ends_at FROM json_each(?)) AS feed
+       WHERE rsvps.event_id = feed.id AND rsvps.event_ends_at <> feed.ends_at`
+    ).bind(JSON.stringify(feed.map((event) => ({ id: event.id, end: sqliteTime(event.endsAt) })))),
+    env.DB.prepare("DELETE FROM rsvps WHERE event_ends_at < datetime('now')")
+  ] : [];
   await env.DB.batch([
     env.DB.prepare("DELETE FROM rate_limits WHERE expires_at < ?").bind(Math.floor(now / 1000)),
     env.DB.prepare("DELETE FROM subscription_confirmations WHERE expires_at < ?").bind(now),
@@ -238,6 +258,6 @@ export async function cleanExpiredData(env: Env) {
        WHERE created_at < ?
          AND NOT EXISTS (SELECT 1 FROM subscription_confirmations WHERE subscription_confirmations.request_id = request_log.request_id)`
     ).bind(now - 30 * 86_400_000),
-    env.DB.prepare("DELETE FROM rsvps WHERE event_ends_at < datetime('now')")
+    ...rsvps
   ]);
 }

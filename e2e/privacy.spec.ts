@@ -50,10 +50,11 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
     await expect(section.locator(":scope > h2:first-child")).toHaveText(heading);
     expect(await section.locator("p").count(), heading).toBeGreaterThan(0);
   }
-  // The RSVP retention the forms Worker enforces (worker/src/database.ts cleanExpiredData, owner decision 2026-11-07).
+  // The RSVP retention the forms Worker enforces (worker/src/database.ts cleanExpiredData, owner decision 2026-11-07):
+  // "normally", because a day the site's events list can't be read deletes no RSVP (Ruling R44).
   const keep = sections.nth(HEADINGS.indexOf("How long we keep it"));
   await expect(keep.locator("p").filter({ hasText: /^RSVPs / })).toHaveText(
-    "RSVPs are kept by the forms service until its daily clean-up after the event ends, at most about a day later, then deleted. Each RSVP is also emailed to our inbox."
+    "RSVPs are kept by the forms service until its daily clean-up after the event ends, normally within a day, then deleted. Each RSVP is also emailed to our inbox."
   );
   // Requests go to the inbox the site already names (Contact page, form messages).
   const email = sections.last().getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true });

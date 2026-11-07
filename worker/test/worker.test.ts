@@ -1380,7 +1380,46 @@ describe("Resend webhook", () => {
 });
 
 describe("scheduled cleanup", () => {
+  const DAY = 24 * HOUR;
+  const at = (offset: number) => new Date(Date.now() + offset).toISOString();
+  // Feed-valid ids (EVENT_ID_PATTERN), named after what each test does with the event.
+  const CLEANUP = {
+    endedYesterday: "c0000000000000000000000a",
+    endsTomorrow: "c0000000000000000000000b",
+    multiDay: "c0000000000000000000000c",
+    allDayYesterday: "c0000000000000000000000d",
+    allDayToday: "c0000000000000000000000e",
+    movedLater: "c0000000000000000000000f",
+    movedEarlierEnded: "c00000000000000000000010",
+    movedEarlierUpcoming: "c00000000000000000000011",
+    removedEnded: "c00000000000000000000012",
+    removedUpcoming: "c00000000000000000000013"
+  } as const;
+  const nameOf = (id: string) => Object.entries(CLEANUP).find(([, value]) => value === id)?.[0] ?? id;
+
+  /** Runs the daily cron (worker.scheduled) to the end. */
+  async function runScheduledCleanup() {
+    const pending: Promise<unknown>[] = [];
+    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+  }
+
+  /** One RSVP per event, stored as the Worker stores it (reserveRsvp doesn't check whether the event has started). */
+  async function reserveEach(events: FeedEvent[]) {
+    for (const [n, event] of events.entries()) {
+      expect((await reserveRsvp(env, reserveInput(), event, `hash-${n}`)).created, nameOf(event.id)).toBe(true);
+    }
+  }
+
+  /** The events that still have RSVPs (by name), and the end each RSVP stores. */
+  async function remaining() {
+    const { results } = await env.DB.prepare("SELECT event_id, event_ends_at FROM rsvps ORDER BY event_id")
+      .all<{ event_id: string; event_ends_at: string }>();
+    return Object.fromEntries(results.map((row) => [nameOf(row.event_id), row.event_ends_at]));
+  }
+
   it("removes expired rate limits, confirmations, webhook rows and old request logs", async () => {
+    mockProviders("cleanup");
     const now = Date.now();
     const old = now - 31 * 86_400_000;
     await env.DB.batch([
@@ -1390,35 +1429,72 @@ describe("scheduled cleanup", () => {
       env.DB.prepare("INSERT INTO subscription_confirmations (id, request_id, token_hash, email, expires_at, created_at) VALUES ('c1', 'old-subscribe', 'hash', 'a@example.test', ?, ?)").bind(old, old),
       env.DB.prepare("INSERT INTO webhook_events (provider, event_id, event_type, payload_json, received_at) VALUES ('resend', 'e1', 't', '{}', ?)").bind(now - 91 * 86_400_000)
     ]);
-    const pending: Promise<unknown>[] = [];
-    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
-    await Promise.all(pending);
+    await runScheduledCleanup();
     for (const table of ["rate_limits", "request_log", "subscription_confirmations", "webhook_events"]) {
       expect(await count(table), table).toBe(0);
     }
   });
 
   it("deletes an RSVP at the first daily clean-up after its event ends, and keeps it until then", async () => {
-    const DAY = 24 * HOUR;
-    const at = (offset: number) => new Date(Date.now() + offset).toISOString();
-    const events = [
-      feedEvent({ id: "ended-yesterday", startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }),
-      feedEvent({ id: "ends-tomorrow", startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) }),
+    const events = {
+      endedYesterday: feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }),
+      endsTomorrow: feedEvent({ id: CLEANUP.endsTomorrow, startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) }),
       // Started yesterday, ends tomorrow: kept while it is still on.
-      feedEvent({ id: "multi-day", startsAt: at(-DAY), endsAt: at(DAY) }),
+      multiDay: feedEvent({ id: CLEANUP.multiDay, startsAt: at(-DAY), endsAt: at(DAY) }),
       // Yesterday, all day: its exclusive end, today's UTC midnight, has passed.
-      feedEvent({ id: "all-day-yesterday", allDay: true, timeZone: "UTC", startsAt: utcMidnight(-1), endsAt: utcMidnight(0) }),
+      allDayYesterday: feedEvent({ id: CLEANUP.allDayYesterday, allDay: true, timeZone: "UTC", startsAt: utcMidnight(-1), endsAt: utcMidnight(0) }),
       // Today, all day: kept until its exclusive end, tomorrow's UTC midnight (the cron runs at 03:17 UTC).
-      feedEvent({ id: "all-day-today", allDay: true, timeZone: "UTC", startsAt: utcMidnight(0), endsAt: utcMidnight(1) })
-    ];
-    // Stored as the Worker stores every RSVP (reserveRsvp doesn't check whether the event has started).
-    for (const [n, event] of events.entries()) {
-      expect((await reserveRsvp(env, reserveInput(), event, `hash-${n}`)).created, event.id).toBe(true);
-    }
-    const pending: Promise<unknown>[] = [];
-    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
-    await Promise.all(pending);
-    const { results } = await env.DB.prepare("SELECT event_id FROM rsvps ORDER BY event_id").all<{ event_id: string }>();
-    expect(results.map((row) => row.event_id)).toEqual(["all-day-today", "ends-tomorrow", "multi-day"]);
+      allDayToday: feedEvent({ id: CLEANUP.allDayToday, allDay: true, timeZone: "UTC", startsAt: utcMidnight(0), endsAt: utcMidnight(1) })
+    };
+    await reserveEach(Object.values(events));
+    // The feed lists the events that haven't ended, as the site publishes it.
+    mockProviders("cleanup", { feedEvents: [events.endsTomorrow, events.multiDay, events.allDayToday] });
+    await runScheduledCleanup();
+    expect(Object.keys(await remaining()).sort()).toEqual(["allDayToday", "endsTomorrow", "multiDay"]);
+  });
+
+  it("follows the calendar when an event is moved: its RSVPs take the feed's current end (UPDATE … FROM in D1)", async () => {
+    // As the events were when the RSVPs were made.
+    await reserveEach([
+      feedEvent({ id: CLEANUP.movedLater, startsAt: at(-3 * HOUR), endsAt: at(-HOUR) }),
+      feedEvent({ id: CLEANUP.movedEarlierEnded, startsAt: at(5 * DAY), endsAt: at(5 * DAY + 2 * HOUR) }),
+      feedEvent({ id: CLEANUP.movedEarlierUpcoming, startsAt: at(5 * DAY), endsAt: at(5 * DAY + 2 * HOUR) })
+    ]);
+    // The calendar now: postponed to tomorrow (it was to end an hour ago); brought forward to earlier
+    // today (the feed, built before it ended, still lists it); brought forward to tomorrow.
+    const calendar = {
+      movedLater: feedEvent({ id: CLEANUP.movedLater, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) }),
+      movedEarlierEnded: feedEvent({ id: CLEANUP.movedEarlierEnded, startsAt: at(-3 * HOUR), endsAt: at(-HOUR) }),
+      movedEarlierUpcoming: feedEvent({ id: CLEANUP.movedEarlierUpcoming, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) })
+    };
+    mockProviders("cleanup", { feedEvents: Object.values(calendar) });
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({
+      movedLater: sqliteTime(calendar.movedLater.endsAt),
+      movedEarlierUpcoming: sqliteTime(calendar.movedEarlierUpcoming.endsAt)
+    });
+  });
+
+  it("keeps the stored end of an event the feed no longer lists (removed from the calendar)", async () => {
+    const removedUpcoming = feedEvent({ id: CLEANUP.removedUpcoming, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) });
+    await reserveEach([feedEvent({ id: CLEANUP.removedEnded, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }), removedUpcoming]);
+    mockProviders("cleanup");
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({ removedUpcoming: sqliteTime(removedUpcoming.endsAt) });
+  });
+
+  it("deletes no RSVP while the feed can't be read, logs only a code, and still runs the other clean-ups", async () => {
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
+    await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // E.g. before switch day, while tzionbreslov.org still redirects to the old site.
+    const outbound = mockProviders("cleanup", { feedResponse: () => new Response("", { status: 302, headers: { Location: "https://tzionbreslov.com/" } }) });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(Object.keys(await remaining())).toEqual(["endedYesterday"]);
+    expect(await count("rate_limits")).toBe(0);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
   });
 });

@@ -49,9 +49,9 @@
   },
   // With invocation logs off, Workers Logs (dashboard → the Worker → Logs) are expected to keep
   // only the Worker's own log lines, for up to 7 days: RSVP_ORGANIZER_EMAIL_FAILED,
-  // RSVP_CANCEL_FAILED, EVENTS_FEED_EVENT_SKIPPED and the error lines (codes, method and path but
-  // never the query string, request or correlation ids; no personal data), so they can be found
-  // later, not only in a live `wrangler tail`. Cloudflare's docs don't say whether a stored line
+  // RSVP_CANCEL_FAILED, RSVP_CLEANUP_FEED_UNAVAILABLE, EVENTS_FEED_EVENT_SKIPPED and the error
+  // lines (codes, method and path but never the query string, request or correlation ids; no
+  // personal data), so they can be found later, not only in a live `wrangler tail`. Cloudflare's docs don't say whether a stored line
   // still carries request fields (URL, headers, IP) with invocation logs off, so this is confirmed
   // on switch day (README → Switch day, step 6.5); if the check fails, "enabled" becomes false.
   // Invocation logs stay OFF: they would store every request's method + URL (e.g.
@@ -60,7 +60,9 @@
   // any URL Cloudflare does record, not a substitute for the check. Takes effect at deploy.
   "observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } },
   // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows, and the RSVPs of
-  // events that are over (deleted once the event's end has passed: at most about a day after it).
+  // events that are over: each RSVP first takes its event's current end from EVENTS_FEED_URL (an event moved in the
+  // calendar keeps its RSVPs), then those whose end has passed are deleted. No RSVP is deleted on a day the feed
+  // can't be read.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {
