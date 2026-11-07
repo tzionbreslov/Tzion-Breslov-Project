@@ -240,8 +240,8 @@ export async function rsvpGuestTotals(env: Env, eventIds: string[]): Promise<Map
 export async function cleanExpiredData(env: Env, feed: FeedEvent[] | null) {
   const now = Date.now();
   const rsvps = feed ? [
-    // UPDATE … FROM (SQLite 3.33+): proven by the Worker tests and on a local D1; README switch day
-    // step 4 checks the live D1. Rows whose end already matches aren't rewritten.
+    // UPDATE … FROM (SQLite 3.33+): proven by the Worker tests and on a local D1; README → Switch day,
+    // steps 1 and 2, checks the live D1. Rows whose end already matches aren't rewritten.
     env.DB.prepare(
       `UPDATE rsvps SET event_ends_at = feed.ends_at
        FROM (SELECT json_extract(value, '$.id') AS id, json_extract(value, '$.end') AS ends_at FROM json_each(?)) AS feed

@@ -68,32 +68,32 @@
 - Produces: e2e helpers in `e2e/helpers.ts` — `trackPageErrors(page: Page): () => Error[]` (collects `pageerror`s, ignoring those whose stack contains `/themes/tzionbreslov/js/global.js`, a pre-existing theme bug kept for fidelity), `cspViolations(page): Promise<string[]>`, and `expectClean(page, errors)` (no page errors, no CSP violations), which every spec calls at the end. The test server sends the enforced CSP, so every interaction test is also a CSP test.
 - Produces: `node scripts/baseline-site.mjs <tag>` → `.tmp/baseline/<tag>/out` (git worktree at the tag, `npm ci`, `npm run build`).
 
-- [ ] **Step 1: Write the failing unit tests** in `scripts/wording.test.mjs`:
+- [x] **Step 1: Write the failing unit tests** in `scripts/wording.test.mjs`:
   - `extractWording` on a fixture page with `<title>About - Tzion Breslov</title>`, `<p>Enrich <strong>your</strong> life</p>`, `<img alt="Rabbi">`, `<script>var x="no"</script>` returns `["title:About - Tzion Breslov","Enrich","your","life","alt:Rabbi"]`.
   - `isOrderedSubsequence(["About","Resources","Contact"], ["Home","About","Resources","Classes","Articles","Contact"])` → `{ ok: true }`.
   - Changed word: baseline `["Enrich your life"]` vs current `["Enrich your lives"]` → `ok:false, index:0`.
   - Reordered: `["About","Contact"]` vs `["Contact","About"]` → `ok:false, index:1`.
   - Missing label after relink: baseline `["Read my full story"]` vs `["Read more"]` → `ok:false`.
-- [ ] **Step 2: Run** `node --test scripts/wording.test.mjs` — expect FAIL (module missing).
-- [ ] **Step 3: Implement** `scripts/lib/wording.mjs` with cheerio (`decodeEntities` default), walking `body` children recursively.
-- [ ] **Step 4: Run** the test — expect PASS.
-- [ ] **Step 5: Implement** `scripts/check-wording.mjs`:
+- [x] **Step 2: Run** `node --test scripts/wording.test.mjs` — expect FAIL (module missing).
+- [x] **Step 3: Implement** `scripts/lib/wording.mjs` with cheerio (`decodeEntities` default), walking `body` children recursively.
+- [x] **Step 4: Run** the test — expect PASS.
+- [x] **Step 5: Implement** `scripts/check-wording.mjs`:
   - `--write-baseline <outDir>` writes `{ "<path>": string[] }` for every route in `content/routes.json` (+ `/404.html` as `"/404/"`).
   - Default mode reads `out/`, and for every baseline path not removed (`isRemovedPath` from Task 2 — until then, none) requires `out/<path>index.html` and `isOrderedSubsequence(baseline, current).ok`.
   - On failure it prints the path, the expected text and 5 entries of context, then exits 1.
-- [ ] **Step 6: Implement `scripts/baseline-site.mjs`.** Reuse `.tmp/baseline/<tag>/out` if it already exists; add `--fresh` to rebuild. Then generate the baseline:
+- [x] **Step 6: Implement `scripts/baseline-site.mjs`.** Reuse `.tmp/baseline/<tag>/out` if it already exists; add `--fresh` to rebuild. Then generate the baseline:
   `node scripts/baseline-site.mjs checkpoint-001 && node scripts/check-wording.mjs --write-baseline .tmp/baseline/checkpoint-001/out` → commit `tests/wording/checkpoint-001.json`.
-- [ ] **Step 7: Prove the check bites.** Build, then hand-edit `out/about-us/index.html` to change "Enrich your life" → "Enrich your lives", then run `npm run check:wording`. Expected: FAIL naming `/about-us/` and `Enrich your life`. Rebuild and run again: PASS.
-- [ ] **Step 8: Write `playwright.config.ts`.**
+- [x] **Step 7: Prove the check bites.** Build, then hand-edit `out/about-us/index.html` to change "Enrich your life" → "Enrich your lives", then run `npm run check:wording`. Expected: FAIL naming `/about-us/` and `Enrich your life`. Rebuild and run again: PASS.
+- [x] **Step 8: Write `playwright.config.ts`.**
   - `testDir: "e2e"`; webServer `node scripts/serve-out.mjs out` with `SECURITY_HEADERS=1`, `PORT=3100`, `reuseExistingServer: !process.env.CI`.
   - `baseURL: http://localhost:3100`.
   - Projects: `desktop` (Chromium, 1440×900) and `mobile` (Chromium, Pixel 7).
   - `e2e/smoke.spec.ts`: for every route from `siteRoutes()` (Task 2; until then, `content/routes.json`), the page loads with status 200, `trackPageErrors` is empty and there are no CSP violations.
-- [ ] **Step 9: Add `--mask-nav` to `scripts/visual-diff.mjs`.**
+- [x] **Step 9: Add `--mask-nav` to `scripts/visual-diff.mjs`.**
   - Before each screenshot on both sides, set `visibility:hidden` on `header.site-header, .mobile-menu-wrap, #genesis-footer-widgets`.
   - Clip both screenshots to the top of `#genesis-footer-widgets` on the reference page.
   - Keep current behaviour without the flag.
-- [ ] **Step 10: Wire scripts.**
+- [x] **Step 10: Wire scripts.**
   - In `package.json`, add:
     - `"test:unit": "node --test \"scripts/**/*.test.mjs\""`
     - `"check:wording": "node scripts/check-wording.mjs"`
@@ -103,8 +103,8 @@
   - `check` becomes `typecheck && typecheck:worker && lint && test:unit && test:worker && build && check:static-export && check:wording && test:e2e`.
   - In `ci.yml`, add `npx playwright install --with-deps chromium` before `npm run check`.
   - In `AGENTS.md`, replace the visual-diff rule with: "For structure work, compare against the `checkpoint-001` build: `npm run baseline -- checkpoint-001`, serve it with `PORT=3201 node scripts/serve-out.mjs .tmp/baseline/checkpoint-001/out`, then run `REF=http://localhost:3201 node scripts/visual-diff.mjs --mask-nav`. Pages a task doesn't intend to change stay ≤0.05%."
-- [ ] **Step 11: Verify.** Run `npm run check`. Expected: all green, including `check:wording` and the e2e smoke tests on both projects.
-- [ ] **Step 12: Commit, open the PR, merge after "check" passes, verify the checkpoint.**
+- [x] **Step 11: Verify.** Run `npm run check`. Expected: all green, including `check:wording` and the e2e smoke tests on both projects.
+- [x] **Step 12: Commit, open the PR, merge after "check" passes, verify the checkpoint.**
   ```bash
   git switch -c structure/01-safety-net && git add -A && git commit -m "Add the wording check, browser tests and checkpoint comparison"
   git push -u origin structure/01-safety-net && gh pr create --fill
@@ -143,14 +143,14 @@
   - `sectionHeading(text: string): string`: `<h1 class="wp-block-heading has-text-align-center has-dark-blue-color has-text-color is-style-secondary has-60-font-size tz-page-heading">`.
 - Produces (`lib/content.ts`): `routeIndex()` returns `siteRoutes(raw)`; `loadPage(key)` delegates `tz:` keys to `registry.ts` (`buildPage(key: string): PageContent`).
 
-- [ ] **Step 1: Write failing tests.** In `scripts/structure.test.mjs`:
+- [x] **Step 1: Write failing tests.** In `scripts/structure.test.mjs`:
   - `siteRoutes` appends `/articles/` and `/articles/page/2/` after the routes.json routes.
   - It never duplicates a path.
   - With a temporary `REMOVED_PATHS` passed as a parameter (`siteRoutes(index, { removed, newRoutes })` overload used by tests), `/about/` is dropped from both routes and redirects.
   - `isRemovedPath("/video/video-3/")` follows the list given.
-- [ ] **Step 2: Run** `node --test scripts/structure.test.mjs` — FAIL.
-- [ ] **Step 3: Implement** `config/site-structure.mjs` + `.d.mts` (pattern: `config/site-url.mjs`). PASS.
-- [ ] **Step 4: Write `e2e/articles.spec.ts`** (fails first: 404).
+- [x] **Step 2: Run** `node --test scripts/structure.test.mjs` — FAIL.
+- [x] **Step 3: Implement** `config/site-structure.mjs` + `.d.mts` (pattern: `config/site-url.mjs`). PASS.
+- [x] **Step 4: Write `e2e/articles.spec.ts`** (fails first: 404).
   - `/articles/` shows the hero text "More purpose, passion and positivity" and "Resources for those seeking spiritual growth.", then the h1 "Articles".
   - It shows 9 `.uagb-post__inner-wrap` cards; the first title is exactly `Parashas Tetzaveh | Feb 12th 2022`.
   - Clicking pagination "2" replaces the grid in place (URL still `/articles/`). The cards now include exactly `Parashas Vayigash | Dec10th-11th 2021` and `Parashas Mikeitz  | Dec 3rd-4th 2021` (two spaces), and "« Previous" leads back.
@@ -158,16 +158,16 @@
   - `/articles/page/2/` exists.
   - "Yes, I would like to donate" links to `/donate/`; "Live Speaking Engagements:" is present.
   - `trackPageErrors` is empty.
-- [ ] **Step 5: Implement** `parts.ts`, `compose.ts`, `registry.ts`, and `articles.ts` (`main = wrapEntry("Articles", resourcesHero() + sectionHeading(copy.articles.heading) + articlesGrid(n) + closingSections())`, islands `["signup","post-grid"]`).
+- [x] **Step 5: Implement** `parts.ts`, `compose.ts`, `registry.ts`, and `articles.ts` (`main = wrapEntry("Articles", resourcesHero() + sectionHeading(copy.articles.heading) + articlesGrid(n) + closingSections())`, islands `["signup","post-grid"]`).
   - In `content/copy/en.json`, add `{ "articles": { "heading": "Articles", "title": "Articles", "description": "Weekly Parasha articles from Tzion Breslov." } }`.
   - Update `lib/content.ts`.
-- [ ] **Step 6: Point the scripts at `siteRoutes`.** `check-static-export`, `check-csp` (still visiting `/resources/` interactions until Task 4), `write-site-files` (adds every `NEW_ROUTES` path to `page-sitemap.xml` as `<url><loc>{site}{path}</loc></url>`), `check-wording`, plus `visual-diff` and `compare-live` (their default page lists gain `/articles/`).
-- [ ] **Step 7: Add the base-path CI step** in `ci.yml` (Review Focus 3): `npm run build && npm run check:static-export` with `NEXT_PUBLIC_BASE_PATH: /Tzion-Breslov-Project`.
-- [ ] **Step 8: Verify.**
+- [x] **Step 6: Point the scripts at `siteRoutes`.** `check-static-export`, `check-csp` (still visiting `/resources/` interactions until Task 4), `write-site-files` (adds every `NEW_ROUTES` path to `page-sitemap.xml` as `<url><loc>{site}{path}</loc></url>`), `check-wording`, plus `visual-diff` and `compare-live` (their default page lists gain `/articles/`).
+- [x] **Step 7: Add the base-path CI step** in `ci.yml` (Review Focus 3): `npm run build && npm run check:static-export` with `NEXT_PUBLIC_BASE_PATH: /Tzion-Breslov-Project`.
+- [x] **Step 8: Verify.**
   - `npm run check`: green.
   - `node scripts/check-csp.mjs`: no violations.
   - Visual diff (AGENTS.md command) on all pre-existing pages: ≤0.05%.
-- [ ] **Step 9: Commit / PR / merge / verify the checkpoint** (as in Task 1, branch `structure/02-articles`).
+- [x] **Step 9: Commit / PR / merge / verify the checkpoint** (as in Task 1, branch `structure/02-articles`).
 
 ---
 
@@ -214,7 +214,7 @@ Each card is an `article.tz-vl__card[data-id][data-title][data-published][data-v
 
 Shorts show the title only (their only dates are WordPress upload times). Shorts stay 16:9; the clips are horizontal.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `scripts/video-library.test.mjs`:
     - `sortVideos` for all three orders;
     - views-missing videos last under "popular";
@@ -222,10 +222,10 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
     - `filterVideos("bitul")` matches `Rabbi Kalmus Daily Ray of Wisdom: What is Bitul?`;
     - `formatMonthYear("2026-11-03T22:09:52+00:00") === "Nov 2026"`.
   - `scripts/youtube-feed.test.mjs`: a feed entry with `<media:group><media:community><media:statistics views="42"/>` parses `views: 42`; without it, there is no `views` key.
-- [ ] **Step 2: Run** `npm run test:unit` — FAIL.
-- [ ] **Step 3: Implement** `lib/video-library.mjs` and the parser change. PASS.
-- [ ] **Step 4: Generate the shorts.** Write and run `scripts/extract-shorts.mjs`; it reads `content/pages/video__video-N.json` iframes + `content/site-files/video-sitemap.xml`, and is one-time (it can't run after Task 4 deletes the pages, which the header comment says). Commit `content/shorts.json`. Check: 26 entries, the first is `CGRzYu-_078`, and no ID repeats.
-- [ ] **Step 5: Write `e2e/classes.spec.ts`** (FAIL first).
+- [x] **Step 2: Run** `npm run test:unit` — FAIL.
+- [x] **Step 3: Implement** `lib/video-library.mjs` and the parser change. PASS.
+- [x] **Step 4: Generate the shorts.** Write and run `scripts/extract-shorts.mjs`; it reads `content/pages/video__video-N.json` iframes + `content/site-files/video-sitemap.xml`, and is one-time (it can't run after Task 4 deletes the pages, which the header comment says). Commit `content/shorts.json`. Check: 26 entries, the first is `CGRzYu-_078`, and no ID repeats.
+- [x] **Step 5: Write `e2e/classes.spec.ts`** (FAIL first).
   - Videos: "Videos" is pressed and the card dates are non-increasing.
   - Sort: "Oldest" makes them non-decreasing; "Most popular" orders by `data-views` with the no-views cards last.
   - Shorts: "Shorts" shows 26 cards, the first titled exactly as `content/shorts.json[0].title`, and the sort group is hidden.
@@ -239,7 +239,7 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
   - **Size parity:** at 1440, 1024, 768 and 390 px wide, the first `.tz-vl__thumb` width equals the first `.sby_video_thumbnail` width on `/resources/` ±2 px. (Today's Classes tab; `/resources/` still exists until Task 4. After Task 4 the test compares against fixed numbers recorded from this run.)
   - **No JS** (Review Focus 2): the first card's link `href` is `https://www.youtube.com/watch?v=…`.
   - The closing sections are present, and there are no page errors.
-- [ ] **Step 6: Implement** `dialog.ts`, `video-library.ts` and `classes.ts`. Add the `classes` copy (all labels above, plus "Close video player", "Play video", "views", "Search videos", "Clear search", "Video type", "Sort videos").
+- [x] **Step 6: Implement** `dialog.ts`, `video-library.ts` and `classes.ts`. Add the `classes` copy (all labels above, plus "Close video player", "Play video", "views", "Search videos", "Clear search", "Video type", "Sort videos").
   - **Player look (Ruach's, in Tzion colours):**
     - overlay `rgb(12 33 54 / .86)` + `backdrop-filter: blur(12px)`, fade .2 s;
     - dialog fixed centre, `width: min(1120px, 100% - 32px)`, entering with `opacity 0, translate(-50%,-47%) scale(.84)` → 1 over .48 s `cubic-bezier(.16,1,.3,1)`, exiting in .22 s to `scale(.94)`;
@@ -248,12 +248,12 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
     - frame 16:9.
   - **Grid:** inside the theme `.wrap`, 3 columns with a 16 px gap at the breakpoints measured in Step 5.
   - **Theme resets:** `all: unset` on every `.tz-vl` button and on the search input.
-- [ ] **Step 7: Verify.**
+- [x] **Step 7: Verify.**
   - `npm run check`: green.
   - `node scripts/check-csp.mjs`: green (`i.ytimg.com` and the nocookie frame are already allowed).
   - Visual diff on pre-existing pages: ≤0.05%.
   - Look at `/classes/` at 1440 and 390 and attach screenshots to the PR.
-- [ ] **Step 8: Commit / PR / merge / checkpoint** (`structure/03-classes`).
+- [x] **Step 8: Commit / PR / merge / checkpoint** (`structure/03-classes`).
 
 ---
 
@@ -292,7 +292,7 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
   - `isRemovedPath` also matches anything under `/video/`, `/category/`, `/author/` or `/resources/`.
 - Produces `REMOVED_SITEMAPS = ["video-sitemap.xml","category-sitemap.xml","author-sitemap.xml"]`.
 
-- [ ] **Step 1: Write the golden test** (`scripts/navigation.test.mjs`). For each of the 10 header/footer fragments, with the page path that uses it, `renderNavigation(fragment, path, ORIGINAL_NAV)` returns the file **byte-for-byte**. Pairings:
+- [x] **Step 1: Write the golden test** (`scripts/navigation.test.mjs`). For each of the 10 header/footer fragments, with the page path that uses it, `renderNavigation(fragment, path, ORIGINAL_NAV)` returns the file **byte-for-byte**. Pairings:
   - `d07fb20f0762` / `5b8a845aead8` → `/`
   - `fde8b8aab1cd` / `c215e6be2de2` → `/about-us/`
   - `edb0eacaaf8f` / `eacacdcdfaec` → `/contact/`
@@ -305,9 +305,9 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
   - the footer list in order is `Home, About, Resources, Classes, Articles, Contact, Donate, Taste a Class`;
   - the buttons still read `Taste A Class`, `Donate`;
   - `rewriteLinks('<a href="/resources/">ENRICH YOUR LIFE</a>')` gives `href="/classes/"`, and `href="/about/"` becomes `/about-us/`.
-- [ ] **Step 2: Run** `npm run test:unit` — FAIL.
-- [ ] **Step 3: Implement** `lib/navigation.mjs` until the golden and new tests pass.
-- [ ] **Step 4: Write `e2e/navigation.spec.ts`** (FAIL first).
+- [x] **Step 2: Run** `npm run test:unit` — FAIL.
+- [x] **Step 3: Implement** `lib/navigation.mjs` until the golden and new tests pass.
+- [x] **Step 4: Write `e2e/navigation.spec.ts`** (FAIL first).
   - **Desktop 1440:**
     - hovering "Resources" shows Classes and Articles *above the hero* (`document.elementFromPoint` at the Classes link centre returns that link) at scrollY 0 and after scrolling;
     - keyboard: Tab to the Resources button, Enter → `aria-expanded="true"`, Tab reaches Classes then Articles, Escape closes and focus is back on the button;
@@ -319,8 +319,8 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
   - **Footer:** Quick Links text in order as in the unit test.
   - **Relinks:** on `/`, "ENRICH YOUR LIFE" and "Enrich your life" → `/classes/`, and "Read my full story" → `/about-us/`; on `/about-us/`, "Enrich your life" → `/classes/`.
   - Screenshots of the header and footer at 1280, 1440 and 390 are saved to `test-results/nav/` for the PR.
-- [ ] **Step 5: Write `e2e/removed.spec.ts`.** Every `REMOVED_PATHS` entry returns the 404 page (served `404.html`).
-- [ ] **Step 6: Implement.** `site-document.tsx` applies `renderNavigation(readShared(header), page.path ?? "/")`, the same to the footer, and `rewriteLinks(expandTokens(main))`. Plus `menu.ts`, `navigation.css` and the structure-module values above.
+- [x] **Step 5: Write `e2e/removed.spec.ts`.** Every `REMOVED_PATHS` entry returns the 404 page (served `404.html`).
+- [x] **Step 6: Implement.** `site-document.tsx` applies `renderNavigation(readShared(header), page.path ?? "/")`, the same to the footer, and `rewriteLinks(expandTokens(main))`. Plus `menu.ts`, `navigation.css` and the structure-module values above.
   - `SiteDocument` applies `stripRemovedUrls` to `jsonld` head items; `scripts/navigation.test.mjs` gains a test that the escaped-slash author `Person.url` from a Parasha post becomes the site root.
   - `write-site-files`:
     - skips `REMOVED_SITEMAPS`;
@@ -331,13 +331,13 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
     - fails if any `out/**/*.html` or `out/*.xml` contains a removed path as a root-relative `href`/`src`/`loc` or as an absolute URL on the site origin (the JSON-LD included);
     - fails if any HTML still contains `youtube.com/embed`.
   - Delete the files listed above.
-- [ ] **Step 7: Verify.**
+- [x] **Step 7: Verify.**
   - `npm run check`: green. `check:wording` passes, and removed pages are skipped.
   - `node scripts/check-csp.mjs`: green.
   - Visual diff with `--mask-nav` on Home, About, Contact, Donate, a Parasha post and 404: ≤0.05%.
   - Review the nav screenshots at 1280, 1440 and 390.
   - `git grep -n '"/resources/\|/video/video-' -- content lib components` shows only the templates and `config/site-structure.mjs`.
-- [ ] **Step 8: Commit / PR** (attach the nav screenshots) **/ merge / checkpoint** (`structure/04-navigation`).
+- [x] **Step 8: Commit / PR** (attach the nav screenshots) **/ merge / checkpoint** (`structure/04-navigation`).
 
 ---
 
@@ -363,14 +363,14 @@ Shorts show the title only (their only dates are WordPress upload times). Shorts
 
 Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are shown whole at their natural ratio (`height:auto`) on a white background: the placeholders have Tzion's rounded corners and the collage gutters baked in as transparency, so nothing is cropped. Page: `wrapEntry("Gallery", renderHero({ image: "/wp-content/uploads/2023/06/hero2.png", heading: copy.gallery.heading }) + grid + spacer-large)`. No closing sections: the spec gives those to Classes and Articles only.
 
-- [ ] **Step 1: Write the failing tests** (`scripts/gallery.test.mjs`, using a temp dir with 3 generated sharp images):
+- [x] **Step 1: Write the failing tests** (`scripts/gallery.test.mjs`, using a temp dir with 3 generated sharp images):
   - order follows `gallery.json`, then filename;
   - a new file with no entry appears with `defaultAlt`;
   - `width` / `height` are correct;
   - non-images are ignored.
-- [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.** PASS.
-- [ ] **Step 4: Run `convert-gallery-placeholders.mjs`.** Using sharp, it writes the 7 webp files (quality 88, alpha kept) from:
+- [x] **Step 2: Run** — FAIL.
+- [x] **Step 3: Implement.** PASS.
+- [x] **Step 4: Run `convert-gallery-placeholders.mjs`.** Using sharp, it writes the 7 webp files (quality 88, alpha kept) from:
   - `2023/06/Mask-Group-11.png`
   - `2023/06/PHOTO-2021-02-26-22-51-46-2.png`
   - `2023/06/R_Kalmus_lecture_screen_1_1.png`
@@ -383,7 +383,7 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
   - "Rabbi Kalmus lecturing at a podium"
   - "Portrait of Rabbi David Yisrael Kalmus"
   - "Collage of photos from Tzion Breslov classes" ×3, with "(1)", "(2)", "(3)"
-- [ ] **Step 5: Write `e2e/gallery.spec.ts`** (FAIL first).
+- [x] **Step 5: Write `e2e/gallery.spec.ts`** (FAIL first).
   - There are 7 items.
   - Opening the first shows a dialog with alt 1 and "1 of 7".
   - ArrowRight → "2 of 7"; from 1, ArrowLeft → "7 of 7".
@@ -392,9 +392,9 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
   - No JS: the item `href` is the image file.
   - "Gallery" is in the desktop menu before Contact and marked current here.
   - No page errors.
-- [ ] **Step 6: Implement** the page, viewer, CSS, copy (`heading` "Gallery", `title`, `description`, `defaultAlt` "Photo from Tzion Breslov", `previous` "Previous photo", `next` "Next photo", `close` "Close", `counter` "{n} of {total}") and the nav item.
-- [ ] **Step 7: Verify.** `npm run check`, `check-csp` and the visual diff (masked) are all green.
-- [ ] **Step 8: Commit / PR / merge / checkpoint** (`structure/05-gallery`).
+- [x] **Step 6: Implement** the page, viewer, CSS, copy (`heading` "Gallery", `title`, `description`, `defaultAlt` "Photo from Tzion Breslov", `previous` "Previous photo", `next` "Next photo", `close` "Close", `counter` "{n} of {total}") and the nav item.
+- [x] **Step 7: Verify.** `npm run check`, `check-csp` and the visual diff (masked) are all green.
+- [x] **Step 8: Commit / PR / merge / checkpoint** (`structure/05-gallery`).
 
 ---
 
@@ -414,17 +414,17 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
 
   Both links have `target=_blank rel="noopener noreferrer"` and are styled as the theme's `wp-block-button is-style-turquoise` / `is-style-outline`.
 
-- [ ] **Step 1: Write `e2e/contact.spec.ts`** (FAIL first).
+- [x] **Step 1: Write `e2e/contact.spec.ts`** (FAIL first).
   - The iframe `src` contains `maps?q=Bet%20Shemesh%2C%20Israel` and `output=embed`.
   - Both link `href`s are as above.
   - The section comes after the "Beit Shemesh, Israel" card in DOM order.
   - The form and the three cards are unchanged; `check:wording` covers their text.
   - After scrolling to the map there are no CSP violations.
-- [ ] **Step 2: Implement** the insertion, CSS, CSP source and copy.
-- [ ] **Step 3: Verify.**
+- [x] **Step 2: Implement** the insertion, CSS, CSP source and copy.
+- [x] **Step 3: Verify.**
   - `npm run check` and `check-csp` are green.
   - The visual diff on Contact differs only from the map section down. Compare the region above it: `node scripts/visual-diff.mjs --mask-nav /contact/` shows the change starting at the map's offset. Note it in the PR.
-- [ ] **Step 4: Commit / PR / merge / checkpoint** (`structure/06-contact-map`).
+- [x] **Step 4: Commit / PR / merge / checkpoint** (`structure/06-contact-map`).
   - In the PR body, note: "Cloudflare 'Tzion security headers' rule must gain `https://www.google.com` in frame-src on switch day (owner go-ahead)."
 
 ---
@@ -453,7 +453,7 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
   - Empty state: `div.tz-events__empty` with "No events are currently scheduled" and "Sign up below to hear about the next gathering, or contact us." The signup arrives in Task 8; until then the second sentence is "Contact us to hear about the next gathering." with a link to `/contact/`.
 - `content/events.json` = `{ "syncedAt": null, "events": [] }` (committed default). `public/events.json` = `{ "syncedAt", "events": [{ id, title, startsAt, endsAt, timeZone, rsvp, limit }] }` (gitignored).
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
   - `scripts/google-calendar.test.mjs`:
     - Ruach's 4 tests, adapted: recurrence edit / EXDATE / all-day / cancelled / ordering; excludes ended events; keeps a TZID; URL validation.
     - One-off event moved from 18:00 to 19:00 → same id.
@@ -471,34 +471,34 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
     - `renderEventsList([])` contains the empty-state text;
     - a card escapes `<script>` in a title;
     - a location row only when one is set.
-- [ ] **Step 2: Run** — FAIL. Run `npm i -D ical.js@2.2.1 --save-exact`.
-- [ ] **Step 3: Implement** `google-calendar.mjs` and `events.mjs`. PASS.
-- [ ] **Step 4: Implement `scripts/sync-events.mjs`.**
+- [x] **Step 2: Run** — FAIL. Run `npm i -D ical.js@2.2.1 --save-exact`.
+- [x] **Step 3: Implement** `google-calendar.mjs` and `events.mjs`. PASS.
+- [x] **Step 4: Implement `scripts/sync-events.mjs`.**
   - `GOOGLE_CALENDAR_ICAL_URL` unset → `::notice::` and keep the file, exit 0.
   - 3 attempts with 5 s and 10 s backoff and a 30 s timeout, `redirect:"error"`.
   - On failure: `::warning title=Google Calendar::` and keep the existing file, exit 0. `--strict` makes that a failure. A malformed calendar always fails.
   - Print warnings as `::warning::`.
   - Write `content/events.json` only when it changed.
-- [ ] **Step 5: Update the deploy workflow.**
+- [x] **Step 5: Update the deploy workflow.**
   - `schedule:` becomes two entries, `- cron: "0 7 * * *"` with `timezone: "Asia/Jerusalem"`, and `- cron: "0 21 * * *"` with `timezone: "Asia/Jerusalem"` (GitHub Actions supports `timezone` on schedules since March 2026). This replaces `41 4 * * *`.
   - Add `actions/cache/restore` and `save` for `content/events.json` (key `events-${{ github.run_id }}`, restore-keys `events-`), pinned to the same SHA as the Instagram cache steps.
   - Add `npm run sync:events` with `GOOGLE_CALENDAR_ICAL_URL: ${{ vars.GOOGLE_CALENDAR_ICAL_URL }}` before Build.
   - Add a `test:unit` step.
-- [ ] **Step 6: Write `e2e/events.spec.ts`.**
+- [x] **Step 6: Write `e2e/events.spec.ts`.**
   - `/events/` (with the empty default) shows the hero ("Upcoming events", image `/wp-content/uploads/2023/06/eagle-in-the-sky.png`) and the empty state.
   - "Events" is in the menu before Gallery and marked current.
   - `/events.json` is served and parses.
-- [ ] **Step 7: Implement** the page, nav item, copy and `docs/EVENT_CALENDAR.md`. That doc adapts Ruach's owner steps:
+- [x] **Step 7: Implement** the page, nav item, copy and `docs/EVENT_CALENDAR.md`. That doc adapts Ruach's owner steps:
   - calendar name "Tzion Breslov Events", public with full details;
   - copy the **public iCal address** (`…/public/basic.ics`) into the Actions **Variable** `GOOGLE_CALENDAR_ICAL_URL`;
   - the markers "No RSVP" and "RSVP limit: 40", each on its own line in the description;
   - every date of a repeating class takes its own RSVPs;
   - the page refreshes at 07:00 and 21:00 Israel time, or right away via Actions → Deploy GitHub Pages → Run workflow.
-- [ ] **Step 8: Verify.**
+- [x] **Step 8: Verify.**
   - `npm run check` and `check-csp` are green.
   - Locally, `GOOGLE_CALENDAR_ICAL_URL=<a public Google holiday calendar basic.ics> npm run sync:events && npm run build`, then look at `/events/` with real cards. Don't commit the result: `git checkout content/events.json`.
   - Masked visual diff is green.
-- [ ] **Step 9: Commit / PR / merge / checkpoint** (`structure/07-events`).
+- [x] **Step 9: Commit / PR / merge / checkpoint** (`structure/07-events`).
   - After merge, run Deploy once by hand to confirm the cache and sync steps. The next morning, check the 07:00 run with `gh run list --workflow deploy-github-pages.yml --event schedule`.
 
 ---
@@ -565,7 +565,7 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
     - at least one box is required ("Choose at least one list.");
     - success: the existing signup confirmation text, reused unchanged.
 
-- [ ] **Step 1: Rewrite and add the Worker tests first** (`worker/test/worker.test.ts`). Extend `mockProviders` to answer `EVENTS_FEED_URL` with a test feed (per-test overridable: 500, 302 redirect, malformed). Add `beforeEach` `DELETE FROM rsvps`. Tests:
+- [x] **Step 1: Rewrite and add the Worker tests first** (`worker/test/worker.test.ts`). Extend `mockProviders` to answer `EVENTS_FEED_URL` with a test feed (per-test overridable: 500, 302 redirect, malformed). Add `beforeEach` `DELETE FROM rsvps`. Tests:
   - replace "keeps removed RSVP … closed" with: RSVP to an open event → 202, one row, 2 emails (guest subject `RSVP received: Weekly class`, organizer to `team@example.test` with Reply-To the visitor);
   - same `requestId` again → same `confirmationId`, still 1 row, no new emails;
   - limit 3: 2 guests then 2 guests → 202, then 409 `EVENT_FULL`;
@@ -578,9 +578,9 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
   - subscribe with `topics:["events"]` → confirm → the Resend contact call carries only `topic_events`; legacy body without topics → only `topic_newsletter` (rewrite the old "ignores legacy fields" test);
   - origin and preflight path loops include `/v1/rsvp`;
   - the scheduled cleanup deletes an RSVP whose event started 91 days ago and keeps one from 89 days ago.
-- [ ] **Step 2: Run** `npm run test:worker` — the new tests FAIL.
-- [ ] **Step 3: Implement** the contract, migration, Worker changes, `wrangler.jsonc` and the vitest bindings (`RESEND_EVENTS_TOPIC_ID: "topic_events"`, `EVENTS_FEED_URL: "https://site.test/events.json"`, `RSVP_RETENTION_DAYS: "90"`). Run `npm run test:worker` and `npm run typecheck:worker` — PASS.
-- [ ] **Step 4: Write the browser tests.**
+- [x] **Step 2: Run** `npm run test:worker` — the new tests FAIL.
+- [x] **Step 3: Implement** the contract, migration, Worker changes, `wrangler.jsonc` and the vitest bindings (`RESEND_EVENTS_TOPIC_ID: "topic_events"`, `EVENTS_FEED_URL: "https://site.test/events.json"`, `RSVP_RETENTION_DAYS: "90"`). Run `npm run test:worker` and `npm run typecheck:worker` — PASS.
+- [x] **Step 4: Write the browser tests.**
   - In the default build (no events, no API configured), `e2e/events.spec.ts` gains two checks on the "Get event announcements" form: it needs at least one box ticked, and submitting shows the unavailable message with tzionbreslovproject@gmail.com.
   - `e2e/rsvp.spec.ts` runs only when `TZ_E2E_EVENTS=1` (`test.skip` otherwise), against a fixture build:
     - Build env: `EVENTS_FIXTURE=scripts/fixtures/events.e2e.json` (read only by `write-site-files` and `lib/pages/events.ts`, at build time), `NEXT_PUBLIC_API_BASE_URL=https://api.tzionbreslov.org` (already allowed by the CSP) and `NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA`.
@@ -593,13 +593,13 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
     - a 202 shows the success message, a 409 `EVENT_FULL` shows the full message, and a network error shows the error message;
     - there are no CSP violations.
   - `.github/workflows/ci.yml` gains a step after the .org build: `node scripts/fixtures/write-events-fixture.mjs && npm run build && TZ_E2E_EVENTS=1 npx playwright test e2e/rsvp.spec.ts`, with the env above.
-- [ ] **Step 5: Implement** the client modules, the events page additions and the copy. `forms.ts` switches to `submit.ts` with no behaviour change: the existing `check-csp` `/contact/` flow and the Worker tests stay green.
-- [ ] **Step 6: Update `scripts/setup-resend.mjs`.** It creates the topic "Event announcements" with `default_subscription:"opt_out"` and the description "Tzion Breslov event announcements." and writes `RESEND_EVENTS_TOPIC_ID`. **Do not run it** (owner go-ahead).
-- [ ] **Step 7: Verify.**
+- [x] **Step 5: Implement** the client modules, the events page additions and the copy. `forms.ts` switches to `submit.ts` with no behaviour change: the existing `check-csp` `/contact/` flow and the Worker tests stay green.
+- [x] **Step 6: Update `scripts/setup-resend.mjs`.** It creates the topic "Event announcements" with `default_subscription:"opt_out"` and the description "Tzion Breslov event announcements." and writes `RESEND_EVENTS_TOPIC_ID`. **Do not run it** (owner go-ahead).
+- [x] **Step 7: Verify.**
   - `npm run check` and `check-csp` are green.
   - `npx wrangler d1 migrations apply tzion-breslov-production --local` applies 0002 cleanly on top of 0001 (local database only).
   - **Nothing is deployed.**
-- [ ] **Step 8: Commit / PR / merge / checkpoint** (`structure/08-rsvp`). The PR body lists the deploy steps deferred to switch day (Task 11).
+- [x] **Step 8: Commit / PR / merge / checkpoint** (`structure/08-rsvp`). The PR body lists the deploy steps deferred to switch day (Task 11).
 
 ---
 
@@ -633,13 +633,13 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
 
   Hero: `renderHero({ image: "/wp-content/uploads/2023/06/clouds-in-the-sky-1.png", heading: "Privacy notice" })`. No closing sections.
 
-- [ ] **Step 1: Write `e2e/privacy.spec.ts`** (FAIL first).
+- [x] **Step 1: Write `e2e/privacy.spec.ts`** (FAIL first).
   - `/privacy/` has the 6 section headings in order.
   - Every page's footer Quick Links ends with "Privacy" → `/privacy/` (one static check over `out/`).
   - The RSVP consent label links to `/privacy/`.
-- [ ] **Step 2: Implement** the page, nav item, copy and CSS.
-- [ ] **Step 3: Verify.** `npm run check`, `check-csp` and the masked visual diff are green.
-- [ ] **Step 4: Commit / PR / merge / checkpoint** (`structure/09-privacy`).
+- [x] **Step 2: Implement** the page, nav item, copy and CSS.
+- [x] **Step 3: Verify.** `npm run check`, `check-csp` and the masked visual diff are green.
+- [x] **Step 4: Commit / PR / merge / checkpoint** (`structure/09-privacy`).
   - PR body: "Owner to read and approve the privacy text before launch."
 
 ---
@@ -654,9 +654,9 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
 - The link `a.tz-donate__manage` "Manage your monthly donation" (`target=_blank rel="noopener noreferrer"`) sits directly under the frequency fieldset and is always visible.
 - `p.tz-donate__manage-note`: "Already giving monthly through PayPal? Change or cancel it in your PayPal account." Style: 1.4 rem Montserrat 700, dark blue, underlined; turquoise on hover.
 
-- [ ] **Step 1: Write `e2e/donate.spec.ts`** (FAIL first). On `/donate/`, after the island mounts, the link has that `href` and `target`, and the existing donate form labels are unchanged (amount buttons $100 / $150 / $300 / $600, "How often would you like to donate?").
-- [ ] **Step 2: Implement.** `npm run check` is green. Donate is the intentional visual-diff exception: note the diff region in the PR.
-- [ ] **Step 3: Commit / PR / merge / checkpoint** (`structure/10-donate-manage`).
+- [x] **Step 1: Write `e2e/donate.spec.ts`** (FAIL first). On `/donate/`, after the island mounts, the link has that `href` and `target`, and the existing donate form labels are unchanged (amount buttons $100 / $150 / $300 / $600, "How often would you like to donate?").
+- [x] **Step 2: Implement.** `npm run check` is green. Donate is the intentional visual-diff exception: note the diff region in the PR.
+- [x] **Step 3: Commit / PR / merge / checkpoint** (`structure/10-donate-manage`).
 
 ---
 
@@ -665,7 +665,7 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
 **Files:**
 - Modify: `README.md` (Switch day section), `PROJECT_MEMORY.md` (Status, decisions), `ROLLBACK.md` (live-service rows confirmed), `docs/superpowers/plans/2026-11-06-site-structure.md` (tick boxes)
 
-- [ ] **Step 1: Write the switch-day steps** into README → "Switch day", each with its undo, all **owner go-ahead only**:
+- [x] **Step 1: Write the switch-day steps** into README → "Switch day", each with its undo, all **owner go-ahead only**:
   1. **Database:** note the D1 Time Travel bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then `npm run db:migrate:remote` (0002).
   2. **Resend:** `node scripts/setup-resend.mjs` creates "Event announcements"; then `npx wrangler secret put RESEND_EVENTS_TOPIC_ID`.
   3. **Worker:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; smoke-test `/health`, the RSVP preflight and availability.
@@ -676,7 +676,7 @@ Grid: 3 columns ≥1024 px, 2 ≥600 px, 1 below; the gap is 24 px. Images are s
      - `/resources/page/*`, `/category/uncategorized/*` and `/author/esti-wolo/*` → `/articles/`;
      - `/about/` → `/about-us/`.
   6. **Calendar:** set the `GOOGLE_CALENDAR_ICAL_URL` variable (docs/EVENT_CALENDAR.md).
-- [ ] **Step 2: Final verification on `main`.**
+- [x] **Step 2: Final verification on `main`.**
   - `npm run check`;
   - `node scripts/check-csp.mjs`;
   - masked visual diff of every pre-existing page against the `checkpoint-001` build;

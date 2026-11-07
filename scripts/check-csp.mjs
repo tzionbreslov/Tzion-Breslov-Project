@@ -11,7 +11,7 @@
 //   always-pass test key). The production key only allows tzionbreslov.org +
 //   www, so on localhost no token is issued and no API request is ever sent.
 //
-// Live (switch day, README step 4): checks a deployed site as served by Cloudflare.
+// Live (README → Switch day, step 11): checks a deployed site as served by Cloudflare.
 //   node scripts/check-csp.mjs https://tzionbreslov.org
 import { spawn } from "node:child_process";
 import fs from "node:fs";

@@ -40,11 +40,15 @@ request → **Revert**), which opens a new pull request.
 
 ## Live services (outside GitHub)
 
-These are only changed with the owner's go-ahead, and each change records its undo first:
+These are only changed with the owner's go-ahead, and each change records its undo first, in the pull request. The
+switch-day steps and the exact commands for each undo are in [README.md](README.md) → Switch day.
 
 | Service | Before the change | To roll back |
 |---|---|---|
-| Forms Worker `tzion-breslov-api` | `npx wrangler deployments list` (note the current version) | `npx wrangler rollback <version-id>` |
-| D1 database `tzion-breslov-production` | `npx wrangler d1 time-travel info tzion-breslov-production` (note the bookmark) | `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>` (any minute in the last 30 days) |
-| Cloudflare DNS / redirect rules | export the records or rule (dashboard or API) into the pull request | re-create the exported records / rule |
-| Resend lists | nothing to save: changes are additive | delete the added topic |
+| Forms Worker `tzion-breslov-api` | `npx wrangler deployments list` (note the newest version id) | If the site's forms are on (switch day, step 10), turn them off first and wait for that deploy: the old Worker would confirm every signup into the Newsletter and refuse RSVPs. Then `npx wrangler rollback <version-id>`. After the RSVP release (switch day, step 4), also run its events-only `DELETE FROM subscription_confirmations …` at once, and check the Worker's logging setting against the one recorded before. |
+| Worker secrets | nothing to save: the values live in `.env.worker` (and `TURNSTILE_SECRET_KEY` only in Cloudflare) | `npx wrangler secret delete <NAME>`, only after rolling back the code that needs it (step 3) |
+| D1 database `tzion-breslov-production` | `npx wrangler d1 time-travel info tzion-breslov-production` (note the bookmark) | a migration's own undo SQL (0002: switch day, step 2; loses only the RSVPs), or `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>` (the whole database: any minute in the last 30 days on Workers Paid, 7 on Workers Free) |
+| Cloudflare rules: Transform Rule "Tzion security headers", redirect rules | export the phase's rules with the API into the pull request (switch day, steps 5 and 6) | put the exported rule value back; delete the added redirect rules (browsers keep a 301 they already followed) |
+| Cloudflare DNS | export the zone's records with the API (BIND file) into the pull request (switch day, step 9) | in the order of switch day, step 9's undo: records DNS-only, re-create the exported 302 rule placed **first** (above the 301 rules), then restore the exported records. Only while tzionbreslov.com doesn't 301 to .org (step 9.6.2): after that, go-live is one-way. |
+| Resend lists | nothing to save: changes are additive | delete the added topic (and its line in `.env.worker`). Once people have confirmed a topic, deleting it drops their choice: keep it unless the owner decides otherwise, and save its subscriber list first. |
+| GitHub Actions variables | `gh variable list` | `gh variable delete <NAME>` (or set the old value), then re-run Deploy GitHub Pages. For `GOOGLE_CALENDAR_ICAL_URL`, also delete the `events-*` caches (switch day, step 8). |

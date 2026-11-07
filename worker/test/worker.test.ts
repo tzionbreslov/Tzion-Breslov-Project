@@ -303,7 +303,7 @@ describe("HTTP boundary", () => {
   });
 
   it("logs the switch-day probe (an unknown path) as one line with method and path, never its query string", async () => {
-    // README → Switch day, step 6.5: the stored line this request leaves in Workers Logs must hold only these fields,
+    // README → Switch day, step 4 (log-probe check): the stored line this request leaves in Workers Logs must hold only these fields,
     // so the probe string can only appear there if Cloudflare itself stored the request URL.
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const response = await fetchHandler(new Request("https://api.test/nope?probe=tzprobe-7k2q9x"), env);
