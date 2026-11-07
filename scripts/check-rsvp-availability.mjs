@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Switch-day smoke check for RSVPs (README → Switch day, step 6): the forms
+// Switch-day smoke check for RSVPs (README → Switch day, step 11): the forms
 // Worker must be able to read the site's /events.json and list, in
 // GET /v1/rsvp/availability, every upcoming event that takes RSVPs. A 200 alone
 // isn't enough: if the Worker skipped every event (worker/src/events.ts), it

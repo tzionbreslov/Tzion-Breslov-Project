@@ -40,11 +40,15 @@ request → **Revert**), which opens a new pull request.
 
 ## Live services (outside GitHub)
 
-These are only changed with the owner's go-ahead, and each change records its undo first:
+These are only changed with the owner's go-ahead, and each change records its undo first, in the pull request. The
+switch-day steps and the exact commands for each undo are in [README.md](README.md) → Switch day.
 
 | Service | Before the change | To roll back |
 |---|---|---|
-| Forms Worker `tzion-breslov-api` | `npx wrangler deployments list` (note the current version) | `npx wrangler rollback <version-id>` |
-| D1 database `tzion-breslov-production` | `npx wrangler d1 time-travel info tzion-breslov-production` (note the bookmark) | `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>` (any minute in the last 30 days) |
-| Cloudflare DNS / redirect rules | export the records or rule (dashboard or API) into the pull request | re-create the exported records / rule |
-| Resend lists | nothing to save: changes are additive | delete the added topic |
+| Forms Worker `tzion-breslov-api` | `npx wrangler deployments list` (note the newest version id) | `npx wrangler rollback <version-id>`. After the RSVP release (switch day, step 4), also run its events-only `DELETE FROM subscription_confirmations …` at once. |
+| Worker secrets | nothing to save: the values live in `.env.worker` (and `TURNSTILE_SECRET_KEY` only in Cloudflare) | `npx wrangler secret delete <NAME>`, only after rolling back the code that needs it (step 3) |
+| D1 database `tzion-breslov-production` | `npx wrangler d1 time-travel info tzion-breslov-production` (note the bookmark) | a migration's own undo SQL (0002: switch day, step 2; loses only the RSVPs), or `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>` (the whole database: any minute in the last 30 days on Workers Paid, 7 on Workers Free) |
+| Cloudflare rules: Transform Rule "Tzion security headers", redirect rules | export the phase's rules with the API into the pull request (switch day, steps 5 and 6) | put the exported rule value back; delete the added redirect rules (browsers keep a 301 they already followed) |
+| Cloudflare DNS | export the zone's records with the API (BIND file) into the pull request (switch day, step 9) | re-create the exported records (and the exported 302 rule) |
+| Resend lists | nothing to save: changes are additive | delete the added topic (and its line in `.env.worker`) |
+| GitHub Actions variables | `gh variable list` | `gh variable delete <NAME>` (or set the old value), then re-run Deploy GitHub Pages. For `GOOGLE_CALENDAR_ICAL_URL`, also delete the `events-*` caches (switch day, step 8). |

@@ -126,7 +126,8 @@ RSVPs until its new end; an event no longer listed keeps the end its RSVPs store
 has passed, normally within a day. If `/events.json` can't be read, it logs `RSVP_CLEANUP_FEED_UNAVAILABLE` and
 deletes no RSVP that day (Ruling R44). The copies already emailed to the organizer's inbox stay there.
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
-they go live on switch day (step 6 below, with each step's undo). Owner steps and details:
+they go live on switch day (Switch day below, steps 1–4, then step 10 turns the forms on; each step has its
+undo). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
 
 ## Instagram (switched off)
@@ -150,14 +151,16 @@ All public, build-time values:
 
 - `NEXT_PUBLIC_SITE_URL` — the site's public origin for canonical links, social cards, structured data, sitemaps and
   `robots.txt`. Unset = `https://tzionbreslov.com` (where WordPress still lives); set to `https://tzionbreslov.org` on
-  switch day.
-- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.org` once the Worker has its Resend secrets
-- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `0x4AAAAAAF1kfPJ0qES50FAh` (widget "Tzion Breslov forms", tzionbreslov.org + www)
+  switch day (step 9.3).
+- `NEXT_PUBLIC_API_BASE_URL` — `https://api.tzionbreslov.org`, set on switch day (step 10), after go-live
+- `NEXT_PUBLIC_TURNSTILE_SITE_KEY` — `0x4AAAAAAF1kfPJ0qES50FAh` (widget "Tzion Breslov forms", tzionbreslov.org + www), set
+  with the API address (step 10)
 - `NEXT_PUBLIC_PAYPAL_CLIENT_ID` — when PayPal checkout is wired
 - `GOOGLE_CALENDAR_ICAL_URL` — the Events calendar's public iCal address (`…/public/basic.ics`, docs/EVENT_CALENDAR.md);
   read by the deploy's calendar sync, not by the site itself
 
-Without the first two, the forms show a "temporarily unavailable — email us" message instead of failing silently.
+Unless both `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` are set, the forms show a "temporarily
+unavailable — email us" message instead of failing silently.
 Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. See `SECURITY.md`.
 
 ## Domains and Cloudflare
@@ -168,141 +171,511 @@ Worker secrets go in Cloudflare (`wrangler secret put …`), never in GitHub. Se
 | Piece | State |
 |---|---|
 | `tzionbreslov.org`, `www` | Proxied placeholder records (`192.0.2.1`, `100::`) + redirect rule **302** → `https://tzionbreslov.com` + same path. 302, not 301: a cached 301 would loop once .com later redirects to .org. |
-| Zone security | Always HTTPS, TLS ≥ 1.2, DNSSEC, SSL Full (strict) for the zone plus a Configuration Rule giving the two site hosts SSL **Full** (see switch day, step 3), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
+| Zone security | Always HTTPS, TLS ≥ 1.2, DNSSEC, SSL Full (strict) for the zone plus a Configuration Rule giving the two site hosts SSL **Full** (see switch day, step 9.4), security headers via Transform Rule (CSP **report-only**) — values from `config/security-headers.mjs` |
 | Email | `v=spf1 -all` + DMARC `p=reject` (nothing may send as @tzionbreslov.org; Resend's DKIM still aligns later). No MX: inbound mail is declined, so the Worker sets a Reply-To on its emails. |
 | Forms API | D1 `tzion-breslov-production` (schema applied), Turnstile widget (site key above). Worker `tzion-breslov-api` → `api.tzionbreslov.org` deploys with `npm run worker:deploy` |
 | GitHub Pages preview | `tzionbreslov.github.io/Tzion-Breslov-Project/` (canonical links still point at the real domain) |
 
-### Before switch day (any time, owner account)
+### Switch day
 
-**Verify the domain with GitHub first**, so nobody else's Pages site can ever claim it: owner profile → Settings → Pages →
-*Verified domains* → Add `tzionbreslov.org`, create the TXT record GitHub shows
-(`_github-pages-challenge-tzionbreslov.tzionbreslov.org`) in Cloudflare, wait until it resolves, click *Verify*. **Keep that
-TXT record forever** — removing it can drop the verification.
+Everything the new structure, the RSVPs and the forms need from the live services, in one ordered list. **Every step
+changes a live service and runs only with the owner's go-ahead, given for that step.** Before a step runs, its undo
+values (the Worker version, the D1 bookmark, the exported rules and records) go into the switch-day pull request
+(owner rule 2; ROLLBACK.md lists the same undos). Steps 1–8 can run before the domain switch, on different days if
+wanted. **Step 9 (go-live) happens only on the owner's word, after the conversation with the Rabbi**; steps 10 and 11
+follow it.
 
-### Switch day (.com → .org)
+**Running the commands**
 
-1. **GitHub (owner account):** repo Settings → Pages → custom domain `tzionbreslov.org` (only after the domain shows *Verified*).
-2. **GitHub variables:** `NEXT_PUBLIC_SITE_URL=https://tzionbreslov.org`; re-run *Deploy GitHub Pages*. (CI already builds
-   and checks this variant on every PR.)
-3. **Cloudflare DNS, in this order:**
-   1. Replace the placeholders with GitHub Pages records, **DNS-only**: apex `A` 185.199.108.153 / .109 / .110 / .111,
-      `AAAA` 2606:50c0:8000::153 / 8001::153 / 8002::153 / 8003::153, `www` CNAME `tzionbreslov.github.io`. (Change DNS
-      *before* touching the redirect rule — DNS-only traffic never hits it, while deleting it first would send visitors
-      to the placeholder address.)
-   2. When repo Settings → Pages shows the certificate, tick *Enforce HTTPS*, then **delete the 302 redirect rule** (it
-      must be gone before re-proxying, or it would loop once .com 301s to .org).
-   3. Switch the records to proxied. The Configuration Rule "tzion_github_pages_origin_ssl_full" (already created) makes
-      Cloudflare use SSL **Full** for the site hosts: GitHub reports proxied domains as not HTTPS-eligible and may fail
-      to renew its certificate, and under Full (strict) that would turn every page into a 526. Ruach Breslov runs the
-      same way. Do not put these hosts back on strict unless
-      `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate for
-      tzionbreslov.org with > 30 days left.
-   4. **Privacy check at the edge, right after proxying.** The privacy notice (`/privacy/`, `content/copy/en.json` `privacy`)
-      says the site sets no cookies of its own and uses no analytics or tracking. Some Cloudflare features would make
-      that untrue once the records are proxied:
-      - a `__cf_bm` cookie (Bot Fight Mode / bot management);
-      - the Web Analytics beacon (`static.cloudflareinsights.com`);
-      - Network Error Logging (`Nel` and `Report-To` headers, which make browsers send error reports to
-        `a.nel.cloudflare.com`; `.org` already sends them today);
-      - anything else Cloudflare injects under `/cdn-cgi/` (e.g. email address obfuscation).
+- Run them from the repository root, logged in as the owner: `npx wrangler login` (Cloudflare account
+  tzionbreslovproject@gmail.com) and `gh auth login` (GitHub).
+- Each command is one line that works as written, with its quotes, in bash and in PowerShell (Windows PowerShell 5.1
+  and PowerShell 7). Where a line differs between the shells, both are given.
+- In PowerShell, type `curl.exe`, never `curl`: in Windows PowerShell 5.1, plain `curl` is `Invoke-WebRequest`.
+- Replace each placeholder in angle brackets, brackets included (`<version-id>` becomes the id itself). `<` and `>`
+  are redirection in both shells.
+- D1 SQL runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
+  dashboard's D1 console). Every statement here holds only single quotes (no `"`, `$`, backtick or `!`), so it
+  reaches D1 unchanged inside `--command "…"`. Each one was rehearsed that way on a local D1 (`--local`) in bash,
+  PowerShell 7 and Windows PowerShell 5.1.
+- The Cloudflare exports in steps 5, 6 and 9 read the Cloudflare API with a **read-only** token. Create it under
+  dashboard → My Profile → API Tokens → Create Token → Custom token, for the zone tzionbreslov.org, with Zone · Single
+  Redirect · Read, Zone · Transform Rules · Read and Zone · DNS · Read.
+  - Keep it in the shell for the session only: `read -rs CF_READ_TOKEN` in bash, `$env:CF_READ_TOKEN = Read-Host`
+    in PowerShell.
+  - Don't name it `CLOUDFLARE_API_TOKEN`: wrangler would use that token instead of its login.
+  - The exports land in `.tmp/switch-day/` (git-ignored). They hold no secrets: copy each one into the switch-day
+    pull request.
 
-      Read the headers and the HTML the edge serves. Run each command as written, with the quotes.
-      - **bash:**
-        - `curl -sI "https://tzionbreslov.org/" | grep -iE "^(set-cookie|nel|report-to):"`
-        - `curl -s "https://tzionbreslov.org/contact/" | grep -oiE "cdn-cgi|cloudflareinsights"`
-      - **PowerShell:** use `curl.exe`, because in Windows PowerShell 5.1 plain `curl` is `Invoke-WebRequest`.
-        - `curl.exe -sI "https://tzionbreslov.org/" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
-        - `curl.exe -s "https://tzionbreslov.org/contact/" | Select-String -Pattern "cdn-cgi|cloudflareinsights"`
+#### 1. Pre-checks
 
-      Repeat with `https://www.tzionbreslov.org/`.
-      - **The check passes** when all four commands print nothing.
-      - **For each hit, choose one, with the owner's go-ahead:**
-        - turn the feature off (Security → Bots for Bot Fight Mode; Web Analytics for the beacon; Scrape Shield
-          for email obfuscation; the zone's Network Error Logging setting for `Nel`/`Report-To`), note its previous
-          value as the undo, and run the check again;
-        - or, if it stays on (or the plan can't turn it off), add a sentence about it to the notice and update its
-          `date` before the forms are turned on (launch checklist, step 3).
-      - This step changes nothing by itself: only the owner-approved setting change does.
-4. **Cloudflare 'Tzion security headers' rule must gain `https://www.google.com` in frame-src on switch day (owner
-   go-ahead)** — the Contact page's map; copy the policy from `config/security-headers.mjs` (`CSP_REPORT_ONLY` while
-   the header is still report-only). Undo: put back the rule's previous value.
-   **Verify live:** `node scripts/check-csp.mjs https://tzionbreslov.org` (and `https://www.tzionbreslov.org`) must report
-   zero violations; then rename the header to `Content-Security-Policy` with the value of `CSP` (it re-adds
-   `upgrade-insecure-requests`) and stage HSTS (short max-age first).
-5. **tzionbreslov.com:** once its DNS is on Cloudflare, 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT
-   mail records — and give it SPF + DMARC (it has neither today, at Wix DNS): start DMARC at `p=none` with a report
-   address, list every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
-   notifications? newsletters?), publish one SPF covering exactly those, then tighten DMARC to `quarantine`/`reject`.
-6. **RSVPs and "Event announcements" (Task 8, owner go-ahead), in this order.** Migration 0002 must come before the
-   deploy: the new Worker writes `subscription_confirmations.topics_json` and its daily cleanup deletes from `rsvps`.
-   SQL below runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
-   dashboard's D1 console). Every statement here holds only single quotes (no `"`, `$`, backtick or `!`), so it
-   reaches D1 unchanged inside `--command "…"` in bash and in PowerShell; each was rehearsed that way with `--local`.
-   1. **Any time before:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
-      `lib/events.mjs` and its `content/copy/en.json` import) and checks `wrangler.jsonc`; it changes nothing live.
-   2. **Topic:** `node scripts/setup-resend.mjs` (the full-access key in `.env.worker`) creates "Event announcements"
-      and writes `RESEND_EVENTS_TOPIC_ID` to `.env.worker`. *Undo:* delete the topic in Resend (Audience → Topics, or
-      `DELETE https://api.resend.com/topics/<id>`) and that line.
-   3. **Secret:** `npx wrangler secret put RESEND_EVENTS_TOPIC_ID` (9 secrets; `TURNSTILE_SECRET_KEY` stays only in
-      Cloudflare). *Undo (after step 5's undo):* `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
-   4. **Migration:** note a bookmark (`npx wrangler d1 time-travel info tzion-breslov-production`), then
-      `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
-      ignores it). Then check that D1 takes the cleanup's `UPDATE … FROM` (it changes no row):
-      `UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;`
-      must answer success. **If it errors, stop: don't run step 5.** Every daily clean-up would fail, including the
-      sign-up deletion the privacy notice promises. The fix is a follow-up pull request that rewrites the clean-up's
-      UPDATE as a correlated `SET event_ends_at = (SELECT …) WHERE event_id IN (SELECT …)`. *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
-      - losing only the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json;
-        DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (also drops the table's two indexes; every
-        other row stays; 0002 can be applied again later), or
-      - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
-        database and loses every contact, signup and RSVP row written since.
-   5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the var
-      `EVENTS_FEED_URL` ships with it, and so do **Workers Logs** (`observability` in `wrangler.jsonc`). With
-      **invocation logs off** (`"invocation_logs": false`; they would store every request's URL, confirmation tokens
-      included, its headers and the visitor's IP), Workers Logs are expected to keep only the Worker's own log lines
-      for up to 7 days (dashboard → the Worker → Logs): codes such as `RSVP_ORGANIZER_EMAIL_FAILED`,
-      `RSVP_CANCEL_FAILED`, `RSVP_CLEANUP_FEED_UNAVAILABLE` and `EVENTS_FEED_EVENT_SKIPPED`, method and path (never the
-      query string), request or correlation ids; no personal data. Cloudflare's docs don't say whether a stored line
-      still carries request fields with invocation logs off, so this is confirmed by the check below.
-      `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.
-      **Expected until the DNS switch:** tzionbreslov.org still answers `/events.json` with a 302, so from this deploy
-      until the site is live there, the daily clean-up logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes no
-      RSVP (none can be made yet). The other clean-ups run as usual, and the line stops once the site is live.
-      **Check at once, before step 6 turns the forms on:**
-      - **Force a stored line** (on a healthy deploy the Worker only logs failures). Pick a probe of letters, digits and
-        hyphens that appears nowhere else, e.g. `tzprobe-7k2q9x`, and run, with the quotes:
-        `curl -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in bash, or
-        `curl.exe -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in PowerShell (in Windows PowerShell
-        5.1, plain `curl` is `Invoke-WebRequest`). The answer is a 404,
-        `{"ok":false,"error":"NOT_FOUND","correlationId":"<id>"}`, and the Worker logs exactly one line:
-        `{"correlationId":"<id>","method":"GET","path":"/nope","error":"NOT_FOUND"}`.
-      - **Open it:** Workers & Pages → tzion-breslov-api → Logs, search for that `<id>`, open the event and expand the
-        full event, not just the message column.
-      - **The check fails** if any of these appear: the probe string anywhere; any URL, path or trigger field besides
-        the Worker's own four (`correlationId`, `method`, `path`, `error`, also shown parsed as fields), e.g.
-        `$workers.event.request.url` or `$workers.event.request.path`; any request header (e.g. `cf-connecting-ip`,
-        `user-agent`); any `cf` request data (e.g. colo, country, city, ASN). Cloudflare's own bookkeeping
-        (timestamp, level, Worker name and version, outcome, ids) is fine. Both tests count: with query strings
-        redacted, a stored URL would no longer hold the probe.
-      - **If it fails:** change that line of `wrangler.jsonc` to `"observability": { "enabled": false },` and run
-        `npm run worker:deploy` again straight away. Not `wrangler rollback`: that would take back the whole RSVP
-        release. From then on, diagnose live with `npx wrangler tail`. Delete the stored test lines if the dashboard
-        allows it; otherwise they expire within 7 days. Record the change in its own pull request. The owner may later
-        choose a Tail Worker that strips those fields, or sampling, instead.
+*Changes:* nothing. The check in 1.5 runs a statement on the live D1 that writes no row, so it still waits for the
+owner's go-ahead.
 
-      *Undo (the whole release):* `npx wrangler rollback <version>`, then at once
-      `DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');` — the
-      previous Worker confirms every signup into the Newsletter, so an events-only signup still pending (24 h) would
-      land on a list its visitor never chose. Those visitors sign up again; a pending signup for both lists keeps the
-      Newsletter.
-   6. **After the switch:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK": every upcoming event
-      that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
-      `https://api.tzionbreslov.org/v1/rsvp/availability` (a 200 alone isn't enough: with every event skipped it would
-      list none). It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect), and exits
-      with 2 when no upcoming event takes RSVPs (add one to the calendar, redeploy, check again). Then turn the site's
-      forms on (launch checklist, step 3).
+1. **Bundle check:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
+   `lib/events.mjs` and its `content/copy/en.json` import) and checks `wrangler.jsonc`. It uploads nothing.
+   *Verify:* it lists the bindings (D1 `DB` and seven variables, `EVENTS_FEED_URL` among them) and ends with
+   `--dry-run: exiting now.`
+2. **Worker version:** `npx wrangler deployments list`. Record the newest version id in the pull request ("before
+   switch day").
+3. **D1 bookmark:** `npx wrangler d1 time-travel info tzion-breslov-production`. Record the bookmark it prints.
+   Time Travel restores any minute of the last 30 days on the Workers Paid plan, or 7 days on Workers Free. The
+   repository doesn't record the account's plan, so count on 7.
+4. **Migrations:** `npx wrangler d1 migrations list tzion-breslov-production --remote` must list
+   `0002_rsvps_and_topics.sql` as the only migration to apply. **If `0001_initial.sql` is listed too, stop.**
+   0001 was applied through the API and recorded in `d1_migrations` by hand (PROJECT_MEMORY.md), and running it again
+   would fail on tables that already exist.
+5. **`UPDATE … FROM` check:** the daily clean-up's RSVP step uses `UPDATE … FROM` (SQLite 3.33+). Check that D1
+   takes it, on a table that exists since 0001. `json_each('{}')` has no rows, so it changes no row:
+   `npx wrangler d1 execute tzion-breslov-production --remote --command "UPDATE subscription_confirmations SET used_at = feed.value FROM json_each('{}') AS feed WHERE subscription_confirmations.id = feed.key;"`
+   - It must answer `"success": true`.
+   - **If it errors, stop: run none of the steps below.** Every daily clean-up would fail, including the sign-up
+     deletion the privacy notice promises.
+   - The fix is a follow-up pull request that rewrites the clean-up's UPDATE as a correlated
+     `SET event_ends_at = (SELECT …) WHERE event_id IN (SELECT …)`.
+   - Step 2 repeats the check on `rsvps` itself. That table only exists after migration 0002, so the same check on
+     `rsvps` can't run here: it fails with "no such table: rsvps".
+
+*Undo:* nothing to undo.
+
+#### 2. D1: migration 0002
+
+*Changes:* the live database gains the table `rsvps` (with two indexes) and the column
+`subscription_confirmations.topics_json` (default `'["newsletter"]'`). The migration is additive, and the running
+Worker ignores it. It must come before step 4: the new Worker writes `topics_json`, and its daily clean-up deletes
+from `rsvps`. *Owner's go-ahead.*
+
+1. If step 1 was on another day, record a fresh bookmark: `npx wrangler d1 time-travel info tzion-breslov-production`.
+2. `npm run db:migrate:remote` (that is `wrangler d1 migrations apply tzion-breslov-production --remote`). It shows
+   0002 and asks to confirm.
+
+*Verify:*
+- `npx wrangler d1 migrations list tzion-breslov-production --remote` has no migration left to apply.
+- Then the gate for step 4, on the real table:
+  `npx wrangler d1 execute tzion-breslov-production --remote --command "UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;"`
+  must answer `"success": true`. **If it errors, stop: don't run step 4**, and undo this step.
+
+*Undo (if step 4 ran, only after its undo, including its DELETE, which needs `topics_json`), either:*
+- losing only the RSVPs:
+  `npx wrangler d1 execute tzion-breslov-production --remote --command "DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json; DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';"`
+  This also drops the table's two indexes. Every other row stays, and 0002 can be applied again later.
+- or `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`. This restores the whole
+  database to the bookmark and loses every contact, signup and RSVP row written since.
+
+#### 3. Resend: the "Event announcements" list
+
+*Changes:*
+- Resend gains the topic "Event announcements". Its default is opt-out, so nobody is on it until they confirm, and
+  that can't be changed later.
+- `.env.worker` gains `RESEND_EVENTS_TOPIC_ID`.
+- The Worker gets it as its 9th secret. `wrangler secret put` deploys a new Worker version at once: today's code
+  plus the secret, which that code ignores.
+
+*Owner's go-ahead.*
+
+1. `node scripts/setup-resend.mjs` (it uses the full-access key `RESEND_CONTACTS_API_KEY` in `.env.worker`, and
+   re-running it reuses what exists). Expected output:
+   - `domain tzionbreslov.org: verified (… DNS records → .tmp/resend-dns.json)`
+   - `topic "Newsletter": 934b4bcd-a4a7-43ce-9310-8fac1cc4541c` (reused)
+   - `topic "Event announcements": <topic-id>`, the only new thing in Resend
+   - `webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677 already exists; secret already saved`
+   - `RESEND_TRANSACTIONAL_API_KEY already set; left unchanged`
+   - a last line where every value reads `=set`
+
+   A `webhook created` or `send-only key created` line is an unplanned live change. Stop and tell the owner. The undo
+   is to delete that webhook, or revoke that key, in Resend.
+2. `npx wrangler secret put RESEND_EVENTS_TOPIC_ID`, and paste the `<topic-id>` from step 3.1 when it asks.
+
+*Verify:*
+- `npx wrangler secret list` shows nine names, `RESEND_EVENTS_TOPIC_ID` among them.
+- `TURNSTILE_SECRET_KEY` exists **only** in Cloudflare. Never put it in `.env.worker`, or a `--secrets-file` upload
+  would overwrite it.
+- In Resend → Audience → Topics, "Event announcements" is listed.
+
+*Undo (if step 4 ran, only after its undo; the new Worker needs both):*
+- `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
+- Delete the topic in Resend: Audience → Topics, or `DELETE https://api.resend.com/topics/<topic-id>` with the
+  full-access key.
+- Remove the `RESEND_EVENTS_TOPIC_ID=` line from `.env.worker`.
+
+#### 4. Worker deploy: RSVPs, announcements, Workers Logs
+
+*Changes:* the forms Worker `tzion-breslov-api` gains:
+- `POST /v1/rsvp` and `GET /v1/rsvp/availability`;
+- lists (`topics`) on `/v1/subscribe`;
+- the RSVP clean-up in its daily cron (03:17 UTC);
+- the variable `EVENTS_FEED_URL`;
+- **Workers Logs** (`observability` in `wrangler.jsonc`).
+
+The site's forms stay off until step 10, so no visitor reaches the new routes yet. *Owner's go-ahead.*
+
+**Before:** `npx wrangler deployments list`. Record the newest version id in the pull request: the version step 3
+made, today's code with the new secret. This is the rollback target. The deploy needs migration 0002 (step 2) and the
+secret (step 3) first. Deployed earlier, it would break the newsletter signup and the daily clean-up. Because
+`secrets.required` lists the secret in `wrangler.jsonc`, wrangler refuses to deploy while `RESEND_EVENTS_TOPIC_ID` is
+missing.
+
+**Deploy:** `npm run worker:deploy`. The variable `EVENTS_FEED_URL` ships with it, and so do Workers Logs:
+- **Invocation logs stay off** (`"invocation_logs": false`). They would store every request's URL (confirmation
+  tokens included), its headers and the visitor's IP.
+- So Workers Logs are expected to keep only the Worker's own log lines, for up to 7 days (3 days on Workers Free
+  until December 1, 2026), under dashboard → Workers & Pages → tzion-breslov-api → **Observability**.
+- Those lines are codes such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED`, `RSVP_CLEANUP_FEED_UNAVAILABLE`
+  and `EVENTS_FEED_EVENT_SKIPPED`, plus the method and path (never the query string) and request or correlation ids.
+  They hold no personal data.
+- Cloudflare's own fields in a stored event are `$`-prefixed (e.g. `$workers.event.request.url`, `$metadata.…`). The
+  Worker's own fields are not (`correlationId`, `method`, `path`, `error`, `code`).
+- Cloudflare's docs don't say whether a stored line still carries request fields with invocation logs off. The probe
+  below confirms it.
+- `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.
+
+**Smoke tests, right after the deploy** (in PowerShell, `curl.exe` with the same arguments):
+- **Health:** `curl -s "https://api.tzionbreslov.org/health"` → `{"ok":true}` (it reads D1). It answers GET only:
+  a HEAD (`curl -I`) gets a 404 by design.
+- **RSVP preflight:**
+  `curl -si -X OPTIONS "https://api.tzionbreslov.org/v1/rsvp" -H "Origin: https://tzionbreslov.org" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type"`
+  → status 204, `Access-Control-Allow-Origin: https://tzionbreslov.org`, `Access-Control-Allow-Methods: POST, OPTIONS`.
+  - Before the deploy, the same request answers 404, because the old Worker has no `/v1/rsvp`. So a 204 proves the
+    new code is live.
+  - With `-H "Origin: https://example.com"` instead, it answers 403 `ORIGIN_NOT_ALLOWED`.
+- **Availability:** `curl -s "https://api.tzionbreslov.org/v1/rsvp/availability"` →
+  `{"ok":false,"error":"EVENTS_UNAVAILABLE","correlationId":"…"}` (503) **until go-live**. The Worker reads
+  `https://tzionbreslov.org/events.json` without following redirects, and .org still answers it with a 302 to .com.
+  After step 9 it answers 200 `{"ok":true,"events":{…}}` (step 11).
+
+**Expected until go-live (step 9):** from this deploy until the site is live on tzionbreslov.org, the daily clean-up
+logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes no RSVP (none can be made yet). The other clean-ups run as
+usual, and the line stops once the site is live (step 11).
+
+**Log-probe check, at once, before step 10 turns the forms on:**
+- **Force a stored line.** On a healthy deploy the Worker only logs failures. Pick a probe of letters, digits and
+  hyphens that appears nowhere else, e.g. `tzprobe-7k2q9x`, and run, with the quotes:
+  `curl -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in bash, or
+  `curl.exe -s "https://api.tzionbreslov.org/nope?probe=tzprobe-7k2q9x"` in PowerShell.
+  - The answer is a 404, `{"ok":false,"error":"NOT_FOUND","correlationId":"<id>"}`.
+  - The Worker logs exactly one line:
+    `{"correlationId":"<id>","method":"GET","path":"/nope","error":"NOT_FOUND"}`.
+- **Open it:** Workers & Pages → tzion-breslov-api → Observability. Search for that `<id>`, open the event and
+  expand the full event, not just the message column.
+- **The check fails** if any of these appear:
+  - the probe string anywhere;
+  - any URL, path or trigger field besides the Worker's own four (`correlationId`, `method`, `path`, `error`, also
+    shown parsed as fields), e.g. `$workers.event.request.url` or `$workers.event.request.path`;
+  - any request header (e.g. `cf-connecting-ip`, `user-agent`);
+  - any `cf` request data (e.g. colo, country, city, ASN).
+
+  Cloudflare's own bookkeeping is fine: timestamp, level, Worker name and version, outcome, ids. Both tests count:
+  with query strings redacted, a stored URL would no longer hold the probe.
+- **If it fails:**
+  1. Change that line of `wrangler.jsonc` to `"observability": { "enabled": false },` and run
+     `npm run worker:deploy` again straight away. Not `wrangler rollback`: that would take back the whole RSVP
+     release.
+  2. From then on, diagnose live with `npx wrangler tail`.
+  3. Delete the stored test lines if the dashboard allows it; otherwise they expire within 7 days.
+  4. Record the change in its own pull request. The owner may later choose a Tail Worker that strips those fields,
+     or sampling, instead.
+
+*Undo (the whole release):* `npx wrangler rollback <version-id>` (the version recorded above). Then, at once:
+`npx wrangler d1 execute tzion-breslov-production --remote --command "DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');"`
+- Why the DELETE: the previous Worker confirms every signup into the Newsletter, so an events-only signup still
+  pending (24 h) would land on a list its visitor never chose. Those visitors sign up again.
+- A pending signup for both lists keeps the Newsletter.
+- After that, undo steps 3 and 2 if wanted, in that order.
+
+#### 5. Cloudflare "Tzion security headers" rule: the CSP
+
+*Changes:* the zone's response-header Transform Rule "Tzion security headers" (`tzion_security_headers`). Its
+`Content-Security-Policy-Report-Only` value becomes `CSP_REPORT_ONLY` from `config/security-headers.mjs`:
+- frame-src **gains `https://www.google.com`** (the Contact page's map);
+- frame-src **loses `https://www.youtube.com`** (no plain YouTube embed remains; the Classes player uses
+  youtube-nocookie);
+- nothing else changes.
+
+While the header is report-only, browsers block nothing either way. *Owner's go-ahead.*
+
+1. **Export the rule first**, and copy the file into the pull request:
+   - bash: `curl -s --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
+   - PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+2. Print the new value: `node -e "import('./config/security-headers.mjs').then(m => console.log(m.CSP_REPORT_ONLY))"`.
+3. Dashboard → tzionbreslov.org → Rules → Transform Rules → response header rules → edit "Tzion security headers" →
+   replace the value of `Content-Security-Policy-Report-Only` with that line → Save.
+
+*Verify:* the rule already applies to .org's 302 today, so the new value shows at once:
+- bash: `curl -sI "https://tzionbreslov.org/" | grep -i "^content-security-policy"`
+- PowerShell: `curl.exe -sI "https://tzionbreslov.org/" | Select-String -Pattern "^content-security-policy"`
+
+It must read `frame-src https://www.youtube-nocookie.com https://challenges.cloudflare.com https://www.google.com`.
+After go-live, step 11 runs the live CSP check.
+
+*Later, separately (owner's go-ahead, not on switch day):* once the live check passes,
+1. rename the header to `Content-Security-Policy` with the value of `CSP` (it re-adds `upgrade-insecure-requests`);
+2. stage HSTS (short max-age first).
+
+Export the rule before each of these changes too.
+
+*Undo:* put the exported value back in the same rule (it is the `Content-Security-Policy-Report-Only` value in
+`.tmp/switch-day/transform-rules-before.json`).
+
+#### 6. Redirect rules for the removed addresses (301)
+
+*Changes:* three Single Redirect rules on the zone. Each is a static 301 that sends a removed address to its new
+home. *Owner's go-ahead.*
+- **They go below the existing 302 rule `tzion_org_to_com_temporary`.** Cloudflare uses the first redirect rule that
+  matches, so the new rules don't fire until step 9 deletes the 302.
+  - Above it, `/resources/` would get a 301, which browsers cache for good, to `/classes/`. The 302 would then send
+    that to .com, where the page doesn't exist.
+- Single Redirects only act on proxied traffic, so the rules take effect when step 9 proxies the records again.
+- The zone's quota is 10 Single Redirect rules on the Free plan (wildcards yes, regular expressions no). With the
+  302, this makes 4.
+
+1. **Export the redirect rules first**, and copy the file into the pull request:
+   - bash: `curl -s --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
+   - PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+2. Create the rules in this order. For each: dashboard → tzionbreslov.org → Rules → Redirect Rules → Create rule →
+   Custom filter expression → Edit expression. Then set: Static, the URL, status code **301**, Preserve query string
+   off, Place at **Last**.
+
+   | Rule name | Expression | URL |
+   |---|---|---|
+   | `tzion_removed_archives_to_articles` | `(http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo/*")` | `https://tzionbreslov.org/articles/` |
+   | `tzion_removed_resources_to_classes` | `(http.request.uri.path eq "/resources/") or (http.request.uri.path wildcard "/video/*")` | `https://tzionbreslov.org/classes/` |
+   | `tzion_removed_about_to_about_us` | `(http.request.uri.path eq "/about/")` | `https://tzionbreslov.org/about-us/` |
+
+   `*` also matches nothing, so `/video/*` covers `/video/video-1/` and `/category/uncategorized/*` covers
+   `/category/uncategorized/` itself. The archives rule comes first, so `/resources/page/2/` can never meet the
+   Classes rule.
+
+*Verify:*
+- **Now:** the dashboard lists the three rules after `tzion_org_to_com_temporary`.
+- **Now:** `curl -sI "https://tzionbreslov.org/resources/"` still answers 302 → `https://tzionbreslov.com/resources/`,
+  because the 302 rule wins.
+- **After step 9:** each address answers 301 with the right `location` (step 11):
+
+  | Address | `location` |
+  |---|---|
+  | `/resources/` | `/classes/` |
+  | `/video/video-1/` | `/classes/` |
+  | `/resources/page/2/` | `/articles/` |
+  | `/category/uncategorized/` | `/articles/` |
+  | `/author/esti-wolo/page/2/` | `/articles/` |
+  | `/about/` | `/about-us/` |
+
+  Test each with `curl -sI "https://tzionbreslov.org/resources/"`, swapping in the address.
+
+*Undo:* delete the three rules (the export shows what was there before). Browsers keep a 301 they already followed,
+so the undo is only complete before go-live.
+
+#### 7. Privacy check at the Cloudflare edge
+
+*Changes:* nothing by itself. Only a setting change the owner approves changes anything.
+
+The privacy notice (`/privacy/`, `content/copy/en.json` `privacy`) says the site sets no cookies of its own and uses no
+analytics or tracking. Some Cloudflare features would make that untrue once the records are proxied:
+- a `__cf_bm` cookie (Bot Fight Mode / bot management);
+- the Web Analytics beacon (`static.cloudflareinsights.com`);
+- Network Error Logging: `Nel` and `Report-To` headers, which make browsers send error reports to
+  `a.nel.cloudflare.com`;
+- anything else Cloudflare injects under `/cdn-cgi/` (e.g. email address obfuscation).
+
+**Today (seen 2026-11-07), tzionbreslov.org and api.tzionbreslov.org already send `Nel` and `Report-To`, so this
+check fails now.** The owner chooses, before step 10 turns the forms on:
+- **Turn NEL off** in the zone's Network Error Logging setting, recording its previous value as the undo. Cloudflare's
+  docs don't describe that switch, so it may not exist on this plan. If not, take the second option.
+- **Or keep it** and disclose it: a sentence about it in the notice (`content/copy/en.json` `privacy`, in its own
+  pull request), with the notice's `date` updated.
+
+**Headers (any time; run each command as written, with the quotes):**
+- bash:
+  - `curl -sI "https://tzionbreslov.org/" | grep -iE "^(set-cookie|nel|report-to):"`
+  - `curl -sI "https://www.tzionbreslov.org/" | grep -iE "^(set-cookie|nel|report-to):"`
+  - `curl -si "https://api.tzionbreslov.org/health" | grep -iE "^(set-cookie|nel|report-to):"`
+- PowerShell:
+  - `curl.exe -sI "https://tzionbreslov.org/" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
+  - `curl.exe -sI "https://www.tzionbreslov.org/" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
+  - `curl.exe -si "https://api.tzionbreslov.org/health" | Select-String -Pattern "^(set-cookie|nel|report-to):"`
+
+**The pages' HTML (only after step 9 proxies the site; until then the hosts only answer with a 302):**
+- bash: `curl -s "https://tzionbreslov.org/contact/" | grep -oiE "cdn-cgi|cloudflareinsights"`
+- PowerShell: `curl.exe -s "https://tzionbreslov.org/contact/" | Select-String -Pattern "cdn-cgi|cloudflareinsights"`
+- Repeat both with `https://www.tzionbreslov.org/contact/`.
+
+*Verify:* the check passes when every command prints nothing.
+
+For each hit, choose one, with the owner's go-ahead:
+- turn the feature off (Security → Bots for Bot Fight Mode; Web Analytics for the beacon; Scrape Shield for email
+  obfuscation; the NEL setting above), record its previous value as the undo, and run the check again;
+- or, if it stays on (or the plan can't turn it off), add a sentence about it to the notice and update its `date`
+  before step 10.
+
+*Undo:* put back the recorded previous value of any setting changed here.
+
+#### 8. Calendar: the Events page's Google Calendar
+
+*Changes:* every deploy, and the rebuilds around 07:00 and 21:00 Israel time, read the calendar's public iCal address
+into `/events/` and `/events.json`. That happens on the github.io preview now, and on tzionbreslov.org after step 9.
+The owner first creates the calendar ([docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md), one-time owner setup, steps
+1–5). *Owner's go-ahead.*
+
+1. `gh variable set GOOGLE_CALENDAR_ICAL_URL --body "<public-ical-address>"`. Use the calendar's **public** address
+   ending in `/public/basic.ics`, never the secret address.
+2. `gh workflow run deploy-github-pages.yml --ref main`.
+
+*Verify:*
+- In the run (Actions → Deploy GitHub Pages), "Refresh calendar events" no longer says the variable is not set.
+- The preview's `/events/` lists the calendar's events.
+- For step 11, at least one upcoming event must take RSVPs, i.e. have no "No RSVP" line.
+
+*Undo:* the deploy carries the last list in the Actions cache, so deleting the variable alone would keep the old
+events on the page.
+1. `gh variable delete GOOGLE_CALENDAR_ICAL_URL`
+2. `gh cache list --key events-`, then `gh cache delete <cache-key>` for each key it lists.
+3. `gh workflow run deploy-github-pages.yml --ref main`. The page says "No events are currently scheduled" again.
+
+#### 9. Go-live: tzionbreslov.org (only on the owner's word)
+
+*Changes:* tzionbreslov.org stops redirecting to the WordPress site on tzionbreslov.com and serves this site from
+GitHub Pages through Cloudflare. Canonical links, sitemaps and structured data switch to .org. tzionbreslov.com stays
+WordPress until 9.6. **Only when the owner says so, after the conversation with the Rabbi.** Do 9.2–9.5 in one
+sitting: once Pages has the custom domain, the github.io preview forwards to tzionbreslov.org, which until 9.4 still
+redirects to .com.
+
+**Before:** export the zone's DNS records (a BIND file), and keep step 6's redirect-rule export, which holds the 302
+rule. Copy both into the pull request.
+- bash: `curl -s --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $CF_READ_TOKEN"`
+- PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+
+1. **Days before (owner account): verify the domain with GitHub**, so nobody else's Pages site can ever claim it.
+   1. Owner profile → Settings → Pages → *Verified domains* → Add `tzionbreslov.org`.
+   2. Create the TXT record GitHub shows (`_github-pages-challenge-tzionbreslov.tzionbreslov.org`) in Cloudflare.
+   3. Wait until it resolves, then click *Verify*.
+
+   **Keep that TXT record forever**: removing it can drop the verification.
+2. **GitHub Pages (owner account):** repo Settings → Pages → custom domain `tzionbreslov.org`, only after the domain
+   shows *Verified*. From then on the deploy's base path is empty instead of `/Tzion-Breslov-Project`.
+3. **Site URL:** `gh variable set NEXT_PUBLIC_SITE_URL --body "https://tzionbreslov.org"`, then
+   `gh workflow run deploy-github-pages.yml --ref main`. CI already builds and checks this variant on every PR.
+4. **Cloudflare DNS, in this order:**
+   1. Replace the placeholders with GitHub Pages records, **DNS-only**:
+      - apex `A` 185.199.108.153 / .109 / .110 / .111;
+      - apex `AAAA` 2606:50c0:8000::153 / 8001::153 / 8002::153 / 8003::153;
+      - `www` CNAME `tzionbreslov.github.io`.
+
+      Change DNS *before* touching the redirect rule: DNS-only traffic never hits it, while deleting it first would
+      send visitors to the placeholder address.
+   2. When repo Settings → Pages shows the certificate, tick *Enforce HTTPS*. Then **delete the 302 redirect rule**
+      `tzion_org_to_com_temporary`. It must be gone before re-proxying, or it would loop once .com 301s to .org.
+      Step 6's 301 rules are now first in line.
+   3. Switch the records to proxied.
+      - The Configuration Rule "tzion_github_pages_origin_ssl_full" (already created) makes Cloudflare use SSL
+        **Full** for the site hosts. GitHub reports proxied domains as not HTTPS-eligible and may fail to renew its
+        certificate, and under Full (strict) that would turn every page into a 526. Ruach Breslov runs the same way.
+      - Do not put these hosts back on strict unless
+        `gh api repos/tzionbreslov/Tzion-Breslov-Project/pages --jq .https_certificate` shows a valid certificate
+        for tzionbreslov.org with > 30 days left.
+5. **Privacy check at the edge, right after proxying:** run step 7 again, now with the HTML commands. Don't go on
+   to step 10 until it passes, or until the owner's choice for each hit is done.
+6. **tzionbreslov.com, later, once its DNS is on Cloudflare:**
+   - 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT mail records.
+   - Give it SPF + DMARC; it has neither today, at Wix DNS.
+     1. Start DMARC at `p=none` with a report address.
+     2. List every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
+        notifications? newsletters?).
+     3. Publish one SPF covering exactly those.
+     4. Then tighten DMARC to `quarantine`/`reject`.
+
+*Verify:* step 11.
+
+*Undo, in reverse order:*
+1. Set the records back to the exported placeholders (proxied).
+2. Re-create the 302 rule from the export, so .org goes back to WordPress.
+3. Remove the custom domain in Settings → Pages.
+4. `gh variable delete NEXT_PUBLIC_SITE_URL`, then `gh workflow run deploy-github-pages.yml --ref main`.
+
+Browsers keep the 301s they followed from step 6. Those land on .org pages, which then 302 to .com, where they
+don't exist.
+
+*Open questions (the repository doesn't describe these):*
+- how and when tzionbreslov.com's DNS moves from Wix to Cloudflare, and from which account;
+- which services send mail as @tzionbreslov.com;
+- what happens to the WordPress hosting once .com redirects;
+- whether the zone's plan offers a Network Error Logging switch (step 7).
+
+#### 10. Forms on
+
+*Changes:* four forms start sending to the Worker, with Turnstile:
+- the contact form;
+- the footer newsletter signup;
+- the Events page's RSVP buttons;
+- "Get event announcements".
+
+**How the code decides:** it is decided at build time from two repository variables that the deploy's Build step
+passes in (`lib/client/config.ts`).
+- A form is live only when **both** `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` are set
+  (`lib/client/forms.ts`, `rsvp.ts`, `announcements.ts`).
+- With either one missing, the forms show "temporarily unavailable — email us" (RSVPs: "RSVPs open when the new site
+  launches…").
+- Without the API address, the Events page doesn't ask for availability, and the confirm-subscription page says
+  signups are unavailable.
+
+**Only after step 9:**
+- the Worker accepts `https://tzionbreslov.org` (+www) only, and the Turnstile widget only runs on those hostnames,
+  so on github.io the forms would break on the only live copy;
+- after the privacy check passes, or the owner's NEL choice is in the notice (steps 7 and 9.5);
+- after the owner has approved the privacy notice.
+
+*Owner's go-ahead.*
+
+1. `gh variable set NEXT_PUBLIC_API_BASE_URL --body "https://api.tzionbreslov.org"`
+2. `gh variable set NEXT_PUBLIC_TURNSTILE_SITE_KEY --body "0x4AAAAAAF1kfPJ0qES50FAh"` (the widget "Tzion Breslov
+   forms": tzionbreslov.org + www)
+3. `gh workflow run deploy-github-pages.yml --ref main`
+
+*Verify:*
+- `/contact/` shows the Turnstile check under the form.
+- Step 11's test sign-ups go through.
+
+*Undo:* the forms go back to "temporarily unavailable".
+1. `gh variable delete NEXT_PUBLIC_API_BASE_URL`
+2. `gh variable delete NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+3. `gh workflow run deploy-github-pages.yml --ref main`
+
+#### 11. After the switch: smoke test
+
+*Changes:* nothing, except the test sign-ups, which the owner removes afterwards.
+
+1. **RSVPs:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK".
+   - It checks that every upcoming event that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
+     `https://api.tzionbreslov.org/v1/rsvp/availability`. A 200 alone isn't enough: with every event skipped it would
+     list none.
+   - It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect).
+   - It exits with 2 when no upcoming event takes RSVPs: add one to the calendar, redeploy, and check again.
+2. **Health:** `curl -s "https://api.tzionbreslov.org/health"` → `{"ok":true}` (PowerShell: `curl.exe`).
+3. **Privacy page:** `curl -sI "https://tzionbreslov.org/privacy/"` answers 200. In a browser it shows "Last updated …"
+   and its six sections, and the footer's Privacy link opens it.
+4. **CSP, live:** `node scripts/check-csp.mjs https://tzionbreslov.org` and
+   `node scripts/check-csp.mjs https://www.tzionbreslov.org` must report zero violations.
+5. **Redirects:** the six addresses in step 6 answer 301 with their `location`.
+6. **Test sign-ups**, each with an address the owner reads:
+   - **Event announcements:** on `/events/`, "Get event announcements" with **only** "Event announcements" ticked.
+     - The confirmation email arrives; "Confirm my subscription" on the site succeeds.
+     - In Resend → Audience the contact is on "Event announcements" only. This is the one path that uses
+       `RESEND_EVENTS_TOPIC_ID`.
+     - Then delete the test contact in Resend.
+   - **Contact form:** the message arrives at the inbox, replying to the visitor.
+   - **RSVP:** an RSVP to an upcoming event.
+     - "RSVP received" reaches the visitor, and "New RSVP" reaches the inbox.
+     - It counts toward a limit. It is deleted with the event's other RSVPs once the event is over. To remove it at
+       once:
+       `npx wrangler d1 execute tzion-breslov-production --remote --command "DELETE FROM rsvps WHERE email = lower('<test-address>');"`
+7. **Log probe again:** with real traffic flowing, repeat step 4's log-probe check (a new probe string). Any stored
+   line from the test sign-ups must hold only the Worker's own fields.
+8. **`RSVP_CLEANUP_FEED_UNAVAILABLE`:** expected every day only between step 4 and go-live.
+   - From the first clean-up after step 9 (03:17 UTC), Observability shows no new line with that code.
+   - If it still appears, `https://tzionbreslov.org/events.json` isn't a plain 200. Check with
+     `curl -sI "https://tzionbreslov.org/events.json"`.
+
+Then update PROJECT_MEMORY.md ("Cloudflare state", Status) with what changed and each undo value, in the switch-day
+pull request.
 
 ## Security headers
 
@@ -310,7 +683,7 @@ TXT record forever** — removing it can drop the verification.
 Any new third-party origin (e.g. PayPal) goes there first, then `npm run build && node scripts/check-csp.mjs` (serves
 `out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
 Cloudflare rule. The Contact page's map added `https://www.google.com` to frame-src; the Cloudflare rule gains it on
-switch day (step 4).
+switch day (step 5, which also drops `https://www.youtube.com`).
 
 ## Launch checklist
 
@@ -329,12 +702,13 @@ switch day (step 4).
    To rotate a value: `npx wrangler secret put NAME`.
    **Except the RSVP release (Task 8, not deployed yet):** its code needs migration 0002 and the secret
    `RESEND_EVENTS_TOPIC_ID` *before* `npm run worker:deploy` (deployed first, it would break the newsletter signup and the
-   daily cleanup). Follow switch day, step 6.
-3. **Turn the forms on only on switch day.** The Worker accepts requests from `https://tzionbreslov.org` (+www) only and
-   Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` + `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site
-   is still served from github.io would break the forms on the only live copy. Until then they show "temporarily
-   unavailable — email us".
-4. Switch day (above), plus Cloudflare 301 redirects for the removed addresses: `/resources/` and `/video/…` →
-   `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`, `/about/` → `/about-us/`.
+   daily cleanup). Follow Switch day, steps 1–4.
+3. **Turn the forms on only on switch day** (Switch day, step 10). The Worker accepts requests from
+   `https://tzionbreslov.org` (+www) only and Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` +
+   `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site is still served from github.io would break the forms on the only live
+   copy. Until then they show "temporarily unavailable — email us".
+4. Switch day (above), in its order, including the Cloudflare 301 redirects for the removed addresses (step 6):
+   `/resources/` and `/video/…` → `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`,
+   `/about/` → `/about-us/`.
 5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first), and confirm that
    `PAYPAL_AUTOPAY_URL` there is where the owner's monthly donors manage their gift.

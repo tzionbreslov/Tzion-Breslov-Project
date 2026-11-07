@@ -18,6 +18,6 @@ Never commit:
 
 ## Required API controls
 
-The included Worker validates input server-side, restricts CORS to exact deployed origins, limits request size, rate-limits by multiple salted signals, requires Turnstile, uses idempotency, keeps personal data out of logs, and verifies provider webhook signatures using the unmodified request body. Production still requires real keys, exact origins, DNS controls, alerting, and account hardening.
+The included Worker validates input server-side, restricts CORS to exact deployed origins, limits request size, rate-limits by multiple salted signals, requires Turnstile, uses idempotency, keeps personal data out of its own log lines (codes, method and path, request ids; whether Cloudflare's stored Workers Logs events add request fields is checked on switch day, README → Switch day, step 4), and verifies provider webhook signatures using the unmodified request body. Production still requires real keys, exact origins, DNS controls, alerting, and account hardening.
 
 See the launch checklist in `README.md`.

@@ -78,8 +78,8 @@
   announcements" signup (lists: Event announcements, Newsletter → `topics` on `/v1/subscribe`). The Worker reads the
   site's `/events.json` (`EVENTS_FEED_URL`, no redirects followed) and reserves seats in one SQL statement; RSVPs never
   touch `request_log`. Migration 0002 (additive), secret `RESEND_EVENTS_TOPIC_ID` (9 secrets), the Resend topic and
-  the Worker deploy wait for switch day (Task 11; steps + undo in the Task 8 PR). RSVPs deleted once the event is
-  over — owner decision 2026-11-07 (Task 10b).
+  the Worker deploy wait for switch day (README → Switch day, steps 1–4, each with its undo). RSVPs deleted once the
+  event is over — owner decision 2026-11-07 (Task 10b).
 - Site structure, Task 9 (2026-11-07): `/privacy/`, the privacy notice ("Last updated November 7, 2026"), linked last in
   the footer Quick Links (footer only) and from "privacy notice" in the RSVP and "Get event announcements" consent
   lines. Its text describes the site as built, checked against the code and a network capture of every page (e.g. the
@@ -102,6 +102,55 @@
   `npm run db:migrate:local`). The privacy notice's RSVP sentence says "normally within a day" (its date stays
   November 7, 2026); the owner still approves the full text before launch. RSVP emails already in the organizer's
   inbox are not affected.
+- **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
+  translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
+  Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,
+  the CSP rule, the redirect rules, the edge privacy check, the calendar variable, go-live, forms on, smoke test), each
+  step with its commands, verification and undo. Checkpoints:
+  - checkpoint-004 (#14) — wording check, browser tests, checkpoint comparison (Task 1)
+  - checkpoint-005 (#15) — structure layer, composed pages, the Articles page (Task 2)
+  - checkpoint-006 (#16) — the Classes page: Ruach's video library in Tzion's look (Task 3)
+  - checkpoint-007 (#17) — Home and the Resources dropdown, old pages removed, everything relinked (Task 4)
+  - checkpoint-008 (#18) — the Gallery page and its viewer (Task 5)
+  - checkpoint-009 (#19) — the map on the Contact page (Task 6)
+  - checkpoint-010 (#20) — the Events page, rebuilt twice a day from Google Calendar (Task 7)
+  - checkpoint-011 (#21) — RSVPs and "Event announcements", built and tested, not deployed (Task 8)
+  - checkpoint-012 (#22) — the privacy notice `/privacy/` (Task 9)
+  - checkpoint-013 (#23) — Donate: "Manage your monthly donation" (Task 10)
+  - checkpoint-014 (#24) — RSVPs deleted once the event is over, not deployed (Task 10b)
+- **Final verification** (2026-11-07, Task 11, on main at 38f5132 = checkpoint-014):
+  - `npm run check` is green:
+    - typecheck, Worker typecheck and lint are clean;
+    - unit tests 107/107 and Worker tests 71/71 pass;
+    - the build exports 30 static pages;
+    - the static-export check passes: 28 routes, 0 redirects, every local reference resolves;
+    - the wording check passes: 23 pages still say everything they said at checkpoint-001;
+    - browser tests: 187 passed, 73 skipped of 260. The skips are by design: each project's desktop- or mobile-only
+      tests, and the RSVP fixture variants, which CI runs in its own steps.
+  - `node scripts/check-csp.mjs`: "CSP OK: 29 pages + interactions, zero violations".
+  - Masked visual diff of every pre-existing page (the 22 kept imported pages + the 404) against the checkpoint-001
+    build, at 1440 and 390:
+    - 0.00% everywhere except /about-us/ (0.03% at 1440);
+    - the two intended exceptions: /contact/ at 0.09% / 0.04%, confined to the new map section, and /donate/ at
+      7.82% / 1.90%, the manage link, the same as at Task 10.
+  - The new pages, checked by hand at 1440, 1280, 768 and 390 against the spec's goals 1–9: all met on the preview.
+    The live parts (the redirects, the RSVP Worker, the CSP rule) are switch-day steps.
+    1. Navigation: Home · About · Resources ▾ (Classes, Articles) · Events · Gallery · Contact + Taste A Class /
+       Donate on desktop (dropdown at 1440 and 1280); the same items in the mobile menu (768, 390); the footer Quick
+       Links mirror them and end with Privacy.
+    2. Classes: Videos/Shorts, search, Latest/Most popular/Oldest, the on-page player, "Visit our YouTube channel",
+       15 + 26 = 41 videos. Three thumbnails across from 768px; at 1440 each is 375×211, the old Classes tab's size.
+       The page ends with the three closing sections.
+    3. Articles: the 18 Parasha articles, 9 per page with in-place pagination, titles unchanged.
+    4. Old pages: the 35 removed addresses serve the 404 page and nothing links to them. The 301s come at switch day,
+       step 6.
+    5. Gallery: 7 photos (4 photos + 3 collages) and the viewer (counter, previous/next, keys, swipe).
+    6. Events: the empty state today (no calendar yet). A fixture build shows the cards: the "No RSVP" event has no
+       button, and an RSVP on the preview says "RSVPs open when the new site launches…".
+    7. Privacy: `/privacy/`, "Last updated November 7, 2026", six sections, linked from the footer and both consent
+       lines.
+    8. Map: "Find us in Bet Shemesh" with the Google map, "Get directions" and "Open in Google Maps".
+    9. Donate: "Manage your monthly donation" → https://www.paypal.com/myaccount/autopay/ in a new tab.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
@@ -120,6 +169,27 @@
   `RESEND_REPLY_TO_EMAIL` (tzionbreslovproject@gmail.com) because tzionbreslov.org has no MX by choice.
 - Known pre-existing theme bug kept for fidelity: `global.js` number counter throws on pages without `.numbers`
   (also on the live site).
+
+## Owner decisions still open
+
+1. **Privacy text:** read and approve `/privacy/` before launch, i.e. before switch day, step 10.
+2. **PayPal autopay URL:** confirm that `https://www.paypal.com/myaccount/autopay/` (`PAYPAL_AUTOPAY_URL`) is where
+   monthly donors manage their gift.
+3. **Turquoise contrast:** white text on turquoise pills and turquoise hover text fail WCAG AA. Keep the look, or
+   darken turquoise for text and pills.
+4. **Email retention:** how long contact and RSVP emails stay in the Gmail inbox and in Resend's email logs. The
+   notice doesn't state it.
+5. **NEL / Report-To on .org:** Cloudflare already sends them. Turn them off, or disclose them in the notice (switch
+   day, step 7).
+6. **Broadcasts:** every hand-sent Resend broadcast needs an unsubscribe link.
+7. **Gallery:**
+   - the page description "Photos from Tzion Breslov classes and gatherings." is new copy;
+   - collage 1 repeats photo 2;
+   - the photos are placeholders, to be replaced.
+8. **Switch day and go-live timing:** after the conversation with the Rabbi (README → Switch day, step 9 only on the
+   owner's word).
+9. **Instagram:** off until access is available (docs/instagram-setup.md).
+10. **Translations (phase 2):** come next, with their own design.
 
 ## Local reference setup notes
 

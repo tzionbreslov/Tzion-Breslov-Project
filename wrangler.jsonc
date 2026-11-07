@@ -47,13 +47,15 @@
       "RESEND_WEBHOOK_SECRET"
     ]
   },
-  // With invocation logs off, Workers Logs (dashboard → the Worker → Logs) are expected to keep
-  // only the Worker's own log lines, for up to 7 days: RSVP_ORGANIZER_EMAIL_FAILED,
+  // With invocation logs off, Workers Logs (dashboard → Workers & Pages → the Worker → Observability)
+  // are expected to keep only the Worker's own log lines, for up to 7 days: RSVP_ORGANIZER_EMAIL_FAILED,
   // RSVP_CANCEL_FAILED, RSVP_CLEANUP_FEED_UNAVAILABLE, EVENTS_FEED_EVENT_SKIPPED and the error
   // lines (codes, method and path but never the query string, request or correlation ids; no
-  // personal data), so they can be found later, not only in a live `wrangler tail`. Cloudflare's docs don't say whether a stored line
-  // still carries request fields (URL, headers, IP) with invocation logs off, so this is confirmed
-  // on switch day (README → Switch day, step 6.5); if the check fails, "enabled" becomes false.
+  // personal data), so they can be found later, not only in a live `wrangler tail`. Cloudflare's own
+  // fields in a stored event are $-prefixed ($workers…, $metadata…); the Worker's are not. Cloudflare's
+  // docs don't say whether a stored line still carries request fields (URL, headers, IP) with
+  // invocation logs off, so this is confirmed on switch day (README → Switch day, step 4, the
+  // log-probe check); if the check fails, "enabled" becomes false.
   // Invocation logs stay OFF: they would store every request's method + URL (e.g.
   // /v1/subscribe/confirm?token=…), headers and the visitor's IP. "redact_query_string" (Cloudflare:
   // "Whether query strings are removed from request URLs in logs and traces") is a second guard for
