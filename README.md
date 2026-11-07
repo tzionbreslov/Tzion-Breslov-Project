@@ -250,7 +250,9 @@ TXT record forever** — removing it can drop the verification.
       `npx wrangler d1 migrations apply tzion-breslov-production --remote` (0002 only: additive, the running Worker
       ignores it). Then check that D1 takes the cleanup's `UPDATE … FROM` (it changes no row):
       `UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;`
-      must answer success. *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
+      must answer success. **If it errors, stop: don't run step 5.** Every daily clean-up would fail, including the
+      sign-up deletion the privacy notice promises. The fix is a follow-up pull request that rewrites the clean-up's
+      UPDATE as a correlated `SET event_ends_at = (SELECT …) WHERE event_id IN (SELECT …)`. *Undo (only after step 5's undo, including its DELETE, which needs `topics_json`):* either
       - losing only the RSVPs: `DROP TABLE rsvps; ALTER TABLE subscription_confirmations DROP COLUMN topics_json;
         DELETE FROM d1_migrations WHERE name = '0002_rsvps_and_topics.sql';` (also drops the table's two indexes; every
         other row stays; 0002 can be applied again later), or
@@ -265,6 +267,9 @@ TXT record forever** — removing it can drop the verification.
       query string), request or correlation ids; no personal data. Cloudflare's docs don't say whether a stored line
       still carries request fields with invocation logs off, so this is confirmed by the check below.
       `"redact_query_string": true` should also strip the query string from any URL Cloudflare does record.
+      **Expected until the DNS switch:** tzionbreslov.org still answers `/events.json` with a 302, so from this deploy
+      until the site is live there, the daily clean-up logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes no
+      RSVP (none can be made yet). The other clean-ups run as usual, and the line stops once the site is live.
       **Check at once, before step 6 turns the forms on:**
       - **Force a stored line** (on a healthy deploy the Worker only logs failures). Pick a probe of letters, digits and
         hyphens that appears nowhere else, e.g. `tzprobe-7k2q9x`, and run, with the quotes:

@@ -127,6 +127,8 @@ type MockOptions = {
   feedEvents?: FeedEvent[];
   /** Answers /events.json instead (a failure, a redirect, a malformed body). */
   feedResponse?: () => Response;
+  /** /events.json never answers: only the request's own signal ends it, as fetch does when it times out. */
+  feedHangs?: boolean;
 };
 
 /**
@@ -143,6 +145,14 @@ function mockProviders(action: string, options: MockOptions = {}) {
     const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     calls.push({ url, method, body, headers: new Headers(init?.headers), redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined) });
     if (url === FEED_URL) {
+      if (options.feedHangs) {
+        const signal = init?.signal;
+        return new Promise<Response>((_, reject) => {
+          // Without a signal this request would hang until the platform gives up.
+          if (!signal) return reject(new Error("no timeout signal"));
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      }
       return options.feedResponse ? options.feedResponse() : Response.json({ syncedAt: new Date().toISOString(), events: feedEvents });
     }
     if (url.includes("/turnstile/v0/siteverify")) {
@@ -171,6 +181,20 @@ function mockProviders(action: string, options: MockOptions = {}) {
     turnstile: () => calls.filter((call) => call.url.includes("/turnstile/")),
     feed: () => calls.filter((call) => call.url === FEED_URL)
   };
+}
+
+/**
+ * Records the timeouts (ms) the Worker asks AbortSignal.timeout for, and makes
+ * each one 20 ms, so a test of a feed that never answers needn't wait 10 s.
+ */
+function shortenTimeouts() {
+  const asked: number[] = [];
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+    asked.push(ms);
+    return timeout(20);
+  });
+  return asked;
 }
 
 async function errorBody(response: Response) {
@@ -1038,6 +1062,18 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(0);
   });
 
+  it("gives up on a feed that doesn't answer within 10 s: 503 EVENTS_UNAVAILABLE", async () => {
+    const asked = shortenTimeouts();
+    const outbound = mockProviders("rsvp", { feedHangs: true });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(asked).toEqual([10_000]);
+    expect(response.status).toBe(503);
+    expect((await errorBody(response)).error).toBe("EVENTS_UNAVAILABLE");
+    expect(outbound.feed()).toHaveLength(1);
+    expect(outbound.emails()).toHaveLength(0);
+    expect(await count("rsvps")).toBe(0);
+  });
+
   it("reads the feed only over https (plain http just for localhost)", async () => {
     const outbound = mockProviders("rsvp");
     for (const url of ["http://tzionbreslov.org/events.json", "ftp://site.test/events.json", "not a url"]) {
@@ -1496,5 +1532,29 @@ describe("scheduled cleanup", () => {
     expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
       { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
     ]);
+  });
+
+  it("gives up on a feed that doesn't answer within 10 s: no RSVP deleted, the other clean-ups still run", async () => {
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
+    await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const asked = shortenTimeouts();
+    mockProviders("cleanup", { feedHangs: true });
+    await runScheduledCleanup();
+    expect(asked).toEqual([10_000]);
+    expect(Object.keys(await remaining())).toEqual(["endedYesterday"]);
+    expect(await count("rate_limits")).toBe(0);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
+  });
+
+  it("with an empty feed (no calendar address set yet) the UPDATE changes nothing and the stored ends decide", async () => {
+    const endsTomorrow = feedEvent({ id: CLEANUP.endsTomorrow, startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) });
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }), endsTomorrow]);
+    const outbound = mockProviders("cleanup", { feedEvents: [] });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(await remaining()).toEqual({ endsTomorrow: sqliteTime(endsTomorrow.endsAt) });
   });
 });

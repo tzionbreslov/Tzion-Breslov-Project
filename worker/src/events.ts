@@ -21,6 +21,8 @@ export type FeedEvent = {
 const CACHE_MS = 60_000;
 /** /events.json lists at most 60 events (scripts/lib/google-calendar.mjs): a few kB. */
 const MAX_FEED_BYTES = 512 * 1024;
+/** A feed that hasn't answered (headers and body) within 10 s is unavailable, so it never holds up an RSVP or the daily clean-up. */
+const FEED_TIMEOUT_MS = 10_000;
 
 let cached: { url: string; until: number; events: FeedEvent[] } | null = null;
 
@@ -68,8 +70,14 @@ async function fetchFeed(url: string): Promise<FeedEvent[]> {
   try {
     // Exactly EVENTS_FEED_URL: a redirect (e.g. while tzionbreslov.org still
     // forwards to the old site) is a failure, never followed.
-    response = await fetch(url, { method: "GET", redirect: "manual", headers: { Accept: "application/json" } });
+    response = await fetch(url, {
+      method: "GET",
+      redirect: "manual",
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(FEED_TIMEOUT_MS)
+    });
   } catch {
+    // Includes the timeout (a TimeoutError).
     throw unavailable("fetch failed");
   }
   if (response.status !== 200) throw unavailable(`HTTP ${response.status}`);
@@ -77,7 +85,13 @@ async function fetchFeed(url: string): Promise<FeedEvent[]> {
   if (type !== "application/json") throw unavailable("not JSON");
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (Number.isFinite(declared) && declared > MAX_FEED_BYTES) throw unavailable("too large");
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    // The body stopped arriving, or the timeout fired while reading it.
+    throw unavailable("read failed");
+  }
   if (new TextEncoder().encode(text).byteLength > MAX_FEED_BYTES) throw unavailable("too large");
   let body: unknown;
   try {
@@ -107,8 +121,8 @@ function feedUrl(env: Env) {
 /**
  * The events of EVENTS_FEED_URL, cached per isolate for 60 s (a failure is
  * never cached). Throws EVENTS_UNAVAILABLE unless the answer is a 200 with a
- * JSON document (at most 512 kB) that has an events list; an invalid event in
- * the list is skipped (feedEvents).
+ * JSON document (at most 512 kB) that has an events list, all within 10 s; an
+ * invalid event in the list is skipped (feedEvents).
  */
 export async function loadEventFeed(env: Env, now = Date.now()): Promise<FeedEvent[]> {
   const url = feedUrl(env);

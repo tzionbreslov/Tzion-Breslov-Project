@@ -47,12 +47,17 @@ currently scheduled".
     warning naming the event. Any other line that starts with "RSVP limit" (`RSVP limit 40`, `RSVP limits: 40`) is
     not a marker: it stays on the card as written, sets no limit, and the deploy warns too.
 - **Repeating classes:** every date takes its own RSVPs. Changing one date ("This event") keeps that date's RSVPs, and
-  so does moving a one-off event. Changing the time of the whole series, or "This and following events", starts those
-  dates afresh.
-- **When RSVPs are deleted:** once the event is over. Every day the forms service reads the site's list of events and
-  gives each event's RSVPs the event's current end, then deletes the RSVPs whose end has passed. So a moved event
-  keeps its RSVPs until its new end, after the next rebuild has published the move. If that list can't be read, no RSVP
-  is deleted that day. The RSVP emails in our inbox are not affected.
+  so does moving a one-off event, as long as the site is rebuilt before the old time has passed (see "Moving an
+  event" below). Changing the time of the whole series, or "This and following events", starts those dates afresh.
+- **When RSVPs are deleted:** once the event is over. Early every morning (05:17 Israel time in winter, 06:17 in
+  summer) the forms service reads the events the site last published, gives each event's RSVPs that event's end, and
+  deletes the RSVPs whose end has passed. If it can't read that list, it deletes no RSVP that day. The RSVP emails in
+  our inbox are not affected.
+- **Moving an event:** the forms service only sees the move once the site has been rebuilt (around 07:00 and 21:00).
+  If you move an event on the day it was due (especially after about 9 pm Israel time), or after it was due to end,
+  run **Deploy GitHub Pages** by hand straight away (**Actions** → **Deploy GitHub Pages** → **Run workflow**).
+  Otherwise the next morning's clean-up deletes its RSVPs by its old time. An event moved beyond what the Events page
+  lists (the next 60 events within 370 days) loses its RSVPs after its old end. Its RSVP emails stay in our inbox.
 - **Cancelling or deleting** an event removes it at the next rebuild; its RSVPs are deleted once the end it had has
   passed. Events that have ended are removed automatically. The page lists at most the next 60 events within the
   coming 370 days.
