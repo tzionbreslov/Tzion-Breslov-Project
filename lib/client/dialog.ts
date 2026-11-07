@@ -1,6 +1,6 @@
 /**
- * A modal dialog (the Classes video player, and later the event and gallery
- * views): an overlay plus a centred `role="dialog"` box appended to <body>.
+ * A modal dialog (the Classes video player, the Gallery viewer and the Events
+ * page's RSVP form): an overlay plus a centred `role="dialog"` box appended to <body>.
  * Focus moves into it and can't Tab out, Escape or a click on the overlay
  * closes it, and the page behind doesn't scroll. Closing plays the exit
  * animation (app/dialog.css; skipped with reduced motion), removes it and
