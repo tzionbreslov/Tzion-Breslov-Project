@@ -78,19 +78,30 @@
   announcements" signup (lists: Event announcements, Newsletter → `topics` on `/v1/subscribe`). The Worker reads the
   site's `/events.json` (`EVENTS_FEED_URL`, no redirects followed) and reserves seats in one SQL statement; RSVPs never
   touch `request_log`. Migration 0002 (additive), secret `RESEND_EVENTS_TOPIC_ID` (9 secrets), the Resend topic and
-  the Worker deploy wait for switch day (Task 11; steps + undo in the Task 8 PR). RSVP retention 90 days after the
-  event is **pending the owner's confirmation** (Ruach used 365).
+  the Worker deploy wait for switch day (Task 11; steps + undo in the Task 8 PR). RSVPs deleted once the event is
+  over — owner decision 2026-11-07 (Task 10b).
 - Site structure, Task 9 (2026-11-07): `/privacy/`, the privacy notice ("Last updated November 7, 2026"), linked last in
   the footer Quick Links (footer only) and from "privacy notice" in the RSVP and "Get event announcements" consent
   lines. Its text describes the site as built, checked against the code and a network capture of every page (e.g. the
   Classes thumbnails come from i.ytimg.com when the page opens, the Contact map loads with the page, Turnstile loads on
-  every page once the forms are on). **The owner reads and approves the text before launch**; RSVP retention (90 days)
-  is still pending the owner's confirmation.
+  every page once the forms are on). **The owner reads and approves the text before launch**; RSVPs deleted once the
+  event is over — owner decision 2026-11-07 (Task 10b).
 - Site structure, Task 10 (2026-11-07): the Donate form has a "Manage your monthly donation" link right under "How
   often would you like to donate?", always shown, with the note "Already giving monthly through PayPal? Change or
   cancel it in your PayPal account." (content/copy/en.json `donate`). It opens PayPal's automatic payments page
   (`PAYPAL_AUTOPAY_URL` = https://www.paypal.com/myaccount/autopay/) in a new tab. **The URL is pending the owner's
   confirmation**; the rest of the form is unchanged.
+- Site structure, Task 10b (2026-11-07, owner decision; built and tested, **not deployed**): RSVPs deleted once the
+  event is over. Each RSVP stores its event's end (`rsvps.event_ends_at`, from `/events.json` `endsAt`; an all-day
+  event ends at the UTC midnight of its exclusive end date). The Worker's daily cleanup (cron 03:17 UTC) first reads
+  `/events.json` and gives the RSVPs of every listed event its current end (Ruling R44: a moved event keeps its id
+  and so its RSVPs until its new end; an event no longer listed keeps its stored end), then deletes the RSVPs whose
+  end has passed, normally within a day. A day `/events.json` can't be read deletes no RSVP and logs
+  `RSVP_CLEANUP_FEED_UNAVAILABLE`. The old 90-day Worker var is removed. Migration 0002 was edited in place (only
+  ever applied to local D1s, which must be re-created: move `.wrangler/state/v3/d1` aside and run
+  `npm run db:migrate:local`). The privacy notice's RSVP sentence says "normally within a day" (its date stays
+  November 7, 2026); the owner still approves the full text before launch. RSVP emails already in the organizer's
+  inbox are not affected.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

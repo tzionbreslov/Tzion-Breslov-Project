@@ -509,12 +509,31 @@ async function fetchHandler(request: Request, env: Env) {
   }
 }
 
+/**
+ * The daily cron. It reads the site's /events.json first, so RSVPs follow
+ * the calendar's current end of each event (cleanExpiredData). If the feed
+ * can't be read, it logs a code (no personal data) and deletes no RSVP that
+ * day; the other clean-ups run either way.
+ */
+async function scheduledCleanup(env: Env) {
+  let feed: FeedEvent[] | null = null;
+  try {
+    feed = await loadEventFeed(env);
+  } catch (error) {
+    console.error(JSON.stringify({
+      code: "RSVP_CLEANUP_FEED_UNAVAILABLE",
+      error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
+    }));
+  }
+  await cleanExpiredData(env, feed);
+}
+
 export default {
   fetch(request: Request, env: Env, _context: ExecutionContextLike) {
     return fetchHandler(request, env);
   },
   scheduled(_controller: ScheduledController, env: Env, context: ExecutionContextLike) {
-    context.waitUntil(cleanExpiredData(env));
+    context.waitUntil(scheduledCleanup(env));
   }
 };
 

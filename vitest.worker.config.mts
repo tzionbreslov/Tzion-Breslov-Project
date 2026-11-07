@@ -30,7 +30,6 @@ export default defineConfig({
           RESEND_EVENTS_TOPIC_ID: "topic_events",
           // The site's /events.json, answered by the tests' fetch stub (worker/test/worker.test.ts).
           EVENTS_FEED_URL: "https://site.test/events.json",
-          RSVP_RETENTION_DAYS: "90",
           // Svix-style secret (base64 after the whsec_ prefix) so signed webhooks can be tested end to end.
           RESEND_WEBHOOK_SECRET: "whsec_dGVzdC13ZWJob29rLXNpZ25pbmctc2VjcmV0"
         }

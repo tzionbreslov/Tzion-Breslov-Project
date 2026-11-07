@@ -52,8 +52,14 @@ function defaultFeedEvents() {
   ];
 }
 
-/** How rsvps.event_starts_at stores a start, comparable with SQLite's datetime('now', …). */
+/** How rsvps.event_starts_at / event_ends_at store a time, comparable with SQLite's datetime('now'). */
 const sqliteTime = (iso: string) => new Date(iso).toISOString().slice(0, 19).replace("T", " ");
+
+/** UTC midnight `days` days from today: how the feed gives an all-day event's dates (the end date is exclusive). */
+function utcMidnight(days: number) {
+  const today = new Date();
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + days)).toISOString();
+}
 
 function publicRequest(path: string, body: Record<string, unknown>, ip = "203.0.113.10", requestOrigin = origin) {
   return new Request(`https://api.test${path}`, {
@@ -121,6 +127,8 @@ type MockOptions = {
   feedEvents?: FeedEvent[];
   /** Answers /events.json instead (a failure, a redirect, a malformed body). */
   feedResponse?: () => Response;
+  /** /events.json never answers: only the request's own signal ends it, as fetch does when it times out. */
+  feedHangs?: boolean;
 };
 
 /**
@@ -137,6 +145,14 @@ function mockProviders(action: string, options: MockOptions = {}) {
     const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     calls.push({ url, method, body, headers: new Headers(init?.headers), redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined) });
     if (url === FEED_URL) {
+      if (options.feedHangs) {
+        const signal = init?.signal;
+        return new Promise<Response>((_, reject) => {
+          // Without a signal this request would hang until the platform gives up.
+          if (!signal) return reject(new Error("no timeout signal"));
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      }
       return options.feedResponse ? options.feedResponse() : Response.json({ syncedAt: new Date().toISOString(), events: feedEvents });
     }
     if (url.includes("/turnstile/v0/siteverify")) {
@@ -165,6 +181,20 @@ function mockProviders(action: string, options: MockOptions = {}) {
     turnstile: () => calls.filter((call) => call.url.includes("/turnstile/")),
     feed: () => calls.filter((call) => call.url === FEED_URL)
   };
+}
+
+/**
+ * Records the timeouts (ms) the Worker asks AbortSignal.timeout for, and makes
+ * each one 20 ms, so a test of a feed that never answers needn't wait 10 s.
+ */
+function shortenTimeouts() {
+  const asked: number[] = [];
+  const timeout = AbortSignal.timeout.bind(AbortSignal);
+  vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+    asked.push(ms);
+    return timeout(20);
+  });
+  return asked;
 }
 
 async function errorBody(response: Response) {
@@ -813,6 +843,7 @@ type RsvpRow = {
   request_id: string;
   event_id: string;
   event_starts_at: string;
+  event_ends_at: string;
   name: string;
   email: string;
   email_hash: string;
@@ -831,6 +862,11 @@ async function rsvpRow(requestId: string) {
 async function guestsFor(eventId: string) {
   const row = await env.DB.prepare("SELECT COALESCE(SUM(guests), 0) AS guests FROM rsvps WHERE event_id = ?").bind(eventId).first<{ guests: number }>();
   return row?.guests ?? -1;
+}
+
+/** What reserveRsvp needs of one visitor's RSVP for one guest. */
+function reserveInput(): RsvpInput {
+  return { requestId: crypto.randomUUID(), name: "Ada", email: "ada@example.test", guests: 1, accessibility: "" } as RsvpInput;
 }
 
 function sentTo(outbound: ReturnType<typeof mockProviders>, address: string) {
@@ -856,6 +892,8 @@ describe("POST /v1/rsvp", () => {
       id: body.confirmationId,
       event_id: EVENT_IDS.open,
       event_starts_at: sqliteTime(event.startsAt),
+      // The daily clean-up deletes the RSVP once this end has passed.
+      event_ends_at: sqliteTime(event.endsAt),
       name: "Ada Lovelace",
       email: payload.email,
       guests: 2,
@@ -968,6 +1006,16 @@ describe("POST /v1/rsvp", () => {
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
   });
 
+  it("stores an all-day event's end as its exclusive end date, at UTC midnight", async () => {
+    // Tomorrow, all day: the feed's end is the day after's UTC midnight.
+    const event = feedEvent({ allDay: true, timeZone: "UTC", startsAt: utcMidnight(1), endsAt: utcMidnight(2) });
+    const input = reserveInput();
+    expect((await reserveRsvp(env, input, event, "hash")).created).toBe(true);
+    const row = await rsvpRow(input.requestId);
+    expect(row?.event_starts_at).toBe(`${utcMidnight(1).slice(0, 10)} 00:00:00`);
+    expect(row?.event_ends_at).toBe(`${utcMidnight(2).slice(0, 10)} 00:00:00`);
+  });
+
   it("closes RSVPs once the event has started", async () => {
     const outbound = mockProviders("rsvp");
     const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.started })), env);
@@ -1011,6 +1059,18 @@ describe("POST /v1/rsvp", () => {
       expect(outbound.feed()[0]?.redirect, label).toBe("manual");
       expect(outbound.emails(), label).toHaveLength(0);
     }
+    expect(await count("rsvps")).toBe(0);
+  });
+
+  it("gives up on a feed that doesn't answer within 10 s: 503 EVENTS_UNAVAILABLE", async () => {
+    const asked = shortenTimeouts();
+    const outbound = mockProviders("rsvp", { feedHangs: true });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(asked).toEqual([10_000]);
+    expect(response.status).toBe(503);
+    expect((await errorBody(response)).error).toBe("EVENTS_UNAVAILABLE");
+    expect(outbound.feed()).toHaveLength(1);
+    expect(outbound.emails()).toHaveLength(0);
     expect(await count("rsvps")).toBe(0);
   });
 
@@ -1356,7 +1416,46 @@ describe("Resend webhook", () => {
 });
 
 describe("scheduled cleanup", () => {
+  const DAY = 24 * HOUR;
+  const at = (offset: number) => new Date(Date.now() + offset).toISOString();
+  // Feed-valid ids (EVENT_ID_PATTERN), named after what each test does with the event.
+  const CLEANUP = {
+    endedYesterday: "c0000000000000000000000a",
+    endsTomorrow: "c0000000000000000000000b",
+    multiDay: "c0000000000000000000000c",
+    allDayYesterday: "c0000000000000000000000d",
+    allDayToday: "c0000000000000000000000e",
+    movedLater: "c0000000000000000000000f",
+    movedEarlierEnded: "c00000000000000000000010",
+    movedEarlierUpcoming: "c00000000000000000000011",
+    removedEnded: "c00000000000000000000012",
+    removedUpcoming: "c00000000000000000000013"
+  } as const;
+  const nameOf = (id: string) => Object.entries(CLEANUP).find(([, value]) => value === id)?.[0] ?? id;
+
+  /** Runs the daily cron (worker.scheduled) to the end. */
+  async function runScheduledCleanup() {
+    const pending: Promise<unknown>[] = [];
+    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
+    await Promise.all(pending);
+  }
+
+  /** One RSVP per event, stored as the Worker stores it (reserveRsvp doesn't check whether the event has started). */
+  async function reserveEach(events: FeedEvent[]) {
+    for (const [n, event] of events.entries()) {
+      expect((await reserveRsvp(env, reserveInput(), event, `hash-${n}`)).created, nameOf(event.id)).toBe(true);
+    }
+  }
+
+  /** The events that still have RSVPs (by name), and the end each RSVP stores. */
+  async function remaining() {
+    const { results } = await env.DB.prepare("SELECT event_id, event_ends_at FROM rsvps ORDER BY event_id")
+      .all<{ event_id: string; event_ends_at: string }>();
+    return Object.fromEntries(results.map((row) => [nameOf(row.event_id), row.event_ends_at]));
+  }
+
   it("removes expired rate limits, confirmations, webhook rows and old request logs", async () => {
+    mockProviders("cleanup");
     const now = Date.now();
     const old = now - 31 * 86_400_000;
     await env.DB.batch([
@@ -1366,25 +1465,96 @@ describe("scheduled cleanup", () => {
       env.DB.prepare("INSERT INTO subscription_confirmations (id, request_id, token_hash, email, expires_at, created_at) VALUES ('c1', 'old-subscribe', 'hash', 'a@example.test', ?, ?)").bind(old, old),
       env.DB.prepare("INSERT INTO webhook_events (provider, event_id, event_type, payload_json, received_at) VALUES ('resend', 'e1', 't', '{}', ?)").bind(now - 91 * 86_400_000)
     ]);
-    const pending: Promise<unknown>[] = [];
-    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
-    await Promise.all(pending);
+    await runScheduledCleanup();
     for (const table of ["rate_limits", "request_log", "subscription_confirmations", "webhook_events"]) {
       expect(await count(table), table).toBe(0);
     }
   });
 
-  it("deletes RSVPs RSVP_RETENTION_DAYS (90) after their event started, and keeps younger ones", async () => {
-    // Stored as the Worker stores an event's start: SQLite's "YYYY-MM-DD HH:MM:SS" (UTC).
-    const insert = (id: string, start: string) => env.DB.prepare(
-      `INSERT INTO rsvps (id, request_id, event_id, event_starts_at, name, email, email_hash, guests, accessibility, created_at)
-       VALUES (?, ?, ?, datetime('now', ?), 'Ada', 'ada@example.test', 'hash', 1, NULL, ?)`
-    ).bind(id, `request-${id}`, EVENT_IDS.open, start, Date.now());
-    await env.DB.batch([insert("started-91-days-ago", "-91 days"), insert("started-89-days-ago", "-89 days"), insert("upcoming", "+1 days")]);
-    const pending: Promise<unknown>[] = [];
-    worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
-    await Promise.all(pending);
-    const { results } = await env.DB.prepare("SELECT id FROM rsvps ORDER BY id").all<{ id: string }>();
-    expect(results.map((row) => row.id)).toEqual(["started-89-days-ago", "upcoming"]);
+  it("deletes an RSVP at the first daily clean-up after its event ends, and keeps it until then", async () => {
+    const events = {
+      endedYesterday: feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }),
+      endsTomorrow: feedEvent({ id: CLEANUP.endsTomorrow, startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) }),
+      // Started yesterday, ends tomorrow: kept while it is still on.
+      multiDay: feedEvent({ id: CLEANUP.multiDay, startsAt: at(-DAY), endsAt: at(DAY) }),
+      // Yesterday, all day: its exclusive end, today's UTC midnight, has passed.
+      allDayYesterday: feedEvent({ id: CLEANUP.allDayYesterday, allDay: true, timeZone: "UTC", startsAt: utcMidnight(-1), endsAt: utcMidnight(0) }),
+      // Today, all day: kept until its exclusive end, tomorrow's UTC midnight (the cron runs at 03:17 UTC).
+      allDayToday: feedEvent({ id: CLEANUP.allDayToday, allDay: true, timeZone: "UTC", startsAt: utcMidnight(0), endsAt: utcMidnight(1) })
+    };
+    await reserveEach(Object.values(events));
+    // The feed lists the events that haven't ended, as the site publishes it.
+    mockProviders("cleanup", { feedEvents: [events.endsTomorrow, events.multiDay, events.allDayToday] });
+    await runScheduledCleanup();
+    expect(Object.keys(await remaining()).sort()).toEqual(["allDayToday", "endsTomorrow", "multiDay"]);
+  });
+
+  it("follows the calendar when an event is moved: its RSVPs take the feed's current end (UPDATE … FROM in D1)", async () => {
+    // As the events were when the RSVPs were made.
+    await reserveEach([
+      feedEvent({ id: CLEANUP.movedLater, startsAt: at(-3 * HOUR), endsAt: at(-HOUR) }),
+      feedEvent({ id: CLEANUP.movedEarlierEnded, startsAt: at(5 * DAY), endsAt: at(5 * DAY + 2 * HOUR) }),
+      feedEvent({ id: CLEANUP.movedEarlierUpcoming, startsAt: at(5 * DAY), endsAt: at(5 * DAY + 2 * HOUR) })
+    ]);
+    // The calendar now: postponed to tomorrow (it was to end an hour ago); brought forward to earlier
+    // today (the feed, built before it ended, still lists it); brought forward to tomorrow.
+    const calendar = {
+      movedLater: feedEvent({ id: CLEANUP.movedLater, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) }),
+      movedEarlierEnded: feedEvent({ id: CLEANUP.movedEarlierEnded, startsAt: at(-3 * HOUR), endsAt: at(-HOUR) }),
+      movedEarlierUpcoming: feedEvent({ id: CLEANUP.movedEarlierUpcoming, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) })
+    };
+    mockProviders("cleanup", { feedEvents: Object.values(calendar) });
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({
+      movedLater: sqliteTime(calendar.movedLater.endsAt),
+      movedEarlierUpcoming: sqliteTime(calendar.movedEarlierUpcoming.endsAt)
+    });
+  });
+
+  it("keeps the stored end of an event the feed no longer lists (removed from the calendar)", async () => {
+    const removedUpcoming = feedEvent({ id: CLEANUP.removedUpcoming, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) });
+    await reserveEach([feedEvent({ id: CLEANUP.removedEnded, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }), removedUpcoming]);
+    mockProviders("cleanup");
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({ removedUpcoming: sqliteTime(removedUpcoming.endsAt) });
+  });
+
+  it("deletes no RSVP while the feed can't be read, logs only a code, and still runs the other clean-ups", async () => {
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
+    await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    // E.g. before switch day, while tzionbreslov.org still redirects to the old site.
+    const outbound = mockProviders("cleanup", { feedResponse: () => new Response("", { status: 302, headers: { Location: "https://tzionbreslov.com/" } }) });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(Object.keys(await remaining())).toEqual(["endedYesterday"]);
+    expect(await count("rate_limits")).toBe(0);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
+  });
+
+  it("gives up on a feed that doesn't answer within 10 s: no RSVP deleted, the other clean-ups still run", async () => {
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
+    await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const asked = shortenTimeouts();
+    mockProviders("cleanup", { feedHangs: true });
+    await runScheduledCleanup();
+    expect(asked).toEqual([10_000]);
+    expect(Object.keys(await remaining())).toEqual(["endedYesterday"]);
+    expect(await count("rate_limits")).toBe(0);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
+  });
+
+  it("with an empty feed (no calendar address set yet) the UPDATE changes nothing and the stored ends decide", async () => {
+    const endsTomorrow = feedEvent({ id: CLEANUP.endsTomorrow, startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) });
+    await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }), endsTomorrow]);
+    const outbound = mockProviders("cleanup", { feedEvents: [] });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(await remaining()).toEqual({ endsTomorrow: sqliteTime(endsTomorrow.endsAt) });
   });
 });

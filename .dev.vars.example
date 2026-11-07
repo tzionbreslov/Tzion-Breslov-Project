@@ -28,6 +28,6 @@ RESEND_EVENTS_TOPIC_ID=replace-me
 RESEND_WEBHOOK_SECRET=replace-me
 
 # RSVPs: the events the Worker takes RSVPs for (the site's /events.json; locally the
-# `node scripts/serve-out.mjs` copy of a build) and how long RSVPs are kept after the event.
+# `node scripts/serve-out.mjs` copy of a build). The daily cleanup reads it too: it deletes an RSVP once
+# its event is over, by the event's current end (no RSVP is deleted while it can't be read).
 EVENTS_FEED_URL=http://localhost:3100/events.json
-RSVP_RETENTION_DAYS=90
