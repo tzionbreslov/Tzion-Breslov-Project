@@ -202,15 +202,20 @@ follow it.
 - The Cloudflare exports in steps 5, 6 and 9 read the Cloudflare API with a **read-only** token. Create it under
   dashboard → My Profile → API Tokens → Create Token → Custom token, for the zone tzionbreslov.org, with Zone · Single
   Redirect · Read, Zone · Transform Rules · Read and Zone · DNS · Read.
-  - Keep it in the shell for the session only: `read -rs CF_READ_TOKEN` in bash, `$env:CF_READ_TOKEN = Read-Host`
-    in PowerShell.
+  - Keep it in the shell for the session only, typed without showing it:
+    - bash: `read -rs CF_READ_TOKEN`
+    - PowerShell 7: `$env:CF_READ_TOKEN = Read-Host -MaskInput`
+    - Windows PowerShell 5.1: `$s = Read-Host -AsSecureString; $env:CF_READ_TOKEN = [System.Net.NetworkCredential]::new('', $s).Password`
   - Don't name it `CLOUDFLARE_API_TOKEN`: wrangler would use that token instead of its login.
   - The exports land in `.tmp/switch-day/` (git-ignored). They hold no secrets: copy each one into the switch-day
     pull request.
+  - Each export uses `curl -sS --fail`, so a refused request (e.g. a token without a permission) prints an error and
+    saves nothing. A `node -e` line after each export then checks that the saved file is the real export, not an
+    error body. **An export that fails its check is not an undo: fix the token and export again before going on.**
 
 #### 1. Pre-checks
 
-*Changes:* nothing. The check in 1.5 runs a statement on the live D1 that writes no row, so it still waits for the
+*Changes:* nothing. The check in 1.6 runs a statement on the live D1 that writes no row, so it still waits for the
 owner's go-ahead.
 
 1. **Bundle check:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
@@ -219,17 +224,26 @@ owner's go-ahead.
    `--dry-run: exiting now.`
 2. **Worker version:** `npx wrangler deployments list`. Record the newest version id in the pull request ("before
    switch day").
-3. **D1 bookmark:** `npx wrangler d1 time-travel info tzion-breslov-production`. Record the bookmark it prints.
+3. **The live Worker's logging:** dashboard → Workers & Pages → tzion-breslov-api → Settings → Observability. Record
+   whether Workers Logs is on, and whether invocation logs are on.
+   - Today's Worker was deployed on 2026-11-06 without an `observability` block, and Cloudflare turns Workers Logs on
+     by default for new Workers, with invocation logs. If they are on, it stores every request's URL (confirmation
+     tokens included), its headers and the visitor's IP. That is an open owner decision (PROJECT_MEMORY.md): turn
+     invocation logs off before switch day.
+   - Step 4's deploy sets the logging that `wrangler.jsonc` asks for. Its undo checks the Worker against this record
+     after the rollback.
+4. **D1 bookmark:** `npx wrangler d1 time-travel info tzion-breslov-production`. Record the bookmark it prints.
    Time Travel restores any minute of the last 30 days on the Workers Paid plan, or 7 days on Workers Free. The
    repository doesn't record the account's plan, so count on 7.
-4. **Migrations:** `npx wrangler d1 migrations list tzion-breslov-production --remote` must list
+5. **Migrations:** `npx wrangler d1 migrations list tzion-breslov-production --remote` must list
    `0002_rsvps_and_topics.sql` as the only migration to apply. **If `0001_initial.sql` is listed too, stop.**
    0001 was applied through the API and recorded in `d1_migrations` by hand (PROJECT_MEMORY.md), and running it again
    would fail on tables that already exist.
-5. **`UPDATE … FROM` check:** the daily clean-up's RSVP step uses `UPDATE … FROM` (SQLite 3.33+). Check that D1
+6. **`UPDATE … FROM` check:** the daily clean-up's RSVP step uses `UPDATE … FROM` (SQLite 3.33+). Check that D1
    takes it, on a table that exists since 0001. `json_each('{}')` has no rows, so it changes no row:
-   `npx wrangler d1 execute tzion-breslov-production --remote --command "UPDATE subscription_confirmations SET used_at = feed.value FROM json_each('{}') AS feed WHERE subscription_confirmations.id = feed.key;"`
-   - It must answer `"success": true`.
+   `npx wrangler d1 execute tzion-breslov-production --remote --json --command "UPDATE subscription_confirmations SET used_at = feed.value FROM json_each('{}') AS feed WHERE subscription_confirmations.id = feed.key;"`
+   - It must print JSON with `"success": true`. Keep `--json`: without it, a terminal shows only
+     `🚣 Executed 1 command …`, not the answer this check needs. An error prints `"error": { "text": "…" }` instead.
    - **If it errors, stop: run none of the steps below.** Every daily clean-up would fail, including the sign-up
      deletion the privacy notice promises.
    - The fix is a follow-up pull request that rewrites the clean-up's UPDATE as a correlated
@@ -246,15 +260,17 @@ owner's go-ahead.
 Worker ignores it. It must come before step 4: the new Worker writes `topics_json`, and its daily clean-up deletes
 from `rsvps`. *Owner's go-ahead.*
 
-1. If step 1 was on another day, record a fresh bookmark: `npx wrangler d1 time-travel info tzion-breslov-production`.
+1. Right before migrating, always record a fresh bookmark (the undo restores to it):
+   `npx wrangler d1 time-travel info tzion-breslov-production`.
 2. `npm run db:migrate:remote` (that is `wrangler d1 migrations apply tzion-breslov-production --remote`). It shows
    0002 and asks to confirm.
 
 *Verify:*
 - `npx wrangler d1 migrations list tzion-breslov-production --remote` has no migration left to apply.
 - Then the gate for step 4, on the real table:
-  `npx wrangler d1 execute tzion-breslov-production --remote --command "UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;"`
-  must answer `"success": true`. **If it errors, stop: don't run step 4**, and undo this step.
+  `npx wrangler d1 execute tzion-breslov-production --remote --json --command "UPDATE rsvps SET event_ends_at = feed.value FROM json_each('{}') AS feed WHERE rsvps.event_id = feed.key;"`
+  must print JSON with `"success": true` (keep `--json`, as in 1.6). **If it prints an `"error"`, stop: don't run
+  step 4**, and undo this step.
 
 *Undo (if step 4 ran, only after its undo, including its DELETE, which needs `topics_json`), either:*
 - losing only the RSVPs:
@@ -278,13 +294,20 @@ from `rsvps`. *Owner's go-ahead.*
    re-running it reuses what exists). Expected output:
    - `domain tzionbreslov.org: verified (… DNS records → .tmp/resend-dns.json)`
    - `topic "Newsletter": 934b4bcd-a4a7-43ce-9310-8fac1cc4541c` (reused)
+   - `added the missing RESEND_EVENTS_TOPIC_ID line to .env.worker`, printed when `.env.worker` has no such line yet
+     (the usual case)
    - `topic "Event announcements": <topic-id>`, the only new thing in Resend
    - `webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677 already exists; secret already saved`
    - `RESEND_TRANSACTIONAL_API_KEY already set; left unchanged`
    - a last line where every value reads `=set`
 
-   A `webhook created` or `send-only key created` line is an unplanned live change. Stop and tell the owner. The undo
-   is to delete that webhook, or revoke that key, in Resend.
+   Stop and tell the owner on any of these:
+   - **`webhook created` or `send-only key created`:** an unplanned live change. The undo is to delete that webhook,
+     or revoke that key, in Resend.
+   - **`webhook … already exists but its secret isn't in .env.worker — delete it in Resend (or ask Claude) and
+     re-run.`:** `.env.worker` has lost `RESEND_WEBHOOK_SECRET`, which the live Worker still uses to check Resend's
+     webhooks. Don't follow the message's advice on switch day: a new webhook means a new secret for the Worker. The
+     owner decides first.
 2. `npx wrangler secret put RESEND_EVENTS_TOPIC_ID`, and paste the `<topic-id>` from step 3.1 when it asks.
 
 *Verify:*
@@ -297,6 +320,9 @@ from `rsvps`. *Owner's go-ahead.*
 - `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
 - Delete the topic in Resend: Audience → Topics, or `DELETE https://api.resend.com/topics/<topic-id>` with the
   full-access key.
+  - **Once step 10 has run, people have confirmed that they want Event announcements.** Deleting the topic silently
+    drops every one of those choices. After step 10, keep the topic unless the owner decides otherwise. If it must
+    go, first save the list of its subscribers from Resend, so they can be asked again.
 - Remove the `RESEND_EVENTS_TOPIC_ID=` line from `.env.worker`.
 
 #### 4. Worker deploy: RSVPs, announcements, Workers Logs
@@ -376,12 +402,24 @@ usual, and the line stops once the site is live (step 11).
   4. Record the change in its own pull request. The owner may later choose a Tail Worker that strips those fields,
      or sampling, instead.
 
-*Undo (the whole release):* `npx wrangler rollback <version-id>` (the version recorded above). Then, at once:
-`npx wrangler d1 execute tzion-breslov-production --remote --command "DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');"`
-- Why the DELETE: the previous Worker confirms every signup into the Newsletter, so an events-only signup still
-  pending (24 h) would land on a list its visitor never chose. Those visitors sign up again.
-- A pending signup for both lists keeps the Newsletter.
-- After that, undo steps 3 and 2 if wanted, in that order.
+*Undo (the whole release):*
+1. **If step 10 ran, undo it first, and wait until that Deploy GitHub Pages run has finished.**
+   - Otherwise the site keeps sending `topics` to the old Worker. That Worker ignores them and confirms every signup
+     into the Newsletter, and its rows get the default `topics_json` (`["newsletter"]`), which the DELETE below
+     can't catch.
+   - RSVPs would also fail: the old Worker has no `/v1/rsvp`, so even the preflight answers 404.
+2. `npx wrangler rollback <version-id>` (the version recorded above).
+3. Then, at once:
+   `npx wrangler d1 execute tzion-breslov-production --remote --command "DELETE FROM subscription_confirmations WHERE used_at IS NULL AND topics_json = json_array('events');"`
+   - Why the DELETE: the previous Worker confirms every signup into the Newsletter, so an events-only signup still
+     pending (24 h) would land on a list its visitor never chose. Those visitors sign up again.
+   - A pending signup for both lists keeps the Newsletter.
+4. Check the logging: dashboard → the Worker → Settings → Observability. Logging is a Worker setting, not part of
+   the code, and Cloudflare's docs don't say whether a rollback restores it.
+   - If it doesn't match what step 1.3 recorded, set it back by hand.
+   - If step 1.3 found invocation logs on, keep them off unless the owner decides otherwise: they store request URLs
+     and IPs.
+5. After that, undo steps 3 and 2 if wanted, in that order.
 
 #### 5. Cloudflare "Tzion security headers" rule: the CSP
 
@@ -394,9 +432,13 @@ usual, and the line stops once the site is live (step 11).
 
 While the header is report-only, browsers block nothing either way. *Owner's go-ahead.*
 
-1. **Export the rule first**, and copy the file into the pull request:
-   - bash: `curl -s --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
-   - PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+1. **Export the rule first**, check the export, and copy the file into the pull request:
+   - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
+   - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+   - Check it (both shells):
+     `node -e "const j = JSON.parse(require('fs').readFileSync('.tmp/switch-day/transform-rules-before.json', 'utf8')); console.log(j.success, j.result.rules.map(r => r.description))"`
+     must print `true` and a list that includes `'tzion_security_headers'`. A `curl: (22)` error, `false`, a
+     `TypeError` or a missing name means the export failed.
 2. Print the new value: `node -e "import('./config/security-headers.mjs').then(m => console.log(m.CSP_REPORT_ONLY))"`.
 3. Dashboard → tzionbreslov.org → Rules → Transform Rules → response header rules → edit "Tzion security headers" →
    replace the value of `Content-Security-Policy-Report-Only` with that line → Save.
@@ -419,28 +461,35 @@ Export the rule before each of these changes too.
 
 #### 6. Redirect rules for the removed addresses (301)
 
-*Changes:* three Single Redirect rules on the zone. Each is a static 301 that sends a removed address to its new
-home. *Owner's go-ahead.*
+*Changes:* three Single Redirect rules on the zone. Each is a static 301 that sends a removed address on the site's
+two hosts to its new home. *Owner's go-ahead.*
 - **They go below the existing 302 rule `tzion_org_to_com_temporary`.** Cloudflare uses the first redirect rule that
-  matches, so the new rules don't fire until step 9 deletes the 302.
+  matches, so on tzionbreslov.org and www the new rules don't fire until step 9 deletes the 302.
   - Above it, `/resources/` would get a 301, which browsers cache for good, to `/classes/`. The 302 would then send
     that to .com, where the page doesn't exist.
+- **Each rule is scoped to the 302's hosts**, `http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}`. The 302
+  doesn't cover `api.tzionbreslov.org` (its `/health` answers 200 today), so rules without the scope would fire on
+  `api.` at once.
 - Single Redirects only act on proxied traffic, so the rules take effect when step 9 proxies the records again.
 - The zone's quota is 10 Single Redirect rules on the Free plan (wildcards yes, regular expressions no). With the
   302, this makes 4.
 
-1. **Export the redirect rules first**, and copy the file into the pull request:
-   - bash: `curl -s --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
-   - PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+1. **Export the redirect rules first**, check the export, and copy the file into the pull request:
+   - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
+   - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+   - Check it (both shells):
+     `node -e "const j = JSON.parse(require('fs').readFileSync('.tmp/switch-day/redirect-rules-before.json', 'utf8')); console.log(j.success, j.result.rules.map(r => r.description))"`
+     must print `true` and a list that includes `'tzion_org_to_com_temporary'`. A `curl: (22)` error, `false`, a
+     `TypeError` or a missing name means the export failed.
 2. Create the rules in this order. For each: dashboard → tzionbreslov.org → Rules → Redirect Rules → Create rule →
    Custom filter expression → Edit expression. Then set: Static, the URL, status code **301**, Preserve query string
    off, Place at **Last**.
 
    | Rule name | Expression | URL |
    |---|---|---|
-   | `tzion_removed_archives_to_articles` | `(http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo/*")` | `https://tzionbreslov.org/articles/` |
-   | `tzion_removed_resources_to_classes` | `(http.request.uri.path eq "/resources/") or (http.request.uri.path wildcard "/video/*")` | `https://tzionbreslov.org/classes/` |
-   | `tzion_removed_about_to_about_us` | `(http.request.uri.path eq "/about/")` | `https://tzionbreslov.org/about-us/` |
+   | `tzion_removed_archives_to_articles` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo/*"))` | `https://tzionbreslov.org/articles/` |
+   | `tzion_removed_resources_to_classes` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path eq "/resources/") or (http.request.uri.path wildcard "/video/*"))` | `https://tzionbreslov.org/classes/` |
+   | `tzion_removed_about_to_about_us` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and (http.request.uri.path eq "/about/")` | `https://tzionbreslov.org/about-us/` |
 
    `*` also matches nothing, so `/video/*` covers `/video/video-1/` and `/category/uncategorized/*` covers
    `/category/uncategorized/` itself. The archives rule comes first, so `/resources/page/2/` can never meet the
@@ -448,6 +497,8 @@ home. *Owner's go-ahead.*
 
 *Verify:*
 - **Now:** the dashboard lists the three rules after `tzion_org_to_com_temporary`.
+- **Now:** `curl -sI "https://api.tzionbreslov.org/about/"` still answers the Worker's 404, not a 301: the host scope
+  holds.
 - **Now:** `curl -sI "https://tzionbreslov.org/resources/"` still answers 302 → `https://tzionbreslov.com/resources/`,
   because the 302 rule wins.
 - **After step 9:** each address answers 301 with the right `location` (step 11):
@@ -540,10 +591,14 @@ WordPress until 9.6. **Only when the owner says so, after the conversation with 
 sitting: once Pages has the custom domain, the github.io preview forwards to tzionbreslov.org, which until 9.4 still
 redirects to .com.
 
-**Before:** export the zone's DNS records (a BIND file), and keep step 6's redirect-rule export, which holds the 302
-rule. Copy both into the pull request.
-- bash: `curl -s --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $CF_READ_TOKEN"`
-- PowerShell: `curl.exe -s --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+**Before:** export the zone's DNS records (a BIND file) and check the export, and keep step 6's checked
+redirect-rule export, which holds the 302 rule. Copy both into the pull request.
+- bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $CF_READ_TOKEN"`
+- PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+- Check it (both shells):
+  `node -e "const t = require('fs').readFileSync('.tmp/switch-day/dns-before.txt', 'utf8'); console.log(t.trim().startsWith('{') ? 'NOT A BIND FILE' : t.split('\n').filter(l => /\sIN\s+(A|AAAA|CNAME)\s/.test(l)).join('\n'))"`
+  must list the site's records as BIND lines: the apex `A 192.0.2.1`, the apex `AAAA 100::` and the `www` CNAME. A
+  `curl: (22)` error, `NOT A BIND FILE` (a JSON error body) or no such lines means the export failed.
 
 1. **Days before (owner account): verify the domain with GitHub**, so nobody else's Pages site can ever claim it.
    1. Owner profile → Settings → Pages → *Verified domains* → Add `tzionbreslov.org`.
@@ -575,28 +630,40 @@ rule. Copy both into the pull request.
         for tzionbreslov.org with > 30 days left.
 5. **Privacy check at the edge, right after proxying:** run step 7 again, now with the HTML commands. Don't go on
    to step 10 until it passes, or until the owner's choice for each hit is done.
-6. **tzionbreslov.com, later, once its DNS is on Cloudflare:**
-   - 301 every path to `https://tzionbreslov.org`, keeping its MX/TXT mail records.
-   - Give it SPF + DMARC; it has neither today, at Wix DNS.
-     1. Start DMARC at `p=none` with a report address.
-     2. List every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
-        notifications? newsletters?).
-     3. Publish one SPF covering exactly those.
-     4. Then tighten DMARC to `quarantine`/`reject`.
+6. **tzionbreslov.com, later, once its DNS is on Cloudflare (owner's word for each part).** Export .com's records
+   first, as for .org.
+   1. **A 302 first:** redirect every path to `https://tzionbreslov.org` + the same path, keeping its MX/TXT mail
+      records. Browsers don't keep a 302, so this part can still be undone.
+      *Undo:* delete that rule, and .com serves WordPress again.
+   2. **A 301 once the move is stable:** when the owner decides nothing will be rolled back (e.g. after some weeks),
+      change that rule's status to 301.
+      - **From here on, go-live is one-way.** Browsers keep .com → .org for good, so re-creating .org's 302 → .com
+        (step 9's undo) would make a redirect loop.
+      - *Undo:* set the rule back to 302. That only helps browsers that haven't followed the 301 yet.
+   3. **SPF + DMARC for .com;** it has neither today, at Wix DNS.
+      1. Start DMARC at `p=none` with a report address.
+      2. List every service that sends as @tzionbreslov.com (Google Workspace? WordPress/Gravity Forms
+         notifications? newsletters?).
+      3. Publish one SPF covering exactly those.
+      4. Then tighten DMARC to `quarantine`/`reject`.
+
+      *Undo:* put back the exported records.
 
 *Verify:* step 11.
 
-*Undo, the forward steps in reverse:*
-1. If the forms are on, undo step 10 first.
-2. Switch the records to DNS-only. GitHub keeps serving the site.
-3. Re-create the 302 rule from the export with **Place at: First**, above step 6's three 301 rules. At "Last", the
+*Undo, the forward steps in reverse.* **Only before 9.6.2:** once .com answers with a 301, there is no undo (see
+9.6.2).
+1. If 9.6.1 ran, delete .com's 302 first: with both redirects in place, .org → .com → .org would loop.
+2. If the forms are on, undo step 10 first.
+3. Switch the records to DNS-only. GitHub keeps serving the site.
+4. Re-create the 302 rule from the export with **Place at: First**, above step 6's three 301 rules. At "Last", the
    301s would match first: `/resources/` would get a 301 that browsers cache for good, then land on .com, where the
    page doesn't exist. While the records are DNS-only, the rule does nothing yet.
-4. Set the records back to the exported placeholders, proxied. The 302 now catches everything, so .org goes back to
+5. Set the records back to the exported placeholders, proxied. The 302 now catches everything, so .org goes back to
    WordPress. Restoring the placeholders before the 302 exists would send visitors to `192.0.2.1` (Cloudflare 52x
    errors).
-5. Remove the custom domain in Settings → Pages.
-6. `gh variable delete NEXT_PUBLIC_SITE_URL`, then `gh workflow run deploy-github-pages.yml --ref main`.
+6. Remove the custom domain in Settings → Pages.
+7. `gh variable delete NEXT_PUBLIC_SITE_URL`, then `gh workflow run deploy-github-pages.yml --ref main`.
 
 Browsers keep the 301s they followed from step 6. Those land on .org pages, which then 302 to .com, where they
 don't exist.

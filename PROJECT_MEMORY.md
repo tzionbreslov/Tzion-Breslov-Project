@@ -190,6 +190,13 @@
    owner's word).
 9. **Instagram:** off until access is available (docs/instagram-setup.md).
 10. **Translations (phase 2):** come next, with their own design.
+11. **RSVP dialog privacy link:** "privacy notice" in the RSVP dialog opens in the same tab, so a visitor who follows
+    it loses what they typed.
+12. **Manage-donation link:** it opens PayPal in a new tab with no cue that it does.
+13. **Live Worker logging:** check whether `tzion-breslov-api` stores invocation logs today (dashboard → the Worker →
+    Settings → Observability). It was deployed on 2026-11-06 without an `observability` block, and Cloudflare turns
+    Workers Logs on by default for new Workers, with invocation logs: request URLs (confirmation tokens included),
+    headers and IPs. If so, turn invocation logs off before switch day (README → Switch day, step 1.3).
 
 ## Local reference setup notes
 
