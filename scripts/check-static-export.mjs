@@ -20,8 +20,8 @@ const errors = [];
 const fail = (msg) => errors.push(msg);
 
 // Nothing may point at a removed page (config/site-structure.mjs): no root-relative
-// href/src, no sitemap <loc> and no absolute URL on the site's origin, plain or
-// JSON-escaped (JSON-LD included).
+// or site-origin href/src, no sitemap <loc> and no absolute URL on the site's
+// origin anywhere in the text, plain or JSON-escaped (JSON-LD included).
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const SITE_ORIGIN = [PRODUCTION, PRODUCTION.replaceAll("/", "\\/")].map(escapeRegExp).join("|");
 const ORIGIN_URL = new RegExp(`(?:${SITE_ORIGIN})(\\\\?/[^"\\s<>]*)`, "g");
@@ -29,15 +29,36 @@ const removedPath = (ref) => {
   const urlPath = ref.replaceAll("\\/", "/").replace(/[?#].*$/, "");
   return isRemovedPath(urlPath) ? urlPath : null;
 };
-function removedRefs(text) {
+/** An href/src value's path on this site: root-relative (base path taken off) or absolute on the site's origin. */
+const attributePath = (value) => {
+  if (value.startsWith("/")) return base && value.startsWith(`${base}/`) ? value.slice(base.length) : value;
+  return value.startsWith(`${PRODUCTION}/`) ? value.slice(PRODUCTION.length) : null;
+};
+/** Removed pages named by `html`'s href/src attributes, or by a site-origin URL anywhere in `text`. */
+function removedRefs(html, text = html) {
   const found = new Set();
-  for (const m of text.matchAll(/\b(?:href|src)="(\/[^"]*)"/g)) {
-    found.add(removedPath(base && m[1].startsWith(`${base}/`) ? m[1].slice(base.length) : m[1]));
+  for (const m of html.matchAll(/\b(?:href|src)="([^"]*)"/g)) {
+    const ref = attributePath(m[1]);
+    if (ref) found.add(removedPath(ref));
   }
   for (const m of text.matchAll(ORIGIN_URL)) found.add(removedPath(m[1]));
   found.delete(null);
   return [...found];
 }
+
+// The Events page's cards hold calendar text (titles, places, descriptions) that
+// lib/events.mjs escapes and never links (card()). Whatever the events manager
+// types there may name a removed page, tzionbreslov.com or a YouTube embed
+// address, and must not fail the deploy, so the text checks read each page
+// without its cards. The page holds them twice: as HTML, and as an escaped
+// string in Next's flight data (`<article class=\"tz-event\"…`). Escaped
+// calendar text can't close a card early in either form (an odd one only leaves
+// text in, which fails safe). Every href/src check still reads the whole page.
+const EVENT_CARDS = [
+  /<article class="tz-event"[^>]*>[\s\S]*?<\/article>/g,
+  /\\u003carticle class=\\+"tz-event\\+"[\s\S]*?\\u003c\/article\\u003e/g
+];
+const withoutEventCards = (html) => EVENT_CARDS.reduce((text, cards) => text.replace(cards, ""), html);
 
 if (!fs.existsSync(out)) {
   console.error("Missing out/. Run `npm run build` first.");
@@ -93,14 +114,15 @@ const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =
 const broken = new Map();
 for (const file of walk(out)) {
   const html = fs.readFileSync(file, "utf8");
+  const text = withoutEventCards(html);
   const rel = path.relative(out, file);
   if (html.includes("localhost:8088")) fail(`${rel} still references localhost:8088`);
   if (html.includes("estiwolo.com/wp-content")) fail(`${rel} still references the dead staging host`);
-  if (SWITCHED && OLD_DOMAIN.test(html)) fail(`${rel} still references tzionbreslov.com after the site-URL switch`);
+  if (SWITCHED && OLD_DOMAIN.test(text)) fail(`${rel} still references tzionbreslov.com after the site-URL switch`);
   if (/\/wp-admin\/admin-ajax\.php/.test(html.replace(/var uagb_data[^;]*;/g, ""))) fail(`${rel} references admin-ajax`);
   // Videos play only in the Classes page's own player (youtube-nocookie, on click).
-  if (html.includes("youtube.com/embed")) fail(`${rel} still embeds a plain YouTube player`);
-  for (const ref of removedRefs(html)) fail(`${rel} links to the removed page ${ref}`);
+  if (text.includes("youtube.com/embed") || /\bsrc="[^"]*youtube\.com\/embed/.test(html)) fail(`${rel} still embeds a plain YouTube player`);
+  for (const ref of removedRefs(html, text)) fail(`${rel} links to the removed page ${ref}`);
   // The broken-reference check below never sees a bare "/" (the Home links); with a base path it must carry it.
   if (base && /\b(?:href|src)="\/"/.test(html)) fail(`${rel} links to "/" without the base path ${base}`);
   const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];

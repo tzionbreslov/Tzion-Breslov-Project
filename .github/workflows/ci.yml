@@ -46,8 +46,10 @@ jobs:
       # RSVPs on a fixture build: four events relative to now (open, "No RSVP", limited,
       # started), the forms API origin and Turnstile's always-pass test key. The spec
       # stubs both, so nothing leaves CI; the enforced CSP still checks their origins.
+      # The export check proves that links pasted into a calendar description (a removed
+      # page, a YouTube embed) can't fail the deploy.
       - name: Build the events fixture variant and run the RSVP browser tests
-        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && TZ_E2E_EVENTS=1 npx playwright test e2e/rsvp.spec.ts
+        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && npm run check:static-export && TZ_E2E_EVENTS=1 npx playwright test e2e/rsvp.spec.ts
         env:
           EVENTS_FIXTURE: scripts/fixtures/events.e2e.json
           NEXT_PUBLIC_API_BASE_URL: https://api.tzionbreslov.org
@@ -56,7 +58,7 @@ jobs:
       # The same events as the github.io preview builds them, with no forms API: the RSVP
       # form must say that RSVPs open when the new site launches, and send nothing.
       - name: Build the events fixture without a forms API and run the preview RSVP test
-        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && TZ_E2E_EVENTS=preview npx playwright test e2e/rsvp.spec.ts
+        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && npm run check:static-export && TZ_E2E_EVENTS=preview npx playwright test e2e/rsvp.spec.ts
         env:
           EVENTS_FIXTURE: scripts/fixtures/events.e2e.json
 
