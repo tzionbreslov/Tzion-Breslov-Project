@@ -86,6 +86,11 @@
   Classes thumbnails come from i.ytimg.com when the page opens, the Contact map loads with the page, Turnstile loads on
   every page once the forms are on). **The owner reads and approves the text before launch**; RSVP retention (90 days)
   is still pending the owner's confirmation.
+- Site structure, Task 10 (2026-11-07): the Donate form has a "Manage your monthly donation" link right under "How
+  often would you like to donate?", always shown, with the note "Already giving monthly through PayPal? Change or
+  cancel it in your PayPal account." (content/copy/en.json `donate`). It opens PayPal's automatic payments page
+  (`PAYPAL_AUTOPAY_URL` = https://www.paypal.com/myaccount/autopay/) in a new tab. **The URL is pending the owner's
+  confirmation**; the rest of the form is unchanged.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
 - Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook

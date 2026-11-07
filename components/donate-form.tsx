@@ -1,15 +1,21 @@
 "use client";
 
 import { useId, useMemo, useState, type FormEvent } from "react";
+import copy from "@/content/copy/en.json";
 import {
   DONATION_TIERS,
   MAX_CUSTOM_AMOUNT,
   MIN_CUSTOM_AMOUNT,
+  PAYPAL_AUTOPAY_URL,
   beginCheckout,
   formatUsd,
   type Frequency
 } from "@/lib/client/donations";
 import { publicConfig } from "@/lib/client/config";
+
+// The form's original wording stays as written below; text added since comes
+// from content/copy/en.json (`donate`).
+const text = copy.donate;
 
 type Errors = Partial<Record<"amount" | "email", string>>;
 type Status = "idle" | "working" | "unavailable";
@@ -105,6 +111,15 @@ export function DonateForm() {
           ))}
         </div>
       </fieldset>
+
+      {/* For donors already giving monthly: shown whatever is chosen above. The link comes
+          first and the note is its description, so it is read with the link on focus. */}
+      <div className="tz-donate__manage-block">
+        <a className="tz-donate__manage" href={PAYPAL_AUTOPAY_URL} target="_blank" rel="noopener noreferrer" aria-describedby={`${id}-manage-note`}>
+          {text.manageMonthly}
+        </a>
+        <p className="tz-donate__manage-note" id={`${id}-manage-note`}>{text.manageMonthlyNote}</p>
+      </div>
 
       <div className="tz-donate__group">
         <label className="gfield_label" htmlFor={`${id}-dedication`}>Dedication / In Honor Of / Other Note</label>

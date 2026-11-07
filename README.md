@@ -61,7 +61,9 @@ WordPress backup (.wpress, private, not in git)
     the feed's view counts for "Most popular") and `content/shorts.json` (the old `/video/video-N/` clips)
   - Gallery photo viewer (whole photo, caption, "3 of 7", previous/next, arrow keys, swipe) → `lib/client/gallery.ts` +
     `lib/client/dialog.ts`; the photos are the files in `public/media/gallery` (see "Gallery photos" below)
-  - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`)
+  - Donate page → `components/donate-form.tsx` (**PayPal not wired yet** — see `lib/client/donations.ts`). Under the
+    frequency choice, "Manage your monthly donation" opens PayPal's automatic payments page (`PAYPAL_AUTOPAY_URL`) in
+    a new tab, for donors who already give monthly
 - Events page (`lib/pages/events.ts`, cards and the announcements signup from `lib/events.mjs`): the list is rendered
   at build time from the Google Calendar (see "Events" below); only the RSVPs and the signup run in the browser.
 
@@ -322,4 +324,5 @@ switch day (step 4).
    unavailable — email us".
 4. Switch day (above), plus Cloudflare 301 redirects for the removed addresses: `/resources/` and `/video/…` →
    `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`, `/about/` → `/about-us/`.
-5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first).
+5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first), and confirm that
+   `PAYPAL_AUTOPAY_URL` there is where the owner's monthly donors manage their gift.
