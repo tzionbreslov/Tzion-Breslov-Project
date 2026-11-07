@@ -92,6 +92,10 @@
     "directions": "Get directions",
     "openInMaps": "Open in Google Maps"
   },
+  "donate": {
+    "manageMonthly": "Manage your monthly donation",
+    "manageMonthlyNote": "Already giving monthly through PayPal? Change or cancel it in your PayPal account."
+  },
   "privacy": {
     "title": "Privacy notice",
     "description": "How Tzion Breslov handles the information you send through this website.",

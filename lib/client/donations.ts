@@ -14,6 +14,13 @@ export const DONATION_TIERS = [
   { amount: 600, label: "Sponsor a Full Month of Short, Inspirational Clips" }
 ] as const;
 
+/**
+ * Where a monthly donor changes or cancels their PayPal gift: PayPal's
+ * automatic payments page (the "Manage your monthly donation" link). The
+ * owner confirms this address before launch.
+ */
+export const PAYPAL_AUTOPAY_URL = "https://www.paypal.com/myaccount/autopay/";
+
 export const MIN_CUSTOM_AMOUNT = 5;
 export const MAX_CUSTOM_AMOUNT = 100_000;
 

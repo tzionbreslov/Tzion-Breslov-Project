@@ -118,6 +118,21 @@ html.tz-lightbox-open { overflow: hidden; }
 .tz-donate__notice { margin-top: 20px; padding: 16px 20px; border-left: 4px solid var(--tz-accent); background: var(--wp--preset--color--light-blue, #f2f9ff); }
 .tz-donate__form .tz-donate__notice p { margin: 0; font-size: 16px; }
 .tz-donate__notice a { color: var(--tz-blue); font-weight: 700; }
+/* "Manage your monthly donation" + its note, right under the frequency choice (14px below
+ * it: the negative margin collapses with the fieldset's 28px). Scoped to the form so the
+ * theme's a:hover / a:focus (black, no underline) can't win. */
+.tz-donate__form .tz-donate__manage-block { margin: -14px 0 28px; }
+.tz-donate__form .tz-donate__manage {
+  display: inline-block;
+  font: 700 1.4rem/1.4 var(--font-main, "Montserrat", sans-serif);
+  color: var(--tz-blue); text-decoration: underline; text-underline-offset: 3px;
+}
+.tz-donate__form .tz-donate__manage:hover { color: var(--tz-accent); }
+.tz-donate__form .tz-donate__manage:focus-visible { outline: 3px solid var(--tz-blue); outline-offset: 3px; border-radius: 2px; }
+.tz-donate__form .tz-donate__manage-note {
+  margin: 4px 0 0;
+  font: 500 1.4rem/1.5 var(--font-main, "Montserrat", sans-serif); color: var(--tz-blue);
+}
 
 @media (max-width: 600px) {
   /* The panel's desktop side padding (inline style) leaves ~190px for the form on phones. */
@@ -131,7 +146,7 @@ html.tz-lightbox-open { overflow: hidden; }
   .tz-donate__row { grid-template-columns: 1fr; gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tz-donate__tier, .tz-donate__submit { transition: none; }
+  .tz-donate__tier, .tz-donate__submit, .tz-donate__form .tz-donate__manage { transition: none; }
 }
 
 /* Article header ("Breeze of Breslov", the 18 Parasha posts only): show the whole
