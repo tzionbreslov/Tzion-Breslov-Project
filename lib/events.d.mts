@@ -18,8 +18,8 @@ export type PublishedEvent = Pick<EventRecord, "id" | "title" | "startsAt" | "en
 /** The part of copy.events (content/copy/en.json) the list needs. */
 export type EventsCopy = { emptyTitle: string; emptyText: string; contactLink: string };
 
-/** The part of copy.rsvp the cards need (the RSVP button). */
-export type RsvpButtonCopy = { button: string };
+/** The part of copy.rsvp the cards need: the RSVP button, and the line offering email without JavaScript. */
+export type RsvpButtonCopy = { button: string; noScript: string };
 
 /** copy.announcements: the "Get event announcements" signup. */
 export type AnnouncementsCopy = {
@@ -31,6 +31,7 @@ export type AnnouncementsCopy = {
   consent: string;
   privacyNotice: string;
   submit: string;
+  noScript: string;
 };
 
 export function formatEventWhen(event: Pick<EventRecord, "startsAt" | "endsAt" | "timeZone" | "allDay">): string;

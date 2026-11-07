@@ -52,6 +52,8 @@ test.describe("Get event announcements", () => {
   test("has an email field, the two lists (Event announcements ticked), the consent and Sign up", async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto("/events/");
+    // The form shows once its island is ready (Ruling R13).
+    await page.waitForSelector("[data-tz-announcements=ready]");
     const form = signup(page);
     await expect(form.getByRole("heading", { name: "Get event announcements" })).toBeVisible();
     await expect(form.getByLabel("Email", { exact: true })).toHaveAttribute("type", "email");
@@ -97,6 +99,24 @@ test.describe("Get event announcements", () => {
     await expect(alert).toHaveText("This form is temporarily unavailable. Please email us at tzionbreslovproject@gmail.com.");
     await expect(alert).toContainText("tzionbreslovproject@gmail.com");
     await expectClean(page, errors);
+  });
+
+  // Without JavaScript the form would post to the static host (a 405): it gives way to a line offering email.
+  test.describe("without JavaScript", () => {
+    test.use({ javaScriptEnabled: false });
+
+    test("the form is hidden and a line offers email instead", async ({ page }) => {
+      const errors = trackPageErrors(page);
+      await page.goto("/events/");
+      const region = signup(page);
+      await expect(region.getByRole("heading", { name: "Get event announcements" })).toBeVisible();
+      await expect(region.locator("form")).toBeHidden();
+      const note = region.locator(".tz-announce__noscript");
+      await expect(note).toBeVisible();
+      await expect(note).toHaveText("To get event announcements, email us at tzionbreslovproject@gmail.com.");
+      await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", "mailto:tzionbreslovproject@gmail.com");
+      await expectClean(page, errors);
+    });
   });
 });
 

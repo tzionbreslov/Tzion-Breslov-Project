@@ -67,12 +67,15 @@
     "submit": "Send RSVP",
     "success": "Thank you — your RSVP is in. A confirmation is on its way to your inbox.",
     "eventFull": "Sorry — this event is now full.",
+    "placesLeft": "Sorry — only {remaining} places are left. Lower the number of guests, or email us at tzionbreslovproject@gmail.com.",
+    "placeLeft": "Sorry — only 1 place is left. Lower the number of guests, or email us at tzionbreslovproject@gmail.com.",
     "closed": "RSVPs for this event have closed.",
     "unavailable": "RSVPs open when the new site launches. Until then, email us at tzionbreslovproject@gmail.com.",
     "error": "Something went wrong sending your RSVP. Please try again.",
     "nameShort": "Please enter at least 2 characters.",
     "guestsRange": "Please enter a number from 1 to 12.",
-    "consentRequired": "Please tick this box to send your RSVP."
+    "consentRequired": "Please tick this box to send your RSVP.",
+    "noScript": "To RSVP, email us at {email}."
   },
   "announcements": {
     "heading": "Get event announcements",
@@ -84,7 +87,8 @@
     "privacyNotice": "privacy notice",
     "submit": "Sign up",
     "chooseList": "Choose at least one list.",
-    "consentRequired": "Please tick this box to sign up."
+    "consentRequired": "Please tick this box to sign up.",
+    "noScript": "To get event announcements, email us at {email}."
   },
   "map": {
     "heading": "Find us in Bet Shemesh",
