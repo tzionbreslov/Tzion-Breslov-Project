@@ -190,8 +190,9 @@ follow it.
 - Run them from the repository root, logged in as the owner: `npx wrangler login` (Cloudflare account
   tzionbreslovproject@gmail.com) and `gh auth login` (GitHub).
 - Each command is one line that works as written, with its quotes, in bash and in PowerShell (Windows PowerShell 5.1
-  and PowerShell 7). Where a line differs between the shells, both are given.
-- In PowerShell, type `curl.exe`, never `curl`: in Windows PowerShell 5.1, plain `curl` is `Invoke-WebRequest`.
+  and PowerShell 7). Where a line differs between the shells beyond `curl`, both are given.
+- On every `curl` line, PowerShell uses `curl.exe` with the same arguments, never plain `curl`: in Windows PowerShell
+  5.1, plain `curl` is `Invoke-WebRequest`.
 - Replace each placeholder in angle brackets, brackets included (`<version-id>` becomes the id itself). `<` and `>`
   are redirection in both shells.
 - D1 SQL runs with `npx wrangler d1 execute tzion-breslov-production --remote --command "<SQL>"` (or in the
@@ -585,11 +586,17 @@ rule. Copy both into the pull request.
 
 *Verify:* step 11.
 
-*Undo, in reverse order:*
-1. Set the records back to the exported placeholders (proxied).
-2. Re-create the 302 rule from the export, so .org goes back to WordPress.
-3. Remove the custom domain in Settings → Pages.
-4. `gh variable delete NEXT_PUBLIC_SITE_URL`, then `gh workflow run deploy-github-pages.yml --ref main`.
+*Undo, the forward steps in reverse:*
+1. If the forms are on, undo step 10 first.
+2. Switch the records to DNS-only. GitHub keeps serving the site.
+3. Re-create the 302 rule from the export with **Place at: First**, above step 6's three 301 rules. At "Last", the
+   301s would match first: `/resources/` would get a 301 that browsers cache for good, then land on .com, where the
+   page doesn't exist. While the records are DNS-only, the rule does nothing yet.
+4. Set the records back to the exported placeholders, proxied. The 302 now catches everything, so .org goes back to
+   WordPress. Restoring the placeholders before the 302 exists would send visitors to `192.0.2.1` (Cloudflare 52x
+   errors).
+5. Remove the custom domain in Settings → Pages.
+6. `gh variable delete NEXT_PUBLIC_SITE_URL`, then `gh workflow run deploy-github-pages.yml --ref main`.
 
 Browsers keep the 301s they followed from step 6. Those land on .org pages, which then 302 to .com, where they
 don't exist.
