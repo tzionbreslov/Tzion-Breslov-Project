@@ -21,8 +21,6 @@ export interface Env {
   RESEND_WEBHOOK_SECRET: string;
   /** The site's published events (`https://tzionbreslov.org/events.json`): which events take RSVPs. */
   EVENTS_FEED_URL: string;
-  /** Days after an event's start that its RSVPs are deleted by the daily cleanup ("90"). */
-  RSVP_RETENTION_DAYS: string;
 }
 
 export class PublicError extends Error {

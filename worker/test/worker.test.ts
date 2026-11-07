@@ -52,8 +52,14 @@ function defaultFeedEvents() {
   ];
 }
 
-/** How rsvps.event_starts_at stores a start, comparable with SQLite's datetime('now', …). */
+/** How rsvps.event_starts_at / event_ends_at store a time, comparable with SQLite's datetime('now'). */
 const sqliteTime = (iso: string) => new Date(iso).toISOString().slice(0, 19).replace("T", " ");
+
+/** UTC midnight `days` days from today: how the feed gives an all-day event's dates (the end date is exclusive). */
+function utcMidnight(days: number) {
+  const today = new Date();
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + days)).toISOString();
+}
 
 function publicRequest(path: string, body: Record<string, unknown>, ip = "203.0.113.10", requestOrigin = origin) {
   return new Request(`https://api.test${path}`, {
@@ -813,6 +819,7 @@ type RsvpRow = {
   request_id: string;
   event_id: string;
   event_starts_at: string;
+  event_ends_at: string;
   name: string;
   email: string;
   email_hash: string;
@@ -831,6 +838,11 @@ async function rsvpRow(requestId: string) {
 async function guestsFor(eventId: string) {
   const row = await env.DB.prepare("SELECT COALESCE(SUM(guests), 0) AS guests FROM rsvps WHERE event_id = ?").bind(eventId).first<{ guests: number }>();
   return row?.guests ?? -1;
+}
+
+/** What reserveRsvp needs of one visitor's RSVP for one guest. */
+function reserveInput(): RsvpInput {
+  return { requestId: crypto.randomUUID(), name: "Ada", email: "ada@example.test", guests: 1, accessibility: "" } as RsvpInput;
 }
 
 function sentTo(outbound: ReturnType<typeof mockProviders>, address: string) {
@@ -856,6 +868,8 @@ describe("POST /v1/rsvp", () => {
       id: body.confirmationId,
       event_id: EVENT_IDS.open,
       event_starts_at: sqliteTime(event.startsAt),
+      // The daily clean-up deletes the RSVP once this end has passed.
+      event_ends_at: sqliteTime(event.endsAt),
       name: "Ada Lovelace",
       email: payload.email,
       guests: 2,
@@ -966,6 +980,16 @@ describe("POST /v1/rsvp", () => {
     expect(results.filter((value) => value === true)).toHaveLength(3);
     expect(results.filter((value) => value === "EVENT_FULL")).toHaveLength(3);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+  });
+
+  it("stores an all-day event's end as its exclusive end date, at UTC midnight", async () => {
+    // Tomorrow, all day: the feed's end is the day after's UTC midnight.
+    const event = feedEvent({ allDay: true, timeZone: "UTC", startsAt: utcMidnight(1), endsAt: utcMidnight(2) });
+    const input = reserveInput();
+    expect((await reserveRsvp(env, input, event, "hash")).created).toBe(true);
+    const row = await rsvpRow(input.requestId);
+    expect(row?.event_starts_at).toBe(`${utcMidnight(1).slice(0, 10)} 00:00:00`);
+    expect(row?.event_ends_at).toBe(`${utcMidnight(2).slice(0, 10)} 00:00:00`);
   });
 
   it("closes RSVPs once the event has started", async () => {
@@ -1374,17 +1398,27 @@ describe("scheduled cleanup", () => {
     }
   });
 
-  it("deletes RSVPs RSVP_RETENTION_DAYS (90) after their event started, and keeps younger ones", async () => {
-    // Stored as the Worker stores an event's start: SQLite's "YYYY-MM-DD HH:MM:SS" (UTC).
-    const insert = (id: string, start: string) => env.DB.prepare(
-      `INSERT INTO rsvps (id, request_id, event_id, event_starts_at, name, email, email_hash, guests, accessibility, created_at)
-       VALUES (?, ?, ?, datetime('now', ?), 'Ada', 'ada@example.test', 'hash', 1, NULL, ?)`
-    ).bind(id, `request-${id}`, EVENT_IDS.open, start, Date.now());
-    await env.DB.batch([insert("started-91-days-ago", "-91 days"), insert("started-89-days-ago", "-89 days"), insert("upcoming", "+1 days")]);
+  it("deletes an RSVP at the first daily clean-up after its event ends, and keeps it until then", async () => {
+    const DAY = 24 * HOUR;
+    const at = (offset: number) => new Date(Date.now() + offset).toISOString();
+    const events = [
+      feedEvent({ id: "ended-yesterday", startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) }),
+      feedEvent({ id: "ends-tomorrow", startsAt: at(DAY - 2 * HOUR), endsAt: at(DAY) }),
+      // Started yesterday, ends tomorrow: kept while it is still on.
+      feedEvent({ id: "multi-day", startsAt: at(-DAY), endsAt: at(DAY) }),
+      // Yesterday, all day: its exclusive end, today's UTC midnight, has passed.
+      feedEvent({ id: "all-day-yesterday", allDay: true, timeZone: "UTC", startsAt: utcMidnight(-1), endsAt: utcMidnight(0) }),
+      // Today, all day: kept until its exclusive end, tomorrow's UTC midnight (the cron runs at 03:17 UTC).
+      feedEvent({ id: "all-day-today", allDay: true, timeZone: "UTC", startsAt: utcMidnight(0), endsAt: utcMidnight(1) })
+    ];
+    // Stored as the Worker stores every RSVP (reserveRsvp doesn't check whether the event has started).
+    for (const [n, event] of events.entries()) {
+      expect((await reserveRsvp(env, reserveInput(), event, `hash-${n}`)).created, event.id).toBe(true);
+    }
     const pending: Promise<unknown>[] = [];
     worker.scheduled({} as ScheduledController, env, { waitUntil: (promise) => pending.push(promise) });
     await Promise.all(pending);
-    const { results } = await env.DB.prepare("SELECT id FROM rsvps ORDER BY id").all<{ id: string }>();
-    expect(results.map((row) => row.id)).toEqual(["started-89-days-ago", "upcoming"]);
+    const { results } = await env.DB.prepare("SELECT event_id FROM rsvps ORDER BY event_id").all<{ event_id: string }>();
+    expect(results.map((row) => row.event_id)).toEqual(["all-day-today", "ends-tomorrow", "multi-day"]);
   });
 });

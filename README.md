@@ -119,7 +119,9 @@ address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/event
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
 publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
-(`POST /v1/rsvp`, `GET /v1/rsvp/availability`; RSVPs are deleted 90 days after the event, `RSVP_RETENTION_DAYS`).
+(`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Each RSVP is deleted once its event is over (owner decision
+2026-11-07): it stores the event's end (`rsvps.event_ends_at`) and the Worker's daily cleanup deletes it once that
+end has passed, at most about a day later. The copies already emailed to the organizer's inbox stay there.
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
 they go live on switch day (step 6 below, with each step's undo). Owner steps and details:
 [docs/EVENT_CALENDAR.md](docs/EVENT_CALENDAR.md).
@@ -249,8 +251,8 @@ TXT record forever** — removing it can drop the verification.
         other row stays; 0002 can be applied again later), or
       - `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`, which restores the whole
         database and loses every contact, signup and RSVP row written since.
-   5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the vars
-      `EVENTS_FEED_URL` and `RSVP_RETENTION_DAYS` ship with it, and so do **Workers Logs** (`observability` in
+   5. **Deploy:** note the current version (`npx wrangler deployments list`), then `npm run worker:deploy`; the var
+      `EVENTS_FEED_URL` ships with it, and so do **Workers Logs** (`observability` in
       `wrangler.jsonc`). With **invocation logs off** (`"invocation_logs": false`; they would store every request's
       URL, confirmation tokens included, its headers and the visitor's IP), Workers Logs are expected to keep only the
       Worker's own log lines for up to 7 days (dashboard → the Worker → Logs): codes such as

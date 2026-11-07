@@ -155,14 +155,15 @@ export async function rsvpConfirmationId(env: Env, requestId: string) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
-/** SQLite's "YYYY-MM-DD HH:MM:SS" (UTC), so the cleanup can compare it with datetime('now', …). */
+/** SQLite's "YYYY-MM-DD HH:MM:SS" (UTC), so the cleanup can compare it with datetime('now'). */
 const sqliteTime = (iso: string) => new Date(Date.parse(iso)).toISOString().slice(0, 19).replace("T", " ");
 
 /**
  * Stores the RSVP if the event's limit still has room for its guests. The
  * check and the insert are ONE statement, so simultaneous RSVPs can't both
  * take the last seats. A repeated requestId returns its stored RSVP
- * (`created: false`, nothing new is sent).
+ * (`created: false`, nothing new is sent). The event's end is stored with it:
+ * the daily cleanup deletes the RSVP once that end has passed.
  */
 export async function reserveRsvp(
   env: Env,
@@ -174,17 +175,18 @@ export async function reserveRsvp(
   if (existing) return existing;
 
   const id = await rsvpConfirmationId(env, input.requestId);
-  // ?11 (the limit) is NULL when the event has no limit.
+  // ?12 (the limit) is NULL when the event has no limit.
   const result = await env.DB.prepare(
     `INSERT OR IGNORE INTO rsvps
-      (id, request_id, event_id, event_starts_at, name, email, email_hash, guests, accessibility, created_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10
-     WHERE ?11 IS NULL OR COALESCE((SELECT SUM(guests) FROM rsvps WHERE event_id = ?3), 0) + ?8 <= ?11`
+      (id, request_id, event_id, event_starts_at, event_ends_at, name, email, email_hash, guests, accessibility, created_at)
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+     WHERE ?12 IS NULL OR COALESCE((SELECT SUM(guests) FROM rsvps WHERE event_id = ?3), 0) + ?9 <= ?12`
   ).bind(
     id,
     input.requestId,
     event.id,
     sqliteTime(event.startsAt),
+    sqliteTime(event.endsAt),
     input.name,
     input.email,
     emailHash,
@@ -220,15 +222,10 @@ export async function rsvpGuestTotals(env: Env, eventIds: string[]): Promise<Map
   return totals;
 }
 
-/** RSVP_RETENTION_DAYS as a whole number of days (90 when unset or invalid). */
-function rsvpRetentionDays(env: Env) {
-  const days = Number(env.RSVP_RETENTION_DAYS);
-  return Number.isSafeInteger(days) && days >= 1 ? days : 90;
-}
-
 /**
  * Daily cron: expire rate-limit buckets, pending confirmations, webhook audit
- * rows, old request logs, and RSVPs RSVP_RETENTION_DAYS after their event started.
+ * rows, old request logs, and the RSVPs of events that are over (their stored
+ * end has passed; owner decision 2026-11-07).
  */
 export async function cleanExpiredData(env: Env) {
   const now = Date.now();
@@ -241,6 +238,6 @@ export async function cleanExpiredData(env: Env) {
        WHERE created_at < ?
          AND NOT EXISTS (SELECT 1 FROM subscription_confirmations WHERE subscription_confirmations.request_id = request_log.request_id)`
     ).bind(now - 30 * 86_400_000),
-    env.DB.prepare("DELETE FROM rsvps WHERE event_starts_at < datetime('now', '-' || ? || ' days')").bind(rsvpRetentionDays(env))
+    env.DB.prepare("DELETE FROM rsvps WHERE event_ends_at < datetime('now')")
   ]);
 }

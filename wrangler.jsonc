@@ -26,11 +26,9 @@
     // before bouncing. Blank/absent = no Reply-To. Contact notifications reply to the visitor.
     "RESEND_REPLY_TO_EMAIL": "tzionbreslovproject@gmail.com",
     // The site's own list of upcoming events (scripts/write-site-files.mjs): which events take
-    // RSVPs, when they start and their limit. Fetched without following redirects, so until
+    // RSVPs, when they start and end, and their limit. Fetched without following redirects, so until
     // switch day (.org still 302s to .com) RSVPs answer EVENTS_UNAVAILABLE.
-    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json",
-    // RSVPs are deleted this many days after their event started (daily cleanup cron).
-    "RSVP_RETENTION_DAYS": "90"
+    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
   // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget
@@ -61,7 +59,8 @@
   // "Whether query strings are removed from request URLs in logs and traces") is a second guard for
   // any URL Cloudflare does record, not a substitute for the check. Takes effect at deploy.
   "observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } },
-  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows and old RSVPs.
+  // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows, and the RSVPs of
+  // events that are over (deleted once the event's end has passed: at most about a day after it).
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {
