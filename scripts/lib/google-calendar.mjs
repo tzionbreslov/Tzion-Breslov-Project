@@ -7,8 +7,9 @@
 //     repeating event's date from its UID and that date's RECURRENCE-ID;
 //   - times are shown in the event's own zone (its TZID), else the calendar's
 //     (X-WR-TIMEZONE), else Israel's, and never depend on the build machine's;
-//   - descriptions lose their HTML (Google stores them as HTML) but keep their
-//     line breaks, and carry two markers, each on a line of its own:
+//   - descriptions lose their HTML tags and comments (Google stores them as
+//     HTML), but keep their line breaks and any other "<" or ">" as text, and
+//     carry two markers, each on a line of its own:
 //     "No RSVP" (no RSVP button) and "RSVP limit: 40" (a cap on attendance).
 import { createHash } from "node:crypto";
 import ICAL from "ical.js";
@@ -43,13 +44,39 @@ function decodeEntities(text) {
   });
 }
 
+/**
+ * The text without its HTML comments, each up to its "-->" (looked for after the "<!--").
+ * An unclosed "<!--" stays as text. A loop rather than /<!--[\s\S]*?-->/g, which is
+ * quadratic on text full of unclosed "<!--"; the result is the same.
+ */
+function removeComments(text) {
+  let kept = "";
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("<!--", from);
+    if (open === -1) break;
+    const close = text.indexOf("-->", open + 4);
+    // No "-->" after this "<!--", so none after any later one either.
+    if (close === -1) break;
+    kept += text.slice(from, open);
+    from = close + 3;
+  }
+  return kept + text.slice(from);
+}
+/**
+ * A real tag: "<" then a tag name (or "/" and a name), up to its ">" (one in a
+ * quoted attribute doesn't end it). Any other "<" or ">" is text ("kids <10, adults >18").
+ * An unquoted "<" ends the attempt, which keeps the search linear on text full of "<".
+ */
+const HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9:-]*(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/g;
+
 /** Plain text from a calendar field: line breaks kept (<br> and block ends become newlines), tags dropped, entities decoded. */
 function htmlToText(value) {
   if (typeof value !== "string") return "";
-  return decodeEntities(value
+  return decodeEntities(removeComments(value)
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, "\n")
-    .replace(/<[^>]*>/g, ""));
+    .replace(HTML_TAG, ""));
 }
 
 /** The text on one line, its whitespace collapsed (titles, locations). */
@@ -82,7 +109,8 @@ const LIMIT_EXAMPLE = 'Write it on a line of its own like "RSVP limit: 40".';
  * them, shortened. A limit must be a whole number of at least 1; anything else
  * on a "RSVP limit:" line means no limit, and a warning for the owner. Any
  * other line that starts with "RSVP limit" (no colon, "limits", "limit40")
- * stays in the text, also with a warning.
+ * stays in the text, also with a warning. "No RSVP" with a limit means no
+ * RSVPs and no limit, with a warning that names the event (its title only).
  */
 function readDescription(value, title) {
   let rsvp = "open";
@@ -102,6 +130,10 @@ function readDescription(value, title) {
       }
       kept.push(line);
     }
+  }
+  if (rsvp === "off" && limit !== null) {
+    limit = null;
+    warnings.push(`"${title}": its description has both "No RSVP" and an RSVP limit, so the event takes no RSVPs and has no limit. Keep only one of the two lines.`);
   }
   const summary = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return { summary: shorten(summary), rsvp, limit, warnings };

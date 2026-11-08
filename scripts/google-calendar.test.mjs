@@ -167,6 +167,45 @@ test("titles and descriptions lose their HTML and decode its entities", () => {
   assert.equal(one({ summary: "&lt;b&gt;Bold&lt;/b&gt; &amp;amp;" }).event.title, "<b>Bold</b> &amp;");
 });
 
+test("only real tags are removed: a < or > that isn't part of a tag stays as text", () => {
+  const summary = (description) => one({ description }).event.summary;
+  assert.equal(summary("kids <10, adults >18"), "kids <10, adults >18");
+  assert.equal(summary("a < b and c > d"), "a < b and c > d");
+  assert.equal(summary("kids <ten, adults >eighteen"), "kids <ten, adults >eighteen");
+  assert.equal(summary("<b>bold</b>"), "bold");
+  assert.equal(summary('<a href="x">link</a>'), "link");
+  // A ">" inside a quoted attribute is not the tag's end.
+  assert.equal(summary('<a href="https://example.com/?a>b" target=\'_blank\'>link</a> after'), "link after");
+  assert.equal(summary("<ul><li>One</li><li>Two&nbsp;items</li></ul>"), "One\nTwo items");
+  // Without its ">" it isn't a tag: kept as written.
+  assert.equal(summary("Doors at 7<br>Bring a friend<br"), "Doors at 7\nBring a friend<br");
+  // A comment goes whole, up to its "-->", even with a ">" or a tag inside.
+  assert.equal(summary("Before<!-- a note > with <b>a tag</b> -->after"), "Beforeafter");
+  // As Google's editor writes them (escaped), and as a plain-text description has them.
+  assert.equal(summary("<p>kids &lt;10, adults &gt;18</p>"), "kids <10, adults >18");
+  assert.equal(one({ summary: "Kids <10 & adults >18" }).event.title, "Kids <10 & adults >18");
+});
+
+test("a long description full of unclosed tags is read in linear time", () => {
+  const description = '<a x="<b '.repeat(40_000);
+  const started = performance.now();
+  const { event } = one({ description });
+  assert.ok(performance.now() - started < 2_000, `${Math.round(performance.now() - started)} ms`);
+  assert.ok(event.summary.startsWith('<a x="<b <a x="<b'));
+});
+
+test("comments are removed one after another, and an unclosed one is text, in linear time", () => {
+  const summary = (description) => one({ description }).event.summary;
+  assert.equal(summary("a<!--x-->b<!--y > z-->c<!--z"), "abc<!--z");
+  // Its "-->" is looked for after the "<!--": "<!-->" doesn't close itself.
+  assert.equal(summary("a<!-->b-->c"), "ac");
+  const description = "<!--".repeat(80_000);
+  const started = performance.now();
+  const { event } = one({ description });
+  assert.ok(performance.now() - started < 2_000, `${Math.round(performance.now() - started)} ms`);
+  assert.ok(event.summary.startsWith("<!--<!--"));
+});
+
 test("an untitled event gets the default title", () => {
   assert.equal(one({ summary: null }).event.title, "Tzion Breslov event");
   assert.equal(one({ summary: "  <br> " }).event.title, "Tzion Breslov event");
@@ -221,6 +260,33 @@ test('any other line that starts with "RSVP limit" is shown as written, with a w
   }
 });
 
+test('"No RSVP" with an RSVP limit: "No RSVP" wins, the limit is dropped, with a warning naming the event only', () => {
+  for (const description of ["Come early\nNo RSVP\nRSVP limit: 40", "RSVP limit: 40\nCome early\nno rsvp."]) {
+    const { event, warnings } = one({ summary: "Melave Malka", description });
+    assert.equal(event.rsvp, "off", description);
+    assert.equal(event.limit, null, description);
+    assert.equal(event.summary, "Come early", description);
+    assert.equal(warnings.length, 1, description);
+    assert.match(warnings[0], /^"Melave Malka": /);
+    assert.match(warnings[0], /No RSVP/);
+    // The title only: nothing else from the description.
+    assert.ok(!warnings[0].includes("Come early"), warnings[0]);
+    assert.ok(!warnings[0].includes("40"), warnings[0]);
+  }
+  // A weekly class: every date is the same, and the warning comes once.
+  const weekly = buildCalendarCatalog(calendar([vevent({ summary: "Weekly class", description: "No RSVP\nRSVP limit: 12", extra: ["RRULE:FREQ=WEEKLY;COUNT=5"] })]), { now: NOW });
+  assert.equal(weekly.events.length, 5);
+  assert.ok(weekly.events.every((event) => event.rsvp === "off" && event.limit === null));
+  assert.equal(weekly.warnings.length, 1);
+  assert.match(weekly.warnings[0], /^"Weekly class": /);
+  // A limit that isn't one sets no limit already: only its own warning.
+  const { event, warnings } = one({ summary: "Melave Malka", description: "No RSVP\nRSVP limit: 0" });
+  assert.equal(event.rsvp, "off");
+  assert.equal(event.limit, null);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /is not an RSVP limit of 1 or more/);
+});
+
 test("a weekly class with a bad limit warns once, not once per date", () => {
   const { warnings } = buildCalendarCatalog(calendar([vevent({ description: "RSVP limit: none", extra: ["RRULE:FREQ=WEEKLY;COUNT=5"] })]), { now: NOW });
   assert.equal(warnings.length, 1);
@@ -229,14 +295,17 @@ test("a weekly class with a bad limit warns once, not once per date", () => {
 test("markers are read from the whole description, then it is shortened to 320 characters on a word boundary", () => {
   const long = Array.from({ length: 90 }, (_, i) => `word${i}`).join(" ");
   assert.ok(long.length > 400);
-  const { event } = one({ description: `${long}\nRSVP limit: 12\nNo RSVP` });
-  assert.equal(event.limit, 12);
-  assert.equal(event.rsvp, "off");
-  assert.ok(event.summary.length <= 321, String(event.summary.length));
-  assert.ok(event.summary.endsWith("…"));
-  assert.ok(long.startsWith(event.summary.slice(0, -1)));
-  assert.match(event.summary, /word\d+…$/);
-  assert.ok(!event.summary.includes("RSVP"));
+  const limited = one({ description: `${long}\nRSVP limit: 12` }).event;
+  assert.equal(limited.limit, 12);
+  assert.equal(limited.rsvp, "open");
+  assert.equal(one({ description: `${long}\nNo RSVP` }).event.rsvp, "off");
+  for (const event of [limited, one({ description: `${long}\nNo RSVP` }).event]) {
+    assert.ok(event.summary.length <= 321, String(event.summary.length));
+    assert.ok(event.summary.endsWith("…"));
+    assert.ok(long.startsWith(event.summary.slice(0, -1)));
+    assert.match(event.summary, /word\d+…$/);
+    assert.ok(!event.summary.includes("RSVP"));
+  }
 });
 
 test("keeps the next 60 events within 370 days by default", () => {

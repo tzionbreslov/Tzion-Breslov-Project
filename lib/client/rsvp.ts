@@ -305,7 +305,8 @@ export function enhanceRsvp(root: ParentNode = document) {
   for (const card of cards) {
     const button = card.querySelector<HTMLButtonElement>("button.tz-event__rsvp");
     if (!button) continue;
-    // RSVPs close when the event starts (the page can be up to half a day old).
+    // RSVPs close when the event starts (the page can be up to half a day old). One that had started when
+    // the page was built (data-started) never showed its slot (app/events.css); this hides the later ones.
     if (!(Date.parse(card.dataset.startsAt ?? "") > now)) {
       const actions = button.closest<HTMLElement>(".tz-event__actions") ?? button;
       actions.hidden = true;
