@@ -51,8 +51,8 @@ currently scheduled".
   event" below). Changing the time of the whole series, or "This and following events", starts those dates afresh.
 - **When RSVPs are deleted:** once the event is over. Early every morning (05:17 Israel time in winter, 06:17 in
   summer) the forms service reads the events the site last published, gives each event's RSVPs that event's end, and
-  deletes the RSVPs whose end has passed. If it can't read that list, it deletes no RSVP that day. The RSVP emails in
-  our inbox are not affected.
+  deletes the RSVPs whose end has passed. If it can't read that list, that day it deletes only the RSVPs of events
+  that ended more than 7 days before. The RSVP emails in our inbox are not affected.
 - **Moving an event:** the forms service only sees the move once the site has been rebuilt (around 07:00 and 21:00).
   If you move an event on the day it was due, or the evening before (especially after about 9 pm Israel time), or
   after it was due to end, run **Deploy GitHub Pages** by hand straight away (**Actions** → **Deploy GitHub Pages** →

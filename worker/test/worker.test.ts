@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
-import { reserveRsvp } from "../src/database";
+import { cancelRsvp, confirmRsvp, confirmedRsvp, reserveRsvp, rsvpConfirmationId, rsvpWait } from "../src/database";
 import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
 import worker, { fetchHandler } from "../src/index";
 import type { RsvpInput } from "../src/validation";
@@ -121,8 +121,12 @@ function rsvpPayload(overrides: Record<string, unknown> = {}) {
 
 type MockOptions = {
   contactsCreateStatus?: number;
-  /** Resend's answer to an email, or one per recipient. */
-  emailStatus?: number | ((to: string) => number);
+  /** Resend's answer to an email, or one per recipient (a promise holds that email until the test settles it). */
+  emailStatus?: number | ((to: string) => number | Promise<number>);
+  /** Resend never answers an email: only the request's own signal ends it, as fetch does when it times out. */
+  emailHangs?: boolean;
+  /** Holds every /events.json answer until this settles. */
+  feedGate?: Promise<void>;
   /** The events /events.json lists (default: defaultFeedEvents()). */
   feedEvents?: FeedEvent[];
   /** Answers /events.json instead (a failure, a redirect, a malformed body). */
@@ -138,6 +142,11 @@ type MockOptions = {
 function mockProviders(action: string, options: MockOptions = {}) {
   const calls: OutboundCall[] = [];
   const feedEvents = options.feedEvents ?? defaultFeedEvents();
+  /** A request that never answers: only its own signal ends it (without one, it would hang until the platform gives up). */
+  const hang = (signal: AbortSignal | null | undefined) => new Promise<Response>((_, reject) => {
+    if (!signal) return reject(new Error("no timeout signal"));
+    signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
   const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const method = init?.method ?? (input instanceof Request ? input.method : "GET");
@@ -145,22 +154,17 @@ function mockProviders(action: string, options: MockOptions = {}) {
     const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     calls.push({ url, method, body, headers: new Headers(init?.headers), redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined) });
     if (url === FEED_URL) {
-      if (options.feedHangs) {
-        const signal = init?.signal;
-        return new Promise<Response>((_, reject) => {
-          // Without a signal this request would hang until the platform gives up.
-          if (!signal) return reject(new Error("no timeout signal"));
-          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
-        });
-      }
+      if (options.feedGate) await options.feedGate;
+      if (options.feedHangs) return hang(init?.signal);
       return options.feedResponse ? options.feedResponse() : Response.json({ syncedAt: new Date().toISOString(), events: feedEvents });
     }
     if (url.includes("/turnstile/v0/siteverify")) {
       return Response.json({ success: true, hostname: "localhost", action });
     }
     if (url === "https://api.resend.com/emails") {
+      if (options.emailHangs) return hang(init?.signal);
       const to = (body as { to?: string[] } | undefined)?.to?.[0] ?? "";
-      const status = typeof options.emailStatus === "function" ? options.emailStatus(to) : options.emailStatus ?? 200;
+      const status = typeof options.emailStatus === "function" ? await options.emailStatus(to) : options.emailStatus ?? 200;
       return Response.json(status === 200 ? { id: "email-id" } : { message: "failure" }, { status });
     }
     if (url === "https://api.resend.com/contacts" && method === "POST") {
@@ -197,14 +201,83 @@ function shortenTimeouts() {
   return asked;
 }
 
+/**
+ * Moves the clock instead of waiting: every wait of up to 4 s that the Worker asks setTimeout for passes at
+ * once, and Date.now() jumps ahead by its length. So a request that waits 30 s for an RSVP row to turn stale
+ * runs in milliseconds, its clock reading as it would. Returns the waits asked for (ms), in order. It skips
+ * ahead through any setTimeout of 4 s or less while the test runs, not only the RSVP wait's: if the Worker
+ * ever waits on something else that short on the same path, that is skipped too.
+ */
+function fastForwardWaits() {
+  const waits: number[] = [];
+  let ahead = 0;
+  const realNow = Date.now.bind(Date);
+  const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+  vi.spyOn(Date, "now").mockImplementation(() => realNow() + ahead);
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+    if (typeof ms !== "number" || ms <= 0 || ms > 4_000) return realSetTimeout(handler, ms);
+    waits.push(ms);
+    ahead += ms;
+    return realSetTimeout(handler, 0);
+  }) as typeof setTimeout);
+  return waits;
+}
+
+/**
+ * The tests' D1, counting the queries Cloudflare counts against "Queries per Worker invocation" (50 on Workers
+ * Free): each statement run on its own (first, run, all, raw) is one, and a batch is one, however many
+ * statements it holds. `queries` lists them in order (a statement's SQL, or "batch"). `before` runs ahead of
+ * each one (given its SQL, or "batch"), uncounted: what other attempts do to the database in the meantime.
+ */
+function countingDb(before?: (query: string) => Promise<void>) {
+  const queries: string[] = [];
+  const unwrapped = new WeakMap<object, D1PreparedStatement>();
+  const runs = new Set<PropertyKey>(["first", "run", "all", "raw"]);
+  const statement = (target: D1PreparedStatement, sql: string): D1PreparedStatement => {
+    const proxy = new Proxy(target, {
+      get(inner, property) {
+        if (property === "bind") return (...values: unknown[]) => statement(inner.bind(...values), sql);
+        const value: unknown = Reflect.get(inner, property, inner);
+        if (typeof value !== "function") return value;
+        if (!runs.has(property)) return value.bind(inner);
+        return async (...args: unknown[]) => {
+          await before?.(sql);
+          queries.push(sql);
+          return value.apply(inner, args);
+        };
+      }
+    });
+    unwrapped.set(proxy, target);
+    return proxy;
+  };
+  const db = new Proxy(env.DB, {
+    get(target, property) {
+      if (property === "prepare") return (sql: string) => statement(target.prepare(sql), sql);
+      if (property === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          await before?.("batch");
+          queries.push("batch");
+          return target.batch(statements.map((each) => unwrapped.get(each) ?? each));
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  });
+  return { db, queries };
+}
+
 async function errorBody(response: Response) {
-  return response.json<{ ok: boolean; error: string; correlationId: string; field?: string }>();
+  return response.json<{ ok: boolean; error: string; correlationId: string; field?: string; remaining?: number }>();
 }
 
 async function count(table: string) {
   const row = await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>();
   return row?.count ?? -1;
 }
+
+/** Cloudflare's default cache, where the Worker shares the availability answer (typed as the Worker reads it). */
+const sharedCache = () => (caches as unknown as { default: Cache }).default;
 
 beforeEach(async () => {
   await env.DB.batch([
@@ -214,8 +287,9 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM rate_limits"),
     env.DB.prepare("DELETE FROM webhook_events")
   ]);
-  // The feed is cached per isolate: every test reads its own.
+  // The feed is cached per isolate, and the availability answer in the Cache API: every test reads its own.
   resetEventFeedCache();
+  await sharedCache().delete("https://api.test/v1/rsvp/availability");
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -850,8 +924,10 @@ type RsvpRow = {
   guests: number;
   accessibility: string | null;
   created_at: number;
+  confirmed_at: number | null;
 };
 type RsvpSuccess = { ok: true; requestId: string; confirmationId: string };
+type RsvpAvailability = { ok: true; events: Record<string, { full: boolean; remaining: number | null }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -871,6 +947,39 @@ function reserveInput(): RsvpInput {
 
 function sentTo(outbound: ReturnType<typeof mockProviders>, address: string) {
   return outbound.emails().filter((call) => (call.body as SentEmail).to[0] === address);
+}
+
+/** A promise the test settles. */
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The guest's "RSVP received" for `address`, held on its first send until the test answers it
+ * (`answer(200)` or `answer(500)`); later sends answer 200 at once. `asked` settles when the
+ * held send reaches Resend.
+ */
+function holdFirstGuestEmail(address: string) {
+  const asked = deferred();
+  const held = deferred<number>();
+  let sends = 0;
+  return {
+    asked: asked.promise,
+    answer: held.resolve,
+    emailStatus: (to: string) => {
+      if (to !== address) return 200;
+      sends += 1;
+      if (sends > 1) return 200;
+      asked.resolve();
+      return held.promise;
+    }
+  };
 }
 
 describe("POST /v1/rsvp", () => {
@@ -950,6 +1059,333 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(2);
   });
 
+  it("a second request with the same requestId waits for the first one's outcome: booked, it answers the same confirmation", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus });
+    const first = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    // The first attempt holds the seats and is emailing the guest.
+    await guest.asked;
+    expect(await count("rsvps")).toBe(1);
+
+    let secondAnswered = false;
+    const second = fetchHandler(publicRequest("/v1/rsvp", payload), env).finally(() => {
+      secondAnswered = true;
+    });
+    await vi.waitFor(() => expect(outbound.turnstile()).toHaveLength(2));
+    await pause(300);
+    // No answer while the guest's email is still on its way.
+    expect(secondAnswered).toBe(false);
+
+    guest.answer(200);
+    const [a, b] = await Promise.all([first, second]);
+    expect([a.status, b.status]).toEqual([202, 202]);
+    const firstBody = await a.json<RsvpSuccess>();
+    await expect(b.json()).resolves.toEqual(firstBody);
+    expect(await count("rsvps")).toBe(1);
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    // The guest and the organizer heard once.
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, "team@example.test"]);
+  });
+
+  it("a second request with the same requestId waits for the first one's outcome: given back, it books the RSVP itself", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus });
+    const first = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    await guest.asked;
+    const second = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    await vi.waitFor(() => expect(outbound.turnstile()).toHaveLength(2));
+    await pause(100);
+
+    // The first attempt's guest email fails: it gives its seats back and answers the retryable error.
+    guest.answer(500);
+    const a = await first;
+    expect(a.status).toBe(502);
+    expect((await errorBody(a)).error).toBe("UPSTREAM_FAILURE");
+    // The second never answered for a row that was being given back: it booked and emailed the guest itself.
+    const b = await second;
+    expect(b.status).toBe(202);
+    const { confirmationId } = await b.json<RsvpSuccess>();
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, guests: 3, confirmed_at: expect.any(Number) });
+    expect(await count("rsvps")).toBe(1);
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, payload.email, "team@example.test"]);
+    expect(outbound.emails().map((call) => call.headers.get("idempotency-key")))
+      .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("two requests with the same requestId that reach the reservation together: one books, the other waits for its outcome", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const feedGate = deferred();
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus, feedGate: feedGate.promise });
+    // Both have found no RSVP for the requestId and are reading the feed.
+    let answered = 0;
+    const both = [fetchHandler(publicRequest("/v1/rsvp", payload), env), fetchHandler(publicRequest("/v1/rsvp", payload), env)]
+      .map((response) => response.finally(() => {
+        answered += 1;
+      }));
+    await vi.waitFor(() => expect(outbound.feed()).toHaveLength(2));
+    expect(await count("rsvps")).toBe(0);
+    feedGate.resolve();
+    // One holds the seats and emails the guest; the other's INSERT finds them taken and waits.
+    await guest.asked;
+    await pause(300);
+    expect(answered).toBe(0);
+    guest.answer(200);
+    const answers = await Promise.all(both);
+    expect(answers.map((response) => response.status)).toEqual([202, 202]);
+    const [one, two] = await Promise.all(answers.map((response) => response.json<RsvpSuccess>()));
+    expect(two).toEqual(one);
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  /**
+   * Books an RSVP, then leaves its row as an attempt that stopped between taking the seats and confirming them
+   * would: unconfirmed, taken `ageMs` ago (at `heldSince`).
+   */
+  async function cutOffRsvp(ageMs: number) {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    mockProviders("rsvp");
+    const { confirmationId } = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+    const heldSince = Date.now() - ageMs;
+    await env.DB.prepare("UPDATE rsvps SET confirmed_at = NULL, created_at = ? WHERE request_id = ?")
+      .bind(heldSince, payload.requestId).run();
+    vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    return { payload, confirmationId, heldSince };
+  }
+
+  it("re-books an RSVP whose first attempt was cut off (its row over 30 s old) at the site's retry, with the same emails' keys", async () => {
+    const { payload, confirmationId } = await cutOffRsvp(31_000);
+    // The site's retry after a network failure or a 5xx: the same requestId and Turnstile token, the same details.
+    const outbound = mockProviders("rsvp");
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    // Resend's idempotency keys stop a second copy of an email the cut-off attempt had already sent.
+    expect(outbound.emails().map((call) => call.headers.get("idempotency-key")).sort())
+      .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("a retry that finds a cut-off attempt's row still under 30 s old waits for it to turn stale, then re-books it in the same call", async () => {
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(29_400);
+    const outbound = mockProviders("rsvp");
+    // Still fresh when the retry is sent (a slow setup would otherwise let it book without waiting).
+    expect(Date.now()).toBeLessThan(heldSince + 30_000);
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    // Not REQUEST_IN_PROGRESS, which would cost the visitor another try (and one of the email's 6 per 10 minutes).
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    // Booked again once the row was stale (30 s after it was taken), not before: as it was fresh when the retry was
+    // sent, this one call waited for it.
+    const row = await rsvpRow(payload.requestId);
+    expect(row?.confirmed_at).toEqual(expect.any(Number));
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
+    expect(outbound.turnstile()).toHaveLength(1);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("a retry that waits the full 30 s for a cut-off attempt's row makes at most 20 D1 queries (Workers Free allows 50)", async () => {
+    // The row was taken just now and never confirmed: the retry waits the whole 30 s for it to turn stale.
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(0);
+    // The feed is read again too (the longest path).
+    resetEventFeedCache();
+    const outbound = mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    const { db, queries } = countingDb();
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // 2 rate limits, the waiting reads, 1 more read and the booking batch, then the confirmation: 17 today.
+    expect(queries.length).toBeLessThanOrEqual(20);
+    // Turnstile, the feed, the guest's email and the organizer's: the other subrequests.
+    expect(outbound.calls).toHaveLength(4);
+    // Booked again once stale, no sooner: 200 ms, doubling up to 4 s, the last wait cut to the moment it turns stale.
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, confirmed_at: expect.any(Number) });
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
+    expect(waits.slice(0, -1)).toEqual([200, 400, 800, 1_600, 3_200, 4_000, 4_000, 4_000, 4_000, 4_000]);
+    expect(waits.at(-1)).toBeLessThan(4_000);
+    expect(await count("rsvps")).toBe(1);
+  });
+
+  it("a retry that finds a cut-off attempt's row 20 s old books it the moment it turns stale, not at its next 4 s read", async () => {
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(20_000);
+    const outbound = mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // The row turns stale about 10 s into the wait, far from the deadline: after the reads at 0, 0.2, 0.6, 1.4, 3 and
+    // 6.2 s, the next 4 s wait is cut to that moment (uncut, it would read again at 10.2 s).
+    expect(waits.slice(0, -1)).toEqual([200, 400, 800, 1_600, 3_200]);
+    expect(waits.at(-1)).toBeLessThan(4_000);
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(10_001);
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, confirmed_at: expect.any(Number) });
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("one RSVP request waits 30 s at most in all and makes at most 22 D1 queries, however other attempts with its requestId race it", async () => {
+    // The first attempt's row, taken just now: it gives the seats back 10 s later (its guest email timed out).
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(0);
+    const row = (await rsvpRow(payload.requestId))!;
+    resetEventFeedCache();
+    mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    // Then two more attempts, each taking the seats just before this request's booking batch: the first gives them
+    // back 10 s later too, the second stops (it never confirms them or gives them back).
+    const others: Array<number | null> = [10_000, null];
+    let holder: { since: number; givesBackAfter: number | null } | null = { since: heldSince, givesBackAfter: 10_000 };
+    const { db, queries } = countingDb(async (query) => {
+      if (holder && holder.givesBackAfter !== null && Date.now() >= holder.since + holder.givesBackAfter) {
+        await env.DB.prepare("DELETE FROM rsvps WHERE request_id = ?").bind(payload.requestId).run();
+        holder = null;
+      }
+      if (query === "batch" && others.length) {
+        holder = { since: Date.now(), givesBackAfter: others.shift() as number | null };
+        await env.DB.prepare(
+          `INSERT INTO rsvps
+            (id, request_id, event_id, event_starts_at, event_ends_at, name, email, email_hash, guests, accessibility, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(row.id, row.request_id, row.event_id, row.event_starts_at, row.event_ends_at, row.name, row.email, row.email_hash,
+          row.guests, row.accessibility, holder.since).run();
+      }
+    });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    // 2 rate limits, the waits' reads (each round goes on from the time and backoff the last one left), 2 batches.
+    expect(queries.length).toBeLessThanOrEqual(22);
+    // One 30 s deadline for the whole request (30 001 ms: rsvpWait). The last attempt took its row 22 s into it, so
+    // that row only turns stale after the deadline: this request answers REQUEST_IN_PROGRESS.
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(30_001);
+    expect(response.status).toBe(409);
+    expect((await errorBody(response)).error).toBe("REQUEST_IN_PROGRESS");
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toBeNull();
+    // The site keeps the requestId and token on that answer: its retry books the stopped attempt's row once stale.
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    expect(await count("rsvps")).toBe(1);
+  });
+
+  it("finishes the emails and the confirmation under waitUntil, so a visitor who disconnects can't leave the seats held unconfirmed", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus });
+    const kept: Promise<unknown>[] = [];
+    const context = { waitUntil: (promise: Promise<unknown>) => void kept.push(promise) };
+    const response = worker.fetch(publicRequest("/v1/rsvp", payload), env, context);
+    // The seats are taken and the guest is being emailed: from here the runtime is asked to finish the work.
+    await guest.asked;
+    expect(kept).toHaveLength(1);
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toBeNull();
+    guest.answer(200);
+    // What the runtime keeps alive covers the confirmation and the organizer's email, not just the guest's.
+    await expect(kept[0]).resolves.toBeUndefined();
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, "team@example.test"]);
+    expect((await response).status).toBe(202);
+  });
+
+  it("under waitUntil, a failed guest email still gives the seats back, and the kept work never rejects", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    mockProviders("rsvp", { emailStatus: (to) => (to === payload.email ? 500 : 200) });
+    const kept: Promise<unknown>[] = [];
+    const response = await worker.fetch(publicRequest("/v1/rsvp", payload), env, { waitUntil: (promise) => void kept.push(promise) });
+    expect(response.status).toBe(502);
+    expect((await errorBody(response)).error).toBe("UPSTREAM_FAILURE");
+    expect(kept).toHaveLength(1);
+    await expect(kept[0]).resolves.toBeUndefined();
+    expect(await count("rsvps")).toBe(0);
+  });
+
+  it("gives up on a Resend call that doesn't answer within 10 s: the guest's email fails (502) and the seats are given back", async () => {
+    const asked = shortenTimeouts();
+    const outbound = mockProviders("rsvp", { emailHangs: true });
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    // The feed's 10 s, then the guest email's.
+    expect(asked).toEqual([10_000, 10_000]);
+    expect(response.status).toBe(502);
+    expect((await errorBody(response)).error).toBe("UPSTREAM_FAILURE");
+    expect(outbound.emails()).toHaveLength(1);
+    expect(await count("rsvps")).toBe(0);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(0);
+  });
+
+  it("keeps the booking and still emails the organizer when confirming fails after the guest's email (logged, request id only)", async () => {
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const outbound = mockProviders("rsvp");
+    // A database whose confirmation UPDATE fails (everything else works).
+    const db = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "prepare") {
+          return (sql: string) => {
+            if (sql.startsWith("UPDATE rsvps SET confirmed_at")) throw new Error("D1 unavailable");
+            return target.prepare(sql);
+          };
+        }
+        const value = Reflect.get(target, property, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+    });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(response.status).toBe(202);
+    const { confirmationId } = await response.json<RsvpSuccess>();
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, "team@example.test"]);
+    expect((sentTo(outbound, "team@example.test")[0].body as SentEmail).text).toContain(`Confirmation ID: ${confirmationId}`);
+    // The seats stay taken, unconfirmed.
+    expect(await rsvpRow(payload.requestId)).toMatchObject({ id: confirmationId, guests: 3, confirmed_at: null });
+    const logged = logs.mock.calls.map((args) => String(args[0]));
+    const line = logged.find((entry) => entry.includes("RSVP_CONFIRM_FAILED"));
+    expect(line && JSON.parse(line)).toEqual({ code: "RSVP_CONFIRM_FAILED", requestId: payload.requestId, error: "Error" });
+    expect(logged.join("\n")).not.toMatch(/example\.test|Ada|Lovelace|Step-free/);
+  });
+
+  it("answers REQUEST_IN_PROGRESS when a shorter wait runs out while the first attempt is still emailing the guest", async () => {
+    const input = reserveInput();
+    const event = feedEvent();
+    // Taken, not yet confirmed (its attempt is still on the guest's email).
+    expect((await reserveRsvp(env, input, event, "hash")).created).toBe(true);
+    const started = Date.now();
+    await expect(confirmedRsvp(env, input.requestId, event.id, "hash", rsvpWait(300))).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+    await expect(reserveRsvp(env, input, event, "hash", rsvpWait(300))).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    expect(await count("rsvps")).toBe(1);
+  });
+
+  it("gives back, or confirms, only the RSVP that the attempt itself holds; never gives back a confirmed one", async () => {
+    const input = reserveInput();
+    const event = feedEvent();
+    const reservation = await reserveRsvp(env, input, event, "hash");
+    if (!reservation.created) throw new Error("not created");
+    // Another attempt's hold (a different time) is not this one's: neither given back nor confirmed.
+    await cancelRsvp(env, reservation.id, reservation.heldSince - 1);
+    expect(await count("rsvps")).toBe(1);
+    await confirmRsvp(env, reservation.id, reservation.heldSince - 1);
+    expect((await rsvpRow(input.requestId))?.confirmed_at).toBeNull();
+    // A confirmed RSVP is never given back.
+    await confirmRsvp(env, reservation.id, reservation.heldSince);
+    expect((await rsvpRow(input.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    await cancelRsvp(env, reservation.id, reservation.heldSince);
+    expect(await count("rsvps")).toBe(1);
+    await env.DB.prepare("UPDATE rsvps SET confirmed_at = NULL").run();
+    await cancelRsvp(env, reservation.id, reservation.heldSince);
+    expect(await count("rsvps")).toBe(0);
+  });
+
   it("refuses a reused requestId for another event or email", async () => {
     const outbound = mockProviders("rsvp");
     const payload = rsvpPayload();
@@ -963,15 +1399,22 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(2);
   });
 
-  it("caps attendance at the event's limit: 2 + 2 against 3 is full, 2 + 1 fits", async () => {
+  it("caps attendance at the event's limit: 2 + 2 against 3 is full, 2 + 1 fits; a refusal says how many places were left", async () => {
     const outbound = mockProviders("rsvp");
     const statuses: number[] = [];
+    const left: Array<number | undefined> = [];
     for (const guests of [2, 2, 1, 1]) {
       const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests })), env);
       statuses.push(response.status);
-      if (response.status === 409) expect((await errorBody(response)).error).toBe("EVENT_FULL");
+      if (response.status === 409) {
+        const body = await errorBody(response);
+        expect(body.error).toBe("EVENT_FULL");
+        left.push(body.remaining);
+      }
     }
     expect(statuses).toEqual([202, 409, 202, 409]);
+    // 2 of 3 taken, 2 asked: 1 left. Then 3 of 3 taken: none.
+    expect(left).toEqual([1, 0]);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
     expect(outbound.emails()).toHaveLength(4);
   });
@@ -984,7 +1427,8 @@ describe("POST /v1/rsvp", () => {
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([202, 409]);
     const refused = responses.find((response) => response.status === 409)!;
-    expect((await errorBody(refused)).error).toBe("EVENT_FULL");
+    // The places left as the refused reservation saw them: 3 - 2.
+    expect(await errorBody(refused)).toMatchObject({ error: "EVENT_FULL", remaining: 1 });
     expect(await count("rsvps")).toBe(1);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(2);
     expect(outbound.emails()).toHaveLength(2);
@@ -1004,6 +1448,7 @@ describe("POST /v1/rsvp", () => {
     expect(results.filter((value) => value === true)).toHaveLength(3);
     expect(results.filter((value) => value === "EVENT_FULL")).toHaveLength(3);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    await expect(reserveRsvp(env, input(7), event, "hash-7")).rejects.toMatchObject({ code: "EVENT_FULL", remaining: 0 });
   });
 
   it("stores an all-day event's end as its exclusive end date, at UTC midnight", async () => {
@@ -1023,6 +1468,41 @@ describe("POST /v1/rsvp", () => {
     expect((await errorBody(response)).error).toBe("EVENT_CLOSED");
     expect(await count("rsvps")).toBe(0);
     expect(outbound.emails()).toHaveLength(0);
+  });
+
+  it("answers a replay of a booked RSVP with its confirmation even after the event has started, or while the feed is down", async () => {
+    const payload = rsvpPayload();
+    const booking = mockProviders("rsvp");
+    const first = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(first.status).toBe(202);
+    const { confirmationId } = await first.json<RsvpSuccess>();
+    expect(booking.emails()).toHaveLength(2);
+    booking.spy.mockRestore();
+
+    // The same event, now started an hour ago (the calendar moved it, or the retry came late).
+    resetEventFeedCache();
+    const started = mockProviders("rsvp", {
+      feedEvents: [feedEvent({ startsAt: new Date(Date.now() - HOUR).toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() })]
+    });
+    const replay = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(replay.status).toBe(202);
+    await expect(replay.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // A new RSVP to it is closed.
+    const late = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(late.status).toBe(409);
+    expect((await errorBody(late)).error).toBe("EVENT_CLOSED");
+    expect(started.emails()).toHaveLength(0);
+    started.spy.mockRestore();
+
+    // The feed can't be read: the replay needs only the stored RSVP.
+    resetEventFeedCache();
+    const down = mockProviders("rsvp", { feedResponse: () => new Response("", { status: 500 }) });
+    const whileDown = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(whileDown.status).toBe(202);
+    await expect(whileDown.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(down.feed()).toHaveLength(0);
+    expect(down.emails()).toHaveLength(0);
+    expect(await count("rsvps")).toBe(1);
   });
 
   it("answers 404 EVENT_NOT_FOUND for a \"No RSVP\" event and for an id the feed doesn't list", async () => {
@@ -1078,6 +1558,46 @@ describe("POST /v1/rsvp", () => {
       await expect(loadEventFeed(env), label).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE" });
       await vi.waitFor(() => expect(cancelled, label).toBe(true), { timeout: 500 });
     }
+  });
+
+  it("treats a feed body that breaks off while it is read as unavailable (read failed)", async () => {
+    // Valid JSON starts arriving, then the connection drops (or the 10 s timeout fires mid-body).
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"syncedAt":null,"events":['));
+        controller.error(new Error("connection reset"));
+      }
+    });
+    const outbound = mockProviders("rsvp", { feedResponse: () => new Response(body, { headers: { "Content-Type": "application/json" } }) });
+    await expect(loadEventFeed(env)).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE", message: "events feed: read failed" });
+    expect(outbound.feed()).toHaveLength(1);
+  });
+
+  it("stops reading a feed with no Content-Length once it passes 512 KB, and cancels the rest", async () => {
+    const CHUNK = 64 * 1024;
+    let pulled = 0;
+    let cancelled = false;
+    // Up to about 1 MB of a JSON string, in 64 KB chunks, with no declared length.
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= 1024 * 1024) return controller.close();
+        const chunk = new TextEncoder().encode((pulled === 0 ? '{"syncedAt":"' : "") + " ".repeat(CHUNK)).slice(0, CHUNK);
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      }
+    }, { highWaterMark: 0 });
+    let response: Response | undefined;
+    mockProviders("rsvp", {
+      feedResponse: () => (response = new Response(body, { headers: { "Content-Type": "application/json" } }))
+    });
+    await expect(loadEventFeed(env)).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE", message: "events feed: too large" });
+    // The no-length path: nothing declared the size up front.
+    expect(response?.headers.get("content-length")).toBeNull();
+    await vi.waitFor(() => expect(cancelled).toBe(true), { timeout: 500 });
+    expect(pulled).toBeLessThanOrEqual(512 * 1024 + 2 * CHUNK);
   });
 
   it("gives up on a feed that doesn't answer within 10 s: 503 EVENTS_UNAVAILABLE", async () => {
@@ -1262,6 +1782,15 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(3);
   });
 
+  it("refuses to derive a confirmation id from a RATE_LIMIT_SALT under 32 characters (SERVICE_NOT_CONFIGURED)", async () => {
+    const shortSalt = { ...env, RATE_LIMIT_SALT: "too-short-salt" };
+    await expect(rsvpConfirmationId(shortSalt, crypto.randomUUID())).rejects.toMatchObject({ code: "SERVICE_NOT_CONFIGURED" });
+    await expect(reserveRsvp(shortSalt, reserveInput(), feedEvent(), "hash")).rejects.toMatchObject({ code: "SERVICE_NOT_CONFIGURED" });
+    expect(await count("rsvps")).toBe(0);
+    // 32 characters is enough.
+    await expect(rsvpConfirmationId({ ...env, RATE_LIMIT_SALT: "x".repeat(32) }, crypto.randomUUID())).resolves.toMatch(UUID);
+  });
+
   it("logs a failed seat release after a failed guest email (code and request id only)", async () => {
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
@@ -1343,9 +1872,18 @@ describe("POST /v1/rsvp", () => {
 });
 
 describe("GET /v1/rsvp/availability", () => {
-  function availability(requestOrigin?: string) {
-    return fetchHandler(new Request("https://api.test/v1/rsvp/availability", { headers: requestOrigin ? { Origin: requestOrigin } : {} }), env);
+  const AVAILABILITY_URL = "https://api.test/v1/rsvp/availability";
+
+  function availability(requestOrigin?: string, url = AVAILABILITY_URL) {
+    return fetchHandler(new Request(url, { headers: requestOrigin ? { Origin: requestOrigin } : {} }), env);
   }
+
+  /** Empties the shared cache (Cache API), as when its 30 s are over. */
+  async function expireSharedCache() {
+    await sharedCache().delete(AVAILABILITY_URL);
+  }
+
+  beforeEach(expireSharedCache);
 
   it("reports full and remaining for every open event, counts only, with CORS for allowed origins only", async () => {
     mockProviders("rsvp");
@@ -1354,7 +1892,7 @@ describe("GET /v1/rsvp/availability", () => {
     const response = await availability(origin);
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe(origin);
-    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=30");
     expect(response.headers.get("vary")).toBe("Origin");
     const text = await response.text();
     expect(JSON.parse(text)).toEqual({
@@ -1368,6 +1906,7 @@ describe("GET /v1/rsvp/availability", () => {
     expect(text).not.toMatch(/@|Ada|Lovelace|example\.test/);
 
     expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env)).status).toBe(202);
+    await expireSharedCache();
     const full = await (await availability(origin)).json<{ events: Record<string, unknown> }>();
     expect(full.events[EVENT_IDS.limited]).toEqual({ full: true, remaining: 0 });
 
@@ -1379,13 +1918,56 @@ describe("GET /v1/rsvp/availability", () => {
     }
   });
 
-  it("answers 503 EVENTS_UNAVAILABLE, not cacheable, when the feed can't be read", async () => {
+  it("shares one answer for 30 s through the Cache API: every origin and query string, CORS added per request", async () => {
+    const outbound = mockProviders("rsvp");
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 2 })), env)).status).toBe(202);
+    const first = await availability(origin);
+    expect((await first.json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: false, remaining: 1 });
+
+    // Stored once, without any caller's origin, for at most 30 s.
+    const stored = await sharedCache().match(AVAILABILITY_URL);
+    expect(stored?.status).toBe(200);
+    expect(stored?.headers.get("cache-control")).toBe("public, max-age=30");
+    expect(stored?.headers.get("access-control-allow-origin")).toBeNull();
+
+    // A booking within those 30 s isn't in the shared answer yet (the reserve itself is what counts).
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env)).status).toBe(202);
+    const feedReads = outbound.feed().length;
+    for (const [caller, url] of [
+      [origin, AVAILABILITY_URL],
+      ["https://www.site.test", AVAILABILITY_URL],
+      [undefined, AVAILABILITY_URL],
+      // A query string can't get past the shared answer.
+      [origin, `${AVAILABILITY_URL}?fresh=${crypto.randomUUID()}`]
+    ] as const) {
+      const response = await fetchHandler(new Request(url, { headers: caller ? { Origin: caller } : {} }), { ...env, ALLOWED_ORIGINS: `${origin},https://www.site.test` });
+      expect(response.status, `${caller} ${url}`).toBe(200);
+      expect(response.headers.get("access-control-allow-origin"), `${caller}`).toBe(caller ?? null);
+      expect(response.headers.get("vary")).toBe("Origin");
+      expect(response.headers.get("cache-control")).toBe("public, max-age=30");
+      expect((await response.json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: false, remaining: 1 });
+    }
+    expect(outbound.feed()).toHaveLength(feedReads);
+
+    // Once the 30 s are over, the next answer is read afresh.
+    await expireSharedCache();
+    expect((await (await availability(origin)).json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: true, remaining: 0 });
+  });
+
+  it("answers 503 EVENTS_UNAVAILABLE, not cacheable, when the feed can't be read, and stores nothing", async () => {
     mockProviders("rsvp", { feedResponse: () => new Response("", { status: 302, headers: { Location: "https://tzionbreslov.com/" } }) });
     const response = await availability(origin);
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("access-control-allow-origin")).toBe(origin);
     expect((await errorBody(response)).error).toBe("EVENTS_UNAVAILABLE");
+    expect(await sharedCache().match(AVAILABILITY_URL)).toBeUndefined();
+
+    // The feed is back: the very next request answers, nothing of the failure kept.
+    vi.restoreAllMocks();
+    resetEventFeedCache();
+    mockProviders("rsvp");
+    expect((await availability(origin)).status).toBe(200);
   });
 });
 
@@ -1447,7 +2029,9 @@ describe("scheduled cleanup", () => {
     movedEarlierEnded: "c00000000000000000000010",
     movedEarlierUpcoming: "c00000000000000000000011",
     removedEnded: "c00000000000000000000012",
-    removedUpcoming: "c00000000000000000000013"
+    removedUpcoming: "c00000000000000000000013",
+    endedSixDaysAgo: "c00000000000000000000014",
+    endedEightDaysAgo: "c00000000000000000000015"
   } as const;
   const nameOf = (id: string) => Object.entries(CLEANUP).find(([, value]) => value === id)?.[0] ?? id;
 
@@ -1537,7 +2121,35 @@ describe("scheduled cleanup", () => {
     expect(await remaining()).toEqual({ removedUpcoming: sqliteTime(removedUpcoming.endsAt) });
   });
 
-  it("deletes no RSVP while the feed can't be read, logs only a code, and still runs the other clean-ups", async () => {
+  it("while the feed can't be read, still deletes the RSVPs whose stored end is more than 7 days past: 8 days deleted, 6 days kept", async () => {
+    await reserveEach([
+      feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(-8 * DAY - 2 * HOUR), endsAt: at(-8 * DAY) }),
+      feedEvent({ id: CLEANUP.endedSixDaysAgo, startsAt: at(-6 * DAY - 2 * HOUR), endsAt: at(-6 * DAY) }),
+      feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })
+    ]);
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const outbound = mockProviders("cleanup", { feedResponse: () => new Response("", { status: 503 }) });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(Object.keys(await remaining()).sort()).toEqual(["endedSixDaysAgo", "endedYesterday"]);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
+  });
+
+  it("with the feed read, the 7 days play no part: the feed's end decides (a long-ended stored end moved later is kept)", async () => {
+    // Stored 8 days ago, since moved to tomorrow in the calendar; and one the feed no longer lists, ended 6 days ago.
+    await reserveEach([
+      feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(-8 * DAY - 2 * HOUR), endsAt: at(-8 * DAY) }),
+      feedEvent({ id: CLEANUP.endedSixDaysAgo, startsAt: at(-6 * DAY - 2 * HOUR), endsAt: at(-6 * DAY) })
+    ]);
+    const movedLater = feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) });
+    mockProviders("cleanup", { feedEvents: [movedLater] });
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({ endedEightDaysAgo: sqliteTime(movedLater.endsAt) });
+  });
+
+  it("while the feed can't be read, keeps the RSVPs that ended within the last 7 days, logs only a code, and still runs the other clean-ups", async () => {
     await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
     await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -1552,7 +2164,7 @@ describe("scheduled cleanup", () => {
     ]);
   });
 
-  it("gives up on a feed that doesn't answer within 10 s: no RSVP deleted, the other clean-ups still run", async () => {
+  it("gives up on a feed that doesn't answer within 10 s: an RSVP that ended yesterday is kept, the other clean-ups still run", async () => {
     await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
     await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);

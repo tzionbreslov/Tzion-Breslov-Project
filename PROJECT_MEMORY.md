@@ -96,12 +96,42 @@
   event ends at the UTC midnight of its exclusive end date). The Worker's daily cleanup (cron 03:17 UTC) first reads
   `/events.json` and gives the RSVPs of every listed event its current end (Ruling R44: a moved event keeps its id
   and so its RSVPs until its new end; an event no longer listed keeps its stored end), then deletes the RSVPs whose
-  end has passed, normally within a day. A day `/events.json` can't be read deletes no RSVP and logs
-  `RSVP_CLEANUP_FEED_UNAVAILABLE`. The old 90-day Worker var is removed. Migration 0002 was edited in place (only
+  end has passed, normally within a day. A day `/events.json` can't be read logs `RSVP_CLEANUP_FEED_UNAVAILABLE` and
+  deletes only the RSVPs whose stored end is more than 7 days past (follow-up Group 6, 2026-11-08; before, it
+  deleted none, so nothing bounded retention while the feed was down). The old 90-day Worker var is removed. Migration 0002 was edited in place (only
   ever applied to local D1s, which must be re-created: move `.wrangler/state/v3/d1` aside and run
   `npm run db:migrate:local`). The privacy notice's RSVP sentence says "normally within a day" (its date stays
   November 7, 2026); the owner still approves the full text before launch. RSVP emails already in the organizer's
   inbox are not affected.
+- Follow-up Group 6 (2026-11-08, built and tested, **not deployed**; it ships with the RSVP release, switch day step 4):
+  - `EVENT_FULL` carries `remaining`, the places left as the refused reservation saw them; the site's "only N places
+    are left" uses it and no longer reads availability again.
+  - `GET /v1/rsvp/availability` is shared for 30 s through the Cache API (per Cloudflare data center), and browsers
+    keep it 30 s (was 60). The Cloudflare rate-limit rule is still open decision 14.
+  - A replay (same requestId) of a booked RSVP answers its confirmation before any event check, so also once the
+    event has started or while `/events.json` can't be read.
+  - Migration 0002 was edited in place again (`rsvps.confirmed_at`; only ever applied to local D1s, which must be
+    re-created). An RSVP is confirmed once the guest's email has gone out. A second request with the same requestId
+    waits for the first one's outcome instead of answering 202 at once. An attempt confirms or gives back only the
+    row it holds. Its emails and confirmation run under `waitUntil`, so a visitor's dropped connection doesn't cut
+    them off, and each Resend call gives up after 10 s. A row still unconfirmed after 30 s was left by an attempt
+    that stopped anyway: the site's retry (same requestId and token) waits for it to turn 30 s old, then books it
+    again in that one call, with the same email keys. A failed confirmation is logged (`RSVP_CONFIRM_FAILED`) and the
+    organizer is still emailed. (Review fix round 1 of PR #33; the 10 s and 30 s values are the implementer's, not
+    the brief's.) While it waits, a request reads the row again after 200 ms, then after waits that double up to
+    4 s, never past the moment the row turns stale: 12 D1 reads for a full 30 s wait (about 150 at the earlier
+    200 ms poll). The check before the reservation and its 3 rounds share one 30 s deadline and that backoff, so one
+    request makes at most 22 D1 queries however other attempts race it (barring clock skew between isolates, which
+    can add a read per racing attempt: in theory about 33, as the email's rate limit caps the attempts; still well
+    under 50), and the wait doesn't depend on the Workers plan (Workers Free allows 50 D1 queries per invocation).
+    The deadline is 30 s and 1 ms, so a row there when the request began waiting is stale by it. A row another
+    attempt took after the request began waiting, still unconfirmed at the deadline, answers `REQUEST_IN_PROGRESS`;
+    the site's retry books it once stale. The backoff and the shared deadline are the controller's rulings
+    (2026-11-08).
+  - With the feed down, the daily clean-up deletes RSVPs whose stored end is more than 7 days past (before: none).
+  - The RSVP dialog takes a new requestId when a retry changes its details.
+  - `scripts/check-rsvp-availability.mjs` checks `ok` and retries for 2 minutes while events are missing.
+  - `npm run test:worker` no longer reads a local `.dev.vars` (no "Missing required secrets" noise).
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,
@@ -209,7 +239,8 @@
     Workers Logs on by default for new Workers, with invocation logs: request URLs (confirmation tokens included),
     headers and IPs. If so, turn invocation logs off before switch day (README → Switch day, step 1.3).
 14. **Rate limit on RSVP availability (after go-live):** the final review recommends a Cloudflare rate-limiting rule
-    on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 on every request.
+    on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 whenever its shared
+    30 s answer (per Cloudflare data center, since 2026-11-08) has expired.
     Nothing is set up; the owner decides after go-live.
 
 ## Local reference setup notes

@@ -128,12 +128,16 @@ address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/event
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
 publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
-(`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Each RSVP is deleted once its event is over (owner decision
+(`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Availability is advisory: the Worker shares one answer for 30 s per
+Cloudflare data center (Cache API) and browsers keep it 30 s, while the reservation itself enforces every limit and its
+`EVENT_FULL` answer says how many places are left. Each RSVP is deleted once its event is over (owner decision
 2026-11-07): it stores the event's end (`rsvps.event_ends_at`). The Worker's daily cleanup first reads `/events.json`
 and gives the RSVPs of every event listed there that event's current end, so a moved event (it keeps its id) keeps its
 RSVPs until its new end; an event no longer listed keeps the end its RSVPs stored. Then it deletes the RSVPs whose end
 has passed, normally within a day. If `/events.json` can't be read, it logs `RSVP_CLEANUP_FEED_UNAVAILABLE` and
-deletes no RSVP that day (Ruling R44). The copies already emailed to the organizer's inbox stay there.
+that day deletes only the RSVPs whose stored end is more than 7 days past: a moved event's later end can't be seen
+then (Ruling R44 keeps a moved event's RSVPs), but no RSVP outlives its event by much more than a week while the feed
+is down. The copies already emailed to the organizer's inbox stay there.
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
 they go live on switch day (Switch day below, steps 1–4, then step 10 turns the forms on; each step has its
 undo). Owner steps and details:
@@ -392,8 +396,9 @@ missing.
   tokens included), its headers and the visitor's IP.
 - So Workers Logs are expected to keep only the Worker's own log lines, for up to 7 days (3 days on Workers Free
   until December 1, 2026), under dashboard → Workers & Pages → tzion-breslov-api → **Observability**.
-- Those lines are codes such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED`, `RSVP_CLEANUP_FEED_UNAVAILABLE`
-  and `EVENTS_FEED_EVENT_SKIPPED`, plus the method and path (never the query string) and request or correlation ids.
+- Those lines are codes such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED`, `RSVP_CONFIRM_FAILED`,
+  `RSVP_CLEANUP_FEED_UNAVAILABLE` and `EVENTS_FEED_EVENT_SKIPPED`, plus the method and path (never the query string)
+  and request or correlation ids.
   They hold no personal data.
 - Cloudflare's own fields in a stored event are `$`-prefixed (e.g. `$workers.event.request.url`, `$metadata.…`). The
   Worker's own fields are not (`correlationId`, `method`, `path`, `error`, `code`).
@@ -416,8 +421,8 @@ missing.
   After step 9 it answers 200 `{"ok":true,"events":{…}}` (step 11).
 
 **Expected until go-live (step 9):** from this deploy until the site is live on tzionbreslov.org, the daily clean-up
-logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes no RSVP (none can be made yet). The other clean-ups run as
-usual, and the line stops once the site is live (step 11).
+logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes only RSVPs that ended more than 7 days before (there are
+none: none can be made yet). The other clean-ups run as usual, and the line stops once the site is live (step 11).
 
 **Log-probe check, at once, before step 10 turns the forms on:**
 - **Force a stored line.** On a healthy deploy the Worker only logs failures. Pick a probe of letters, digits and
@@ -822,9 +827,13 @@ passes in (`lib/client/config.ts`).
 
 1. **RSVPs:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK".
    - It checks that every upcoming event that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
-     `https://api.tzionbreslov.org/v1/rsvp/availability`. A 200 alone isn't enough: with every event skipped it would
-     list none.
-   - It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect).
+     `https://api.tzionbreslov.org/v1/rsvp/availability`, and that the answer says `"ok": true`. A 200 alone isn't
+     enough: with every event skipped it would list none.
+   - It fails at once if either address doesn't answer a plain 200 (the Worker never follows a redirect), or if the
+     answer lacks `"ok": true`.
+   - Right after a redeploy of the site, the Worker can still hold the previous events for up to 90 s (its 60 s feed
+     cache, then the 30 s shared availability answer). So while events are missing, it says so and checks again every
+     30 s, up to 2 minutes, before it fails.
    - It exits with 2 when no upcoming event takes RSVPs: add one to the calendar, redeploy, and check again.
 2. **Health:** `curl -s "https://api.tzionbreslov.org/health"` → `{"ok":true}` (PowerShell: `curl.exe`).
 3. **Privacy page:** `curl -sI "https://tzionbreslov.org/privacy/"` answers 200. In a browser it shows "Last updated …"

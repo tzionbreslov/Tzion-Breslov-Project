@@ -63,8 +63,8 @@
   "observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } },
   // Daily cleanup of rate-limit buckets, expired confirmations, old request logs, webhook rows, and the RSVPs of
   // events that are over: each RSVP first takes its event's current end from EVENTS_FEED_URL (an event moved in the
-  // calendar keeps its RSVPs), then those whose end has passed are deleted. No RSVP is deleted on a day the feed
-  // can't be read.
+  // calendar keeps its RSVPs), then those whose end has passed are deleted. On a day the feed can't be read, only the
+  // RSVPs whose stored end is more than 7 days past are deleted.
   "triggers": { "crons": ["17 3 * * *"] },
   "d1_databases": [
     {

@@ -34,9 +34,6 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`playwright.config.ts:11`'s 60 s timeout** covers an unexplained local stall. CI is steady. Checked.
   Left as it is: a full local `npm run check` on 2026-11-08 (290 browser tests, 10 workers) didn't reproduce the
   stall. The slowest test took 11.5 s, and none took more than 30 s, so there's no evidence to change the timeout.
-- **Further test gaps:**
-  - no test for the Worker's "read failed" feed-body path;
-  - wrangler prints "Missing required secrets" noise in `npm run test:worker`.
 
 ## Code
 
@@ -64,25 +61,39 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Worker and RSVPs
 
-- **`/v1/rsvp/availability` has no throttle or edge cache.** See open decision 14 in `PROJECT_MEMORY.md`.
-- **The feed body is read before the size check** when there is no `Content-Length` (it is the site's own origin).
+Left as they are by Group 6 (2026-11-08), which fixed the rest of this list: each is accepted, out of its scope.
+The Cloudflare rate-limit rule on `/v1/rsvp/availability` stays open decision 14 in `PROJECT_MEMORY.md`.
+
 - **The guest email carries a visitor-typed name** to an address that isn't verified. Turnstile and the limits
   mitigate this.
 - **Four parties of 12 fill a 40-seat event.** There is no cancel tool; use the D1 console.
-- **A replay after the event starts returns `EVENT_CLOSED`**, even if the first attempt booked.
-- **A concurrent request with the same `requestId` cancels the other one.** The client disabling its button
-  mitigates this.
-- **`rsvpConfirmationId` doesn't check the salt length itself.**
-- **The client keeps its `requestId` after a 5xx, even if the fields change.** Resend answers 409 and the Worker 502
-  until the dialog is reopened.
-- **The smoke script can fail once after a redeploy**, inside the Worker's 60 s feed cache. It also doesn't check
-  `availability.ok`.
 - **Gaps in RSVP retention:**
-  - nothing bounds RSVP retention while the calendar feed is down; the only signal is a 7-day log line;
   - all-day events end at UTC midnight, which is too early in zones more than 3 h west of UTC (not Israel);
   - after a Worker rollback, someone must run the dated DELETE by hand every day (README → Switch day, step 4's
     undo);
   - an event moved later loses its RSVPs at its old end; the organizer still has them by email.
+
+Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment call rather than a defect:
+- **An RSVP attempt that stops before it confirms keeps its seats unless the visitor retries.** Its emails and
+  confirmation run under `waitUntil`, so a dropped connection no longer stops it. It can still stop if the Worker's
+  run ends, or if D1 fails both to confirm the RSVP and to give the seats back (`RSVP_CANCEL_FAILED`). Its row then
+  holds the seats unconfirmed until the event ends, and nobody is emailed about it, unless the visitor retries the
+  same submission (same requestId), which books it again. Before Group 6 such a row also kept its seats.
+- **The timing values are the implementer's, not rulings:** each Resend call gives up after 10 s; a row unconfirmed
+  for 30 s counts as stopped, and a retry waits up to that long for it. (How a waiting request reads the row is the
+  controller's ruling: after 200 ms, then after waits that double up to 4 s, never past the moment the row turns
+  stale, within one 30 s deadline for the whole request. A full 30 s wait is 12 D1 reads, and one request makes at
+  most 22 D1 queries however other attempts race it, inside Workers Free's 50. That bound assumes the isolates'
+  clocks agree: skew can add a read per racing attempt, in theory about 33 queries, as the email's rate limit caps
+  the attempts; still well under 50.)
+- **One deadline per RSVP request** (controller's ruling): the check before the reservation and its 3 rounds share
+  one deadline, 30 s and 1 ms after the request began waiting. A row stamped no later than that moment is stale by
+  the deadline, so a retry of a stopped attempt still books that row in the same call. But a row that another attempt with the same requestId took after
+  this request began waiting, and still holds unconfirmed at the deadline, gets `REQUEST_IN_PROGRESS` (409) instead
+  of up to 30 s more waiting; the site keeps the requestId and token, and its retry books that row once stale.
+- **A confirmation that fails after the guest's email** (D1, logged `RSVP_CONFIRM_FAILED`) leaves the booking
+  standing but unconfirmed. The organizer is still emailed and the visitor gets the success answer. A replay of that
+  requestId waits until the row is 30 s old, then books it again with the same email keys (no second copy).
 
 ## Look and feel (owner-visible)
 
@@ -131,7 +142,9 @@ These were out of the final review's reach and remain open questions:
 - the 26 Shorts;
 - 375 px thumbnails;
 - turquoise contrast (open decision 3);
-- an RSVP retry after more than 300 s;
+- an RSVP retry after more than 300 s (since Group 6, a retry with the same requestId is how an RSVP whose attempt
+  stopped gets booked again, within 30 s; a retry after 300 s most likely fails its Turnstile check and starts a new
+  RSVP, so the stopped attempt's row would keep its seats, as in "Worker and RSVPs" above);
 - the 24 h form;
 - the live Cloudflare and Resend state;
 - the broadcast unsubscribe (open decision 6).

@@ -47,11 +47,27 @@ export async function validateTurnstile(env: Env, token: string, remoteIp: strin
   }
 }
 
+/**
+ * A Resend call that hasn't answered within 10 s has failed: UPSTREAM_FAILURE,
+ * safe to retry (every email carries an idempotency key, and a topic opt-in can
+ * be repeated). It bounds how long an RSVP attempt holds its seats unconfirmed
+ * while it emails the guest (database.ts, PENDING_STALE_MS), and keeps an
+ * RSVP's two emails inside the 30 s the runtime gives its waitUntil work after
+ * a visitor disconnects (index.ts, handleRsvp).
+ */
+const RESEND_TIMEOUT_MS = 10_000;
+
 async function resendRequest(env: Env, apiKeyName: "RESEND_TRANSACTIONAL_API_KEY" | "RESEND_CONTACTS_API_KEY", path: string, init: RequestInit) {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${requireBinding(env, apiKeyName)}`);
   headers.set("Content-Type", "application/json");
-  return fetch(`https://api.resend.com${path}`, { ...init, headers });
+  try {
+    return await fetch(`https://api.resend.com${path}`, { ...init, headers, signal: AbortSignal.timeout(RESEND_TIMEOUT_MS) });
+  } catch (error) {
+    // The timeout answers as an error status would; any other failure is left as it was.
+    if ((error as { name?: unknown } | null)?.name === "TimeoutError") throw new PublicError("UPSTREAM_FAILURE", "Resend timed out");
+    throw error;
+  }
 }
 
 export async function sendEmail(

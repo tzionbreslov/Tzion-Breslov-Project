@@ -36,8 +36,9 @@ const card = (page: Page, id: string) => page.locator(`article.tz-event[data-eve
 const rsvpButton = (page: Page, id: string) => card(page, id).getByRole("button", { name: "RSVP", exact: true });
 const dialog = (page: Page) => page.getByRole("dialog");
 
-/** A minimal Turnstile: renders nothing and hands out a token at once. */
-const TURNSTILE = "window.turnstile = { render: function () { return 'stub-widget'; }, getResponse: function () { return 'test-token'; }, reset: function () {}, remove: function () {} };";
+/** A minimal Turnstile: renders nothing and hands out a token at once. It counts its resets (`window.tzTurnstileResets`). */
+const TURNSTILE = "window.tzTurnstileResets = 0; window.turnstile = { render: function () { return 'stub-widget'; }, getResponse: function () { return 'test-token'; }, reset: function () { window.tzTurnstileResets += 1; }, remove: function () {} };";
+const turnstileResets = (page: Page) => page.evaluate(() => (window as unknown as { tzTurnstileResets: number }).tzTurnstileResets);
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 
@@ -200,11 +201,12 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
-  test("a 409 EVENT_FULL for more guests than the places left says how many are left, asking availability again", async ({ page }) => {
+  test("a 409 EVENT_FULL for more guests than the places left says how many are left, from the 409 itself", async ({ page }) => {
     const errors = trackPageErrors(page);
-    // The count when the page opened (enough for 3), then what the Worker says after the 409.
+    // The count when the page opened (enough for 3); after that only the 409's own count matters.
     const availability: Availability = { [FIXTURE_IDS.limited]: { full: false, remaining: 5 } };
-    await stubServices(page, availability, reply(409, { ok: false, error: "EVENT_FULL", correlationId: "x" }));
+    let remaining = 2;
+    const posts = await stubServices(page, availability, (route) => reply(409, { ok: false, error: "EVENT_FULL", correlationId: "x", remaining })(route));
     let asked = 0;
     page.on("request", (request) => {
       if (request.url() === `${API}/v1/rsvp/availability`) asked++;
@@ -216,21 +218,38 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     const send = dialog(page).getByRole("button", { name: "Send RSVP" });
     const alert = dialog(page).getByRole("alert");
 
-    availability[FIXTURE_IDS.limited] = { full: false, remaining: 2 };
     await send.click();
     await expect(alert).toHaveText(TEXT.placesLeft(2));
     await expect(alert).toBeFocused();
-    await expect.poll(() => asked).toBe(2);
 
-    availability[FIXTURE_IDS.limited] = { full: false, remaining: 1 };
+    remaining = 1;
     await send.click();
     await expect(alert).toHaveText(TEXT.placesLeft(1));
 
     // None left: the event is now full, as before.
-    availability[FIXTURE_IDS.limited] = { full: true, remaining: 0 };
+    remaining = 0;
     await send.click();
     await expect(alert).toHaveText(TEXT.full);
     await expect(dialog(page).locator("form")).toHaveCount(1);
+    expect(posts).toHaveLength(3);
+    // Availability was read once, when the page opened: never again after a 409.
+    expect(asked).toBe(1);
+    await expectClean(page, errors);
+  });
+
+  test("a 409 EVENT_FULL with as many places left as guests (or none given) says the event is now full", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    let body: Record<string, unknown> = { ok: false, error: "EVENT_FULL", correlationId: "x", remaining: 3 };
+    await stubServices(page, {}, (route) => reply(409, body)(route));
+    await openEvents(page);
+    await openRsvp(page, FIXTURE_IDS.limited);
+    await fillRsvp(page, "3");
+    const send = dialog(page).getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.full);
+    body = { ok: false, error: "EVENT_FULL", correlationId: "x" };
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.full);
     await expectClean(page, errors);
   });
 
@@ -248,6 +267,69 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     // The retry is the same submission: it keeps its requestId (the Worker answers it once).
     await dialog(page).getByRole("button", { name: "Send RSVP" }).click();
     await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].requestId).toBe(posts[0].requestId);
+    await expectClean(page, errors);
+  });
+
+  test("after a 502, a retry with the same details keeps the requestId; one with changed details gets a new one", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    const posts = await stubServices(page, {}, reply(502, { ok: false, error: "UPSTREAM_FAILURE", correlationId: "x" }));
+    await openEvents(page);
+    await openRsvp(page);
+    await fillRsvp(page);
+    const box = dialog(page);
+    const send = box.getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    // The same submission again: the Worker answers it once (idempotency), so it keeps its requestId and token.
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].requestId).toBe(posts[0].requestId);
+    expect(await turnstileResets(page)).toBe(0);
+
+    // Changed details are a new submission: a new requestId (Resend would refuse the old email key with another
+    // text), and a fresh Turnstile token (the old one was redeemed under the old requestId).
+    await box.getByLabel("Name", { exact: true }).fill("Ada King");
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(3);
+    expect(posts[2]).toMatchObject({ name: "Ada King" });
+    expect(posts[2].requestId).not.toBe(posts[0].requestId);
+    expect(await turnstileResets(page)).toBe(1);
+    // And a retry of that one keeps its new requestId.
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts[3].requestId).toBe(posts[2].requestId);
+
+    // Every field counts: the number of guests too.
+    await box.getByLabel("Number of guests").fill("2");
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(5);
+    expect(posts[4]).toMatchObject({ guests: 2 });
+    expect(posts[4].requestId).not.toBe(posts[3].requestId);
+    expect(await turnstileResets(page)).toBe(2);
+    await expectClean(page, errors);
+  });
+
+  test("a 409 REQUEST_IN_PROGRESS shows the error message, and the retry keeps the requestId", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    let answer = reply(409, { ok: false, error: "REQUEST_IN_PROGRESS", correlationId: "x" });
+    const posts = await stubServices(page, {}, (route) => answer(route));
+    await openEvents(page);
+    await openRsvp(page);
+    await fillRsvp(page);
+    const send = dialog(page).getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(1);
+
+    // The first attempt booked meanwhile: the retry is the same submission, answered with its confirmation.
+    answer = reply(202, { ok: true, requestId: "r", confirmationId: "c" });
+    await send.click();
+    await expect(dialog(page).getByRole("status")).toHaveText(TEXT.success);
     expect(posts).toHaveLength(2);
     expect(posts[1].requestId).toBe(posts[0].requestId);
     await expectClean(page, errors);

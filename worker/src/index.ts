@@ -19,6 +19,8 @@ import {
   cancelRsvp,
   claimRequest,
   cleanExpiredData,
+  confirmRsvp,
+  confirmedRsvp,
   createSubscriptionConfirmation,
   enforceRateLimit,
   findSubscriptionConfirmation,
@@ -26,11 +28,12 @@ import {
   markSubscriptionConfirmationUsed,
   reserveRsvp,
   rsvpGuestTotals,
+  rsvpWait,
   storeWebhookEvent
 } from "./database";
 import { findRsvpEvent, loadEventFeed, type FeedEvent } from "./events";
 import { sendEmail, subscribeToTopics, validateTurnstile } from "./providers";
-import { PublicError, requireBinding, type Env } from "./types";
+import { PublicError, requireBinding, requireSalt, type Env } from "./types";
 import {
   readJson,
   subscribeTopics,
@@ -117,9 +120,7 @@ function remoteIp(request: Request) {
 }
 
 async function privateHash(env: Env, purpose: string, value: string) {
-  const salt = requireBinding(env, "RATE_LIMIT_SALT");
-  if (salt.length < 32) throw new PublicError("SERVICE_NOT_CONFIGURED", "RATE_LIMIT_SALT must be at least 32 characters");
-  return sha256Hex(`${salt}:${purpose}:${value}`);
+  return sha256Hex(`${requireSalt(env)}:${purpose}:${value}`);
 }
 
 async function rateLimitValue(env: Env, route: string, purpose: "ip" | "email", value: string, limit: number) {
@@ -354,68 +355,97 @@ function rsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId
 /**
  * The guest first, then the organizer: the organizer never hears of an RSVP
  * the guest wasn't told about.
- * - The guest's email fails (or can't be built): the seats are given back and
- *   the visitor gets the retryable error; a retry with the same requestId books
- *   and mails again (Resend's idempotency keys stop a second copy).
+ * - The guest's email fails (or can't be built): the seats this attempt holds
+ *   are given back and the visitor gets the retryable error; a retry with the
+ *   same requestId books and mails again (Resend's idempotency keys stop a
+ *   second copy).
+ * - Once the guest's email is sent, the RSVP is confirmed: from then on a
+ *   replay answers it, and no attempt gives it back.
  * - Only the organizer's fails: the guest already holds "RSVP received" and its
- *   confirmation id, so the booking stands. It is logged (a code and the
- *   requestId, no personal data; the row is found by request_id) and the RSVP
+ *   confirmation id, so the booking stands. It is logged and the RSVP
  *   succeeds, so a replay returns the same id and sends nothing new.
+ * - Confirming fails (D1) after the guest's email: the booking stands too, and
+ *   the organizer is still emailed. It is logged; the row stays unconfirmed, so
+ *   a replay of it waits until it turns stale, then books it again with the same
+ *   emails' keys (database.ts, PENDING_STALE_MS).
+ * Each log line is a code and the requestId, no personal data (the row is found
+ * by request_id).
  */
-async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string) {
+async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, reservation: { id: string; heldSince: number }) {
+  const logFailure = (code: string, error: unknown) => console.error(JSON.stringify({
+    code,
+    requestId: input.requestId,
+    error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
+  }));
   let organizer: Email;
   try {
-    const emails = rsvpEmails(env, input, event, confirmationId);
+    const emails = rsvpEmails(env, input, event, reservation.id);
     organizer = emails.organizer;
     await sendEmail(env, emails.guest);
   } catch (error) {
-    await cancelRsvp(env, confirmationId).catch((cancelError: unknown) => {
-      // The seats stay taken and a replay would answer 202 without any email: say so in the logs.
-      console.error(JSON.stringify({
-        code: "RSVP_CANCEL_FAILED",
-        requestId: input.requestId,
-        error: cancelError instanceof PublicError ? cancelError.code : cancelError instanceof Error ? cancelError.name : "UnknownError"
-      }));
-    });
+    // If this fails, the seats stay taken, unconfirmed: a retry with the same requestId books them again once they
+    // are stale (database.ts, PENDING_STALE_MS). Say so in the logs.
+    await cancelRsvp(env, reservation.id, reservation.heldSince).catch((cancelError: unknown) => logFailure("RSVP_CANCEL_FAILED", cancelError));
     throw error;
+  }
+  try {
+    await confirmRsvp(env, reservation.id, reservation.heldSince);
+  } catch (error) {
+    logFailure("RSVP_CONFIRM_FAILED", error);
   }
   try {
     await sendEmail(env, organizer);
   } catch (error) {
-    console.error(JSON.stringify({
-      code: "RSVP_ORGANIZER_EMAIL_FAILED",
-      requestId: input.requestId,
-      error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
-    }));
+    logFailure("RSVP_ORGANIZER_EMAIL_FAILED", error);
   }
 }
 
 /**
  * `POST /v1/rsvp`. Never touches request_log (its route CHECK is live in
  * production): rsvps.request_id is the idempotency key.
+ *
+ * Once this attempt holds the seats, its emails and the confirmation run
+ * under `context.waitUntil` as well as being awaited: a visitor whose
+ * connection drops would otherwise cancel them half done, leaving the seats
+ * held unconfirmed. The runtime gives that work up to 30 s after a disconnect,
+ * more than its two Resend calls' 10 s timeouts (providers.ts). Without a
+ * context (direct calls in the tests), it is only awaited.
  */
-async function handleRsvp(request: Request, env: Env, origin: string) {
+async function handleRsvp(request: Request, env: Env, origin: string, context?: ExecutionContextLike) {
   const input = validateRsvp(await readJson(request));
   await rateLimitValue(env, "rsvp", "ip", remoteIp(request), 30);
   // After the challenge, so a failed one can't use up someone's email quota (as contact and subscribe).
   await validateTurnstile(env, input.turnstileToken, remoteIp(request), input.requestId, TURNSTILE_ACTIONS.rsvp);
   const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
+  // A replay of an RSVP already made answers as the first attempt did, before anything about the event is
+  // checked: it still holds once the event has started, and while the feed can't be read. If another attempt
+  // with this requestId is still emailing the guest, this waits for its outcome, or until its row turns stale
+  // (confirmedRsvp). This wait and every round of the reservation's share one deadline and backoff (rsvpWait), so
+  // the request's waits add up to 30 s at most.
+  const wait = rsvpWait();
+  const replay = await confirmedRsvp(env, input.requestId, input.eventId, emailHash, wait);
+  if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay } satisfies RsvpSuccessResponse, 202, origin);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
-  const reservation = await reserveRsvp(env, input, event, emailHash);
-  if (reservation.created) await sendRsvpEmails(env, input, event, reservation.id);
+  const reservation = await reserveRsvp(env, input, event, emailHash, wait);
+  if (reservation.created) {
+    const emails = sendRsvpEmails(env, input, event, reservation);
+    // Kept alive even if the visitor disconnects; its failure is this request's answer, below.
+    context?.waitUntil(emails.catch(() => undefined));
+    await emails;
+  }
   return json({ ok: true, requestId: input.requestId, confirmationId: reservation.id } satisfies RsvpSuccessResponse, 202, origin);
 }
 
 /**
- * `GET /v1/rsvp/availability`: for each event that takes RSVPs, whether it is
- * full and how many places remain (null = no limit). Counts only. Readable
- * cross-origin by the site's origins only; cacheable for 60 s.
+ * How long an availability answer is shared, and how long a browser keeps it:
+ * together at most 60 s, as before the shared cache.
  */
-async function handleRsvpAvailability(request: Request, env: Env) {
-  const requested = request.headers.get("origin") ?? "";
-  const origin = requested && allowedOrigins(env).has(requested) ? requested : "";
+const AVAILABILITY_MAX_AGE = 30;
+
+/** The availability answer's JSON, read now from the feed and D1. */
+async function currentAvailability(env: Env) {
   const open = (await loadEventFeed(env)).filter((event) => event.rsvp === "open");
   const totals = await rsvpGuestTotals(env, open.filter((event) => event.limit !== null).map((event) => event.id));
   const events: RsvpAvailabilityResponse["events"] = {};
@@ -423,10 +453,42 @@ async function handleRsvpAvailability(request: Request, env: Env) {
     const remaining = event.limit === null ? null : Math.max(0, event.limit - (totals.get(event.id) ?? 0));
     events[event.id] = { full: remaining === 0, remaining };
   }
+  return JSON.stringify({ ok: true, events } satisfies RsvpAvailabilityResponse);
+}
+
+/**
+ * `GET /v1/rsvp/availability`: for each event that takes RSVPs, whether it is
+ * full and how many places remain (null = no limit). Counts only. Readable
+ * cross-origin by the site's origins only.
+ *
+ * Advisory (the reservation itself enforces every limit, and its EVENT_FULL
+ * says how many places are left), so one answer is shared for 30 s through
+ * the Cache API, in the Cloudflare data center that served it. A Worker's own
+ * Cache-Control only reaches browsers: Cloudflare's cache doesn't store a
+ * Worker's responses unless Workers Cache is switched on for the whole Worker,
+ * a bigger change. The entry has one key, the path without any query string,
+ * so no caller can step past it, and no origin: the CORS headers are added per
+ * request. Only a 200 is stored; a failure is never kept.
+ */
+async function handleRsvpAvailability(request: Request, env: Env) {
+  const requested = request.headers.get("origin") ?? "";
+  const origin = requested && allowedOrigins(env).has(requested) ? requested : "";
+  const key = new URL(API_PATHS.rsvpAvailability, request.url).toString();
+  // Cloudflare's default cache (the WebWorker lib's CacheStorage type, which wins here, has no `default`).
+  const cache = (caches as unknown as { default: Cache }).default;
+  // A cache that can't be read or written only means a fresh answer.
+  let body = await cache.match(key).then((hit) => hit?.text()).catch(() => undefined);
+  if (body === undefined) {
+    body = await currentAvailability(env);
+    const stored = new Response(body, {
+      headers: { "Cache-Control": `public, max-age=${AVAILABILITY_MAX_AGE}`, "Content-Type": "application/json; charset=utf-8" }
+    });
+    await cache.put(key, stored).catch(() => undefined);
+  }
   const headers = responseHeaders(origin);
-  headers.set("Cache-Control", "public, max-age=60");
+  headers.set("Cache-Control", `public, max-age=${AVAILABILITY_MAX_AGE}`);
   headers.set("Vary", "Origin");
-  return new Response(JSON.stringify({ ok: true, events } satisfies RsvpAvailabilityResponse), { status: 200, headers });
+  return new Response(body, { status: 200, headers });
 }
 
 async function readWebhookBody(request: Request) {
@@ -465,7 +527,7 @@ async function handleResendWebhook(request: Request, env: Env) {
   return json({ ok: true });
 }
 
-async function route(request: Request, env: Env) {
+async function route(request: Request, env: Env, context?: ExecutionContextLike) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS" && publicPostRoutes.has(url.pathname)) return preflight(request, env);
 
@@ -484,16 +546,17 @@ async function route(request: Request, env: Env) {
     if (url.pathname === API_PATHS.contact) return handleContact(request, env, origin);
     if (url.pathname === API_PATHS.subscribe) return handleSubscription(request, env, origin);
     if (url.pathname === API_PATHS.subscribeConfirm) return handleSubscriptionConfirmation(request, env, origin);
-    if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin);
+    if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin, context);
   }
 
   throw new PublicError("NOT_FOUND");
 }
 
-async function fetchHandler(request: Request, env: Env) {
+/** The Worker's fetch handler; `context` is the runtime's (optional only for direct calls in the tests). */
+async function fetchHandler(request: Request, env: Env, context?: ExecutionContextLike) {
   const correlationId = crypto.randomUUID();
   try {
-    return await route(request, env);
+    return await route(request, env, context);
   } catch (error) {
     const publicError = error instanceof PublicError ? error : new PublicError("INTERNAL_ERROR");
     logError(correlationId, request, error);
@@ -503,7 +566,8 @@ async function fetchHandler(request: Request, env: Env) {
       ok: false,
       error: publicError.code,
       correlationId,
-      ...(publicError.code === "INVALID_INPUT" && publicError.field ? { field: publicError.field } : {})
+      ...(publicError.code === "INVALID_INPUT" && publicError.field ? { field: publicError.field } : {}),
+      ...(publicError.code === "EVENT_FULL" && typeof publicError.remaining === "number" ? { remaining: publicError.remaining } : {})
     };
     return json(body, publicError.status, safeOrigin);
   }
@@ -512,8 +576,9 @@ async function fetchHandler(request: Request, env: Env) {
 /**
  * The daily cron. It reads the site's /events.json first, so RSVPs follow
  * the calendar's current end of each event (cleanExpiredData). If the feed
- * can't be read, it logs a code (no personal data) and deletes no RSVP that
- * day; the other clean-ups run either way.
+ * can't be read, it logs a code (no personal data) and that day deletes only
+ * the RSVPs whose stored end is more than 7 days past; the other clean-ups
+ * run either way.
  */
 async function scheduledCleanup(env: Env) {
   let feed: FeedEvent[] | null = null;
@@ -529,8 +594,8 @@ async function scheduledCleanup(env: Env) {
 }
 
 export default {
-  fetch(request: Request, env: Env, _context: ExecutionContextLike) {
-    return fetchHandler(request, env);
+  fetch(request: Request, env: Env, context: ExecutionContextLike) {
+    return fetchHandler(request, env, context);
   },
   scheduled(_controller: ScheduledController, env: Env, context: ExecutionContextLike) {
     context.waitUntil(scheduledCleanup(env));

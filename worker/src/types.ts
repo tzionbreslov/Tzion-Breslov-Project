@@ -25,6 +25,8 @@ export interface Env {
 
 export class PublicError extends Error {
   public readonly status: number;
+  /** EVENT_FULL only: the places the event had left when the RSVP was refused (fewer than its guests; 0 = full). */
+  public remaining?: number;
 
   constructor(
     public readonly code: ApiErrorCode,
@@ -37,6 +39,13 @@ export class PublicError extends Error {
   }
 }
 
+/** EVENT_FULL, with the places left as the refused reservation saw them. */
+export function eventFull(remaining: number) {
+  const error = new PublicError("EVENT_FULL");
+  error.remaining = Math.max(0, remaining);
+  return error;
+}
+
 export function invalidInput(field: ApiInputField): never {
   throw new PublicError("INVALID_INPUT", `Invalid field: ${field}`, field);
 }
@@ -47,4 +56,15 @@ export function requireBinding(env: Env, name: Exclude<keyof Env, "DB">) {
     throw new PublicError("SERVICE_NOT_CONFIGURED", `Missing Worker binding: ${String(name)}`);
   }
   return value.trim();
+}
+
+/**
+ * RATE_LIMIT_SALT, the key of every salted hash the Worker makes (rate-limit
+ * keys, subscription tokens, RSVP confirmation ids). Fails closed when it is
+ * missing or shorter than 32 characters.
+ */
+export function requireSalt(env: Env) {
+  const salt = requireBinding(env, "RATE_LIMIT_SALT");
+  if (salt.length < 32) throw new PublicError("SERVICE_NOT_CONFIGURED", "RATE_LIMIT_SALT must be at least 32 characters");
+  return salt;
 }

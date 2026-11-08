@@ -65,6 +65,43 @@ function feedEvents(records: unknown[]): FeedEvent[] {
   return events;
 }
 
+/**
+ * The feed's body as text, read chunk by chunk with a running count, so a body
+ * with no Content-Length (or a wrong one) is never held past MAX_FEED_BYTES:
+ * past it, the rest is cancelled unread.
+ */
+async function readFeedBody(response: Response): Promise<string> {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    let next: ReadableStreamReadResult<Uint8Array>;
+    try {
+      next = await reader.read();
+    } catch {
+      // The body stopped arriving, or the timeout fired while reading it.
+      throw unavailable("read failed");
+    }
+    if (next.done) break;
+    size += next.value.byteLength;
+    if (size > MAX_FEED_BYTES) {
+      // A failed cancel changes nothing here.
+      reader.cancel().catch(() => undefined);
+      throw unavailable("too large");
+    }
+    chunks.push(next.value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  // As Response.text() decodes: UTF-8, a leading BOM dropped.
+  return new TextDecoder().decode(bytes);
+}
+
 async function fetchFeed(url: string): Promise<FeedEvent[]> {
   let response: Response;
   try {
@@ -91,14 +128,7 @@ async function fetchFeed(url: string): Promise<FeedEvent[]> {
   if (type !== "application/json") throw giveUp("not JSON");
   const declared = Number(response.headers.get("content-length") ?? 0);
   if (Number.isFinite(declared) && declared > MAX_FEED_BYTES) throw giveUp("too large");
-  let text: string;
-  try {
-    text = await response.text();
-  } catch {
-    // The body stopped arriving, or the timeout fired while reading it.
-    throw unavailable("read failed");
-  }
-  if (new TextEncoder().encode(text).byteLength > MAX_FEED_BYTES) throw unavailable("too large");
+  const text = await readFeedBody(response);
   let body: unknown;
   try {
     body = JSON.parse(text);
