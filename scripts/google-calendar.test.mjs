@@ -167,6 +167,33 @@ test("titles and descriptions lose their HTML and decode its entities", () => {
   assert.equal(one({ summary: "&lt;b&gt;Bold&lt;/b&gt; &amp;amp;" }).event.title, "<b>Bold</b> &amp;");
 });
 
+test("only real tags are removed: a < or > that isn't part of a tag stays as text", () => {
+  const summary = (description) => one({ description }).event.summary;
+  assert.equal(summary("kids <10, adults >18"), "kids <10, adults >18");
+  assert.equal(summary("a < b and c > d"), "a < b and c > d");
+  assert.equal(summary("kids <ten, adults >eighteen"), "kids <ten, adults >eighteen");
+  assert.equal(summary("<b>bold</b>"), "bold");
+  assert.equal(summary('<a href="x">link</a>'), "link");
+  // A ">" inside a quoted attribute is not the tag's end.
+  assert.equal(summary('<a href="https://example.com/?a>b" target=\'_blank\'>link</a> after'), "link after");
+  assert.equal(summary("<ul><li>One</li><li>Two&nbsp;items</li></ul>"), "One\nTwo items");
+  // Without its ">" it isn't a tag: kept as written.
+  assert.equal(summary("Doors at 7<br>Bring a friend<br"), "Doors at 7\nBring a friend<br");
+  // A comment goes whole, up to its "-->", even with a ">" or a tag inside.
+  assert.equal(summary("Before<!-- a note > with <b>a tag</b> -->after"), "Beforeafter");
+  // As Google's editor writes them (escaped), and as a plain-text description has them.
+  assert.equal(summary("<p>kids &lt;10, adults &gt;18</p>"), "kids <10, adults >18");
+  assert.equal(one({ summary: "Kids <10 & adults >18" }).event.title, "Kids <10 & adults >18");
+});
+
+test("a long description full of unclosed tags is read in linear time", () => {
+  const description = '<a x="<b '.repeat(40_000);
+  const started = performance.now();
+  const { event } = one({ description });
+  assert.ok(performance.now() - started < 2_000, `${Math.round(performance.now() - started)} ms`);
+  assert.ok(event.summary.startsWith('<a x="<b <a x="<b'));
+});
+
 test("an untitled event gets the default title", () => {
   assert.equal(one({ summary: null }).event.title, "Tzion Breslov event");
   assert.equal(one({ summary: "  <br> " }).event.title, "Tzion Breslov event");

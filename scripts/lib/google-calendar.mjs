@@ -7,8 +7,9 @@
 //     repeating event's date from its UID and that date's RECURRENCE-ID;
 //   - times are shown in the event's own zone (its TZID), else the calendar's
 //     (X-WR-TIMEZONE), else Israel's, and never depend on the build machine's;
-//   - descriptions lose their HTML (Google stores them as HTML) but keep their
-//     line breaks, and carry two markers, each on a line of its own:
+//   - descriptions lose their HTML tags and comments (Google stores them as
+//     HTML), but keep their line breaks and any other "<" or ">" as text, and
+//     carry two markers, each on a line of its own:
 //     "No RSVP" (no RSVP button) and "RSVP limit: 40" (a cap on attendance).
 import { createHash } from "node:crypto";
 import ICAL from "ical.js";
@@ -43,13 +44,23 @@ function decodeEntities(text) {
   });
 }
 
+/** An HTML comment, up to its "-->". */
+const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+/**
+ * A real tag: "<" then a tag name (or "/" and a name), up to its ">" (one in a
+ * quoted attribute doesn't end it). Any other "<" or ">" is text ("kids <10, adults >18").
+ * An unquoted "<" ends the attempt, which keeps the search linear on text full of "<".
+ */
+const HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9:-]*(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/g;
+
 /** Plain text from a calendar field: line breaks kept (<br> and block ends become newlines), tags dropped, entities decoded. */
 function htmlToText(value) {
   if (typeof value !== "string") return "";
   return decodeEntities(value
+    .replace(HTML_COMMENT, "")
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, "\n")
-    .replace(/<[^>]*>/g, ""));
+    .replace(HTML_TAG, ""));
 }
 
 /** The text on one line, its whitespace collapsed (titles, locations). */
