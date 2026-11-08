@@ -154,6 +154,37 @@ test("the hero's h1 looks exactly like the Events hero's h2", async ({ page }) =
   await expectClean(page, errors);
 });
 
+// Between 599 and 600px (a zoomed page has fractional widths) one of the two layouts still applies: the
+// photos never get the 16px inset of neither query. A same-origin frame zoomed 4x gives the fractional width
+// (Chromium snaps a frame's width to whole device pixels).
+test("between 599 and 600px wide, one photo across still takes the whole content width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own sizes");
+  const errors = trackPageErrors(page);
+  for (const width of [599.25, 599.5, 599.75]) {
+    await page.route("**/__gallery-frame/", (route) => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><body style="margin:0"><iframe src="/gallery/" style="border:0;zoom:4;width:${width}px;height:600px"></iframe></body>`
+    }));
+    await page.goto("/__gallery-frame/");
+    const frame = page.frame({ url: /\/gallery\/$/ })!;
+    await frame.waitForLoadState("load");
+    const layout = await frame.evaluate(() => {
+      const photo = document.querySelector(".tz-gallery__item img")!.getBoundingClientRect();
+      const content = document.querySelector(".entry-content")!.getBoundingClientRect();
+      return {
+        viewport: document.documentElement.getBoundingClientRect().width,
+        columns: getComputedStyle(document.querySelector(".tz-gallery__grid")!).gridTemplateColumns.split(" ").length,
+        left: Math.abs(photo.left - content.left) < 0.5,
+        width: Math.abs(photo.width - content.width) < 0.5
+      };
+    });
+    expect(layout.viewport, "the frame's own width").toBe(width);
+    expect(layout, `${width}px`).toEqual({ viewport: width, columns: 1, left: true, width: true });
+    await page.unroute("**/__gallery-frame/");
+  }
+  await expectClean(page, errors);
+});
+
 test("the first photo opens in the viewer; arrows, buttons and swipes move through them all, wrapping around", async ({ page }) => {
   test.skip(N < 2, "needs two photos to move between");
   const errors = trackPageErrors(page);
