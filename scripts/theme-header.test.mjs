@@ -1,7 +1,9 @@
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
-import { THEME_STYLESHEET, stripThemeAuthor } from "./lib/theme-header.mjs";
+import { THEME_STYLESHEET, copyAsset, stripThemeAuthor } from "./lib/theme-header.mjs";
 
 // The theme's stylesheet header (scripts/import-wordpress.mjs copies it with stripThemeAuthor): the owner had the
 // designer's credit removed (2026-11-08), and the header named her as the theme's author on every page's stylesheet.
@@ -34,8 +36,31 @@ test("the committed theme stylesheet is the stripped one: its header names no au
   assert.equal(stripThemeAuthor(served), css);
 });
 
-test("the importer copies the theme stylesheet through stripThemeAuthor", () => {
-  const importer = fs.readFileSync(new URL("./import-wordpress.mjs", import.meta.url), "utf8");
-  assert.match(importer, /import \{ THEME_STYLESHEET, stripThemeAuthor \} from "\.\/lib\/theme-header\.mjs";/);
-  assert.match(importer, /if \(rel === THEME_STYLESHEET\) fs\.writeFileSync\(dest, stripThemeAuthor\(fs\.readFileSync\(src, "utf8"\)\)\);\s*else fs\.copyFileSync\(src, dest\);/);
+// copyAsset is how scripts/import-wordpress.mjs copies every asset (copyAssets). The importer itself needs the
+// WordPress export, so it isn't run here; a re-import that bypassed copyAsset would commit the Author lines again,
+// and the test above fails on the committed file.
+test("copyAsset copies the theme stylesheet through stripThemeAuthor, and every other file byte for byte", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tz-theme-header-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = (name, data) => {
+    const at = path.join(dir, name);
+    if (data !== undefined) fs.writeFileSync(at, data);
+    return at;
+  };
+
+  copyAsset(THEME_STYLESHEET, file("style.css", HEADER), file("theme-out.css"));
+  assert.equal(fs.readFileSync(file("theme-out.css"), "utf8"), STRIPPED);
+
+  // Any other stylesheet with the same header (a child theme, a plugin's) is left as it is.
+  copyAsset("/wp-content/themes/genesis/style.css", file("other.css", HEADER), file("other-out.css"));
+  assert.equal(fs.readFileSync(file("other-out.css"), "utf8"), HEADER);
+
+  // Binary files are copied unchanged, bytes that aren't UTF-8 included.
+  const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0xfe, 0x00, 0x80]);
+  copyAsset("/wp-content/uploads/2023/06/footer-logo.png", file("logo.png", bytes), file("logo-out.png"));
+  assert.deepEqual(fs.readFileSync(file("logo-out.png")), bytes);
+
+  // A theme stylesheet whose header has moved fails the import, and nothing is written.
+  assert.throws(() => copyAsset(THEME_STYLESHEET, file("moved.css", STRIPPED), file("moved-out.css")), /theme: marker not found: Author/);
+  assert.ok(!fs.existsSync(file("moved-out.css")));
 });

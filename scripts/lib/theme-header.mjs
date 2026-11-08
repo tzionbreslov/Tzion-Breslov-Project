@@ -1,10 +1,21 @@
 // The theme's stylesheet header: the first comment of style.css, where WordPress reads "Theme Name:", "Author:"…
 // one per line. The owner had the designer's credit removed from the site (2026-11-08), and this header named her
 // as the theme's author in the stylesheet every page loads, so scripts/import-wordpress.mjs copies the stylesheet
-// without its Author and Author URI lines (scripts/theme-header.test.mjs).
+// without its Author and Author URI lines (copyAsset; scripts/theme-header.test.mjs).
+import fs from "node:fs";
 
 /** The theme's stylesheet, as the pages link it (public/ holds the copy). */
 export const THEME_STYLESHEET = "/wp-content/themes/tzionbreslov/style.css";
+
+/**
+ * Copies one imported asset, `rel` as the pages link it, from `src` to `dest`: the theme's stylesheet through
+ * stripThemeAuthor (a theme header that has moved fails the import, and `dest` is not written), any other file byte
+ * for byte.
+ */
+export function copyAsset(rel, src, dest) {
+  if (rel === THEME_STYLESHEET) fs.writeFileSync(dest, stripThemeAuthor(fs.readFileSync(src, "utf8")));
+  else fs.copyFileSync(src, dest);
+}
 
 const markerMissing = (name) => new Error(`theme: marker not found: ${name}`);
 const markerRepeated = (name) => new Error(`theme: marker not unique: ${name}`);
