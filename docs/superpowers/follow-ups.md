@@ -34,9 +34,6 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`playwright.config.ts:11`'s 60 s timeout** covers an unexplained local stall. CI is steady. Checked.
   Left as it is: a full local `npm run check` on 2026-11-08 (290 browser tests, 10 workers) didn't reproduce the
   stall. The slowest test took 11.5 s, and none took more than 30 s, so there's no evidence to change the timeout.
-- **Further test gaps:**
-  - no test for the Worker's "read failed" feed-body path;
-  - wrangler prints "Missing required secrets" noise in `npm run test:worker`.
 
 ## Code
 
@@ -64,21 +61,13 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Worker and RSVPs
 
-- **`/v1/rsvp/availability` has no throttle or edge cache.** See open decision 14 in `PROJECT_MEMORY.md`.
-- **The feed body is read before the size check** when there is no `Content-Length` (it is the site's own origin).
+Left as they are by Group 6 (2026-11-08), which fixed the rest of this list: each is accepted, out of its scope.
+The Cloudflare rate-limit rule on `/v1/rsvp/availability` stays open decision 14 in `PROJECT_MEMORY.md`.
+
 - **The guest email carries a visitor-typed name** to an address that isn't verified. Turnstile and the limits
   mitigate this.
 - **Four parties of 12 fill a 40-seat event.** There is no cancel tool; use the D1 console.
-- **A replay after the event starts returns `EVENT_CLOSED`**, even if the first attempt booked.
-- **A concurrent request with the same `requestId` cancels the other one.** The client disabling its button
-  mitigates this.
-- **`rsvpConfirmationId` doesn't check the salt length itself.**
-- **The client keeps its `requestId` after a 5xx, even if the fields change.** Resend answers 409 and the Worker 502
-  until the dialog is reopened.
-- **The smoke script can fail once after a redeploy**, inside the Worker's 60 s feed cache. It also doesn't check
-  `availability.ok`.
 - **Gaps in RSVP retention:**
-  - nothing bounds RSVP retention while the calendar feed is down; the only signal is a 7-day log line;
   - all-day events end at UTC midnight, which is too early in zones more than 3 h west of UTC (not Israel);
   - after a Worker rollback, someone must run the dated DELETE by hand every day (README → Switch day, step 4's
     undo);

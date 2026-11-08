@@ -128,7 +128,9 @@ address, the repository variable `GOOGLE_CALENDAR_ICAL_URL`, into `content/event
 the Actions cache and never committed (git keeps the empty default). Unset, the page says "No events are currently
 scheduled". A line "No RSVP" or "RSVP limit: 40" in an event's description controls its RSVPs. The build also
 publishes the list as `/events.json` for the forms Worker, which reads it (`EVENTS_FEED_URL`) to take RSVPs
-(`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Each RSVP is deleted once its event is over (owner decision
+(`POST /v1/rsvp`, `GET /v1/rsvp/availability`). Availability is advisory: the Worker shares one answer for 30 s per
+Cloudflare data center (Cache API) and browsers keep it 30 s, while the reservation itself enforces every limit and its
+`EVENT_FULL` answer says how many places are left. Each RSVP is deleted once its event is over (owner decision
 2026-11-07): it stores the event's end (`rsvps.event_ends_at`). The Worker's daily cleanup first reads `/events.json`
 and gives the RSVPs of every event listed there that event's current end, so a moved event (it keeps its id) keeps its
 RSVPs until its new end; an event no longer listed keeps the end its RSVPs stored. Then it deletes the RSVPs whose end
