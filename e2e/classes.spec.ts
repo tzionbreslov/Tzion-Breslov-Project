@@ -106,19 +106,22 @@ test("Most popular puts the counted videos first, most viewed first, then the re
   expect(VIDEOS.length).toBeGreaterThanOrEqual(4);
   const [newest, middle, oldest] = [VIDEOS[0], VIDEOS[Math.floor(VIDEOS.length / 2)], VIDEOS[VIDEOS.length - 1]];
   const views = new Map([[newest.id, 20], [middle.id, 900], [oldest.id, 4500]]);
+  // How many card tags the served page had rewritten: checked once the page is open, so a markup
+  // change fails with a plain count, not as an error inside the route handler.
+  let tags = 0;
   await page.route("**/classes/", async (route) => {
     const response = await route.fetch();
-    let tags = 0;
+    tags = 0;
     // Card opening tags only (the copies in the page's inline scripts are JSON-escaped, so they don't match).
     const body = (await response.text()).replace(/<article class="tz-vl__card" data-id="([^"]+)"([^>]*)>/g, (_, id: string, rest: string) => {
       tags++;
       const count = views.get(id);
       return `<article class="tz-vl__card" data-id="${id}"${rest.replace(/ data-views="\d+"/, "")}${count === undefined ? "" : ` data-views="${count}"`}>`;
     });
-    expect(tags).toBe(VIDEOS.length + SHORTS.length);
     await route.fulfill({ response, body });
   });
   await openClasses(page);
+  expect(tags).toBe(VIDEOS.length + SHORTS.length);
   // The counts are on the cards the island read.
   await expect(grid(page, "video").locator(".tz-vl__card[data-views]")).toHaveCount(3);
 
