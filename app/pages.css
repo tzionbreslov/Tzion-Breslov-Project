@@ -75,10 +75,7 @@
 .tz-map .tz-map__links .wp-block-button .wp-block-button__link {
   display: flex; align-items: center; justify-content: center; gap: 8px;
 }
-.tz-map .tz-map__links .wp-block-button__link svg {
-  flex: none; width: 16px; height: 16px;
-  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
-}
+.tz-map .tz-map__links .wp-block-button__link svg { flex: none; width: 16px; height: 16px; }
 @media (max-width: 389px) {
   .tz-map .tz-map__links .wp-block-button__link svg { display: none; }
 }
