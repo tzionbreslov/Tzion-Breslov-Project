@@ -80,16 +80,15 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   holds the seats unconfirmed until the event ends, and nobody is emailed about it, unless the visitor retries the
   same submission (same requestId), which books it again. Before Group 6 such a row also kept its seats.
 - **The timing values are the implementer's, not rulings:** each Resend call gives up after 10 s; a row unconfirmed
-  for 30 s counts as stopped, and a retry waits up to that long for it. (How often a waiting request reads the row
-  is the controller's ruling: after 200 ms, then after waits that double up to 4 s, never past the moment the row
-  turns stale. A full 30 s wait is 12 D1 reads.)
-- **Only a chain of stopped attempts can take one RSVP request past 50 D1 queries** (the Workers Free limit per
-  invocation). A retry that waits the full 30 s for one stopped attempt makes 17 (`worker/test/worker.test.ts` pins
-  it at 20 or fewer). The check before the reservation and each of its 3 rounds wait afresh, though, for a row that
-  another attempt with the same requestId took between two of this request's queries. If three such attempts each
-  win that race and then stop too, the request reaches 54 queries, and on Workers Free the 51st fails (a 500; the
-  site's retry then books the stale row). Left because the fix, one wait shared by the whole request, changes more
-  than the poll, which was the ruling's scope; it is the controller's call.
+  for 30 s counts as stopped, and a retry waits up to that long for it. (How a waiting request reads the row is the
+  controller's ruling: after 200 ms, then after waits that double up to 4 s, never past the moment the row turns
+  stale, within one 30 s deadline for the whole request. A full 30 s wait is 12 D1 reads, and one request makes at
+  most 22 D1 queries however other attempts race it, inside Workers Free's 50.)
+- **One deadline per RSVP request** (controller's ruling): the check before the reservation and its 3 rounds share
+  one 30 s deadline. A row there when the request began waiting turns stale before it, so a retry of a stopped
+  attempt still books that row in the same call. But a row that another attempt with the same requestId took after
+  this request began waiting, and still holds unconfirmed at the deadline, gets `REQUEST_IN_PROGRESS` (409) instead
+  of up to 30 s more waiting; the site keeps the requestId and token, and its retry books that row once stale.
 - **A confirmation that fails after the guest's email** (D1, logged `RSVP_CONFIRM_FAILED`) leaves the booking
   standing but unconfirmed. The organizer is still emailed and the visitor gets the success answer. A replay of that
   requestId waits until the row is 30 s old, then books it again with the same email keys (no second copy).

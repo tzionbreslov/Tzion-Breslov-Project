@@ -120,8 +120,11 @@
     organizer is still emailed. (Review fix round 1 of PR #33; the 10 s and 30 s values are the implementer's, not
     the brief's.) While it waits, a request reads the row again after 200 ms, then after waits that double up to
     4 s, never past the moment the row turns stale: 12 D1 reads for a full 30 s wait (about 150 at the earlier
-    200 ms poll), so the wait doesn't depend on the Workers plan (Workers Free allows 50 D1 queries per invocation).
-    That backoff is the controller's ruling (2026-11-08).
+    200 ms poll). The check before the reservation and its 3 rounds share one 30 s deadline and that backoff, so one
+    request makes at most 22 D1 queries however other attempts race it, and the wait doesn't depend on the Workers
+    plan (Workers Free allows 50 D1 queries per invocation). A row another attempt took after the request began
+    waiting, still unconfirmed at the deadline, answers `REQUEST_IN_PROGRESS`; the site's retry books it once stale.
+    The backoff and the shared deadline are the controller's rulings (2026-11-08).
   - With the feed down, the daily clean-up deletes RSVPs whose stored end is more than 7 days past (before: none).
   - The RSVP dialog takes a new requestId when a retry changes its details.
   - `scripts/check-rsvp-availability.mjs` checks `ok` and retries for 2 minutes while events are missing.
