@@ -61,7 +61,7 @@ const NO_SCRIPT = "<noscript><style>" +
 
 function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
   const text = copy.classes;
-  const sort =(["latest", "popular", "oldest"] as const).map((order) =>
+  const sort = (["latest", "popular", "oldest"] as const).map((order) =>
     `<button type="button" data-order="${order}" aria-pressed="${order === "latest"}">${esc(text[order])}</button>`).join("");
   return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" data-no-results="${esc(text.noResults)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
     `<div class="tz-vl__profile">` +
