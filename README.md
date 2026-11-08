@@ -245,10 +245,13 @@ owner's go-ahead.
    switch day").
 3. **The live Worker's logging:** dashboard → Workers & Pages → tzion-breslov-api → Settings → Observability. Record
    whether Workers Logs is on, and whether invocation logs are on.
-   - Today's Worker was deployed on 2026-11-06 without an `observability` block, and Cloudflare turns Workers Logs on
-     by default for new Workers, with invocation logs. If they are on, it stores every request's URL (confirmation
-     tokens included), its headers and the visitor's IP. That is an open owner decision (PROJECT_MEMORY.md): turn
-     invocation logs off before switch day.
+   - Today's Worker was deployed on 2026-11-06 without an `observability` block. A read-only check on 2026-11-08
+     (Cloudflare API GETs and Workers Observability queries; nothing changed) found Workers Logs storing nothing for
+     it, invocation logs included: its settings had `observability: null`, `logpush: false` and no tail consumers,
+     and Workers Observability had no events from any Worker in the previous 7 days, although this Worker runs a daily
+     cron (PROJECT_MEMORY.md, decision 13, answered).
+   - The setting can change before switch day, so record on the day what the dashboard shows. Step 4 then turns
+     Workers Logs on, with invocation logs off.
    - Step 4's deploy sets the logging that `wrangler.jsonc` asks for. Its undo checks the Worker against this record
      after the rollback.
 4. **D1 bookmark:** `npx wrangler d1 time-travel info tzion-breslov-production`. Record the bookmark it prints.
