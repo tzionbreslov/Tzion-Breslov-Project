@@ -48,8 +48,10 @@ const SETTLE_MAX_FRAMES = 120;
 
 /**
  * Scrolls `target` into view and waits until it has stopped moving, so a click on it (or on
- * anything near it) doesn't scroll the page itself. A target still moving after
- * SETTLE_MAX_FRAMES frames (an animation, a carousel) fails with "target kept moving".
+ * anything near it) doesn't scroll the page itself. A target that holds still for two frames
+ * but never for three (one that pauses between moves) fails after SETTLE_MAX_FRAMES frames with
+ * "target kept moving". One that never holds still for two frames doesn't get that far: it
+ * waits in Playwright's own stable check inside scrollIntoViewIfNeeded until the test timeout.
  *
  * On desktop (1280 px and up) the theme's header (global.js) turns `position: fixed` on the
  * first scroll event at 100 px or more, one frame after the scroll, and everything under it moves
