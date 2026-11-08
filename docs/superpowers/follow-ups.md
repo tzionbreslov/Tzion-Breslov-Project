@@ -122,13 +122,12 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
     1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
   - Fixing the page itself (keeping the header's place) would change how the theme behaves, so it needs the owner's
     go-ahead.
-- **Footer Quick Links: one column from 960px to just under 1280px** (owner edits, 2026-11-08). In the four-column
-  footer the Quick Links column is 129-177px wide there, narrower than two of "Resources" (82.4px; 84px in Chromium
-  on Linux) side by side, so the list stays one column and the footer keeps its height (606-618px). From 1280px, and
-  below 960px, it is two columns. Two columns there would need a smaller type size or a wider Quick Links column
-  (taking room from the contact or sign-up columns), which the brief ruled out; that is the owner's call. In the
-  two-column footer from 1280px, "Taste a Class" wraps between words onto two lines ("Taste a" / "Class") until the
-  list is about 206px wide (between 1600 and 1920px): its column is 85.5-100px wide.
+- **Footer Quick Links: "Taste a Class" on two lines in the four-column footer** (owner edits, 2026-11-08). The list is
+  in two columns at every width. From 960px, where the footer has four columns, "Taste a Class" wraps between words
+  ("Taste a" / "Class") until the list is about 206px wide (between 1600 and 1920px): its column is 87-100px wide.
+  It is not a mid-word break, but it is visible. Keeping it on one line would need a wider Quick Links column still
+  (taking more from the sign-up column, whose line "Find out about what's happening" needs 283px), so it is left for
+  the owner.
 - **The fixed header in full-page captures.** Desktop full-page screenshots (`scripts/visual-diff.mjs`) paint the
   fixed header part-way down the page, where it depends on the page's height. A change that only shortens the footer
   therefore shows up above it as two 75px header bands, moved by the footer's change (owner edits, 2026-11-08:

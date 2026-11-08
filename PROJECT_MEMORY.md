@@ -173,10 +173,12 @@
   - Found and left: the dialogs' backdrop and the Classes play overlay also rely on `inset`
     (`docs/superpowers/follow-ups.md`).
 - Owner edits (2026-11-08, one pull request): every footer's last line reads "© 2026 Tzion Breslov", with no credit or
-  link; the footer Quick Links are two columns (one where there is no room, 960px to just under 1280px), so the
-  footer is 377px tall at 1440 (was 486), 1004px at 768 (was 1208) and 1010px at 390 (was 1214); the Classes header
-  shows the handle alone, with no video count; the 18 articles name Tzion Breslov as author in their page data; the
-  theme stylesheet's header names no author. The new phone number and WhatsApp wait for the contact-hiding feature.
+  link; the footer Quick Links are two columns at every width (in the four-column footer below about 1325px their
+  column takes room from the sign-up column, and below about 1020px from the contact column too), so the footer is
+  377px tall at 1440 (was 486), 402-414px from 960 to 1279px (was 606-618), 1004px at 768 (was 1208) and 1010px at
+  390 (was 1214); the Classes header shows the handle alone, with no video count; the 18 articles name Tzion Breslov
+  as author in their page data; the theme stylesheet's header names no author. The new phone number and WhatsApp wait
+  for the contact-hiding feature.
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,
