@@ -23,7 +23,8 @@ WordPress backup (.wpress, private, not in git)
   the 27 `/video/video-N/` clips, the `/category/` and `/author/` archives and the `/about/` forwarding page), link
   rewrites (`LINK_REWRITES`: `/resources/` → `/classes/`, `/about/` → `/about-us/`) and the Yoast sitemaps that are no
   longer published. Next (`lib/content.ts`), the export and CSP checks and the browser smoke test take their route list
-  from its `siteRoutes()`, so a re-import can't bring a removed page back; the wording check skips `isRemovedPath()`
+  from its `siteRoutes()`, so a re-import can't bring a removed page back (and a `NEW_ROUTES` path that `routes.json`
+  still serves as a page or redirect, or that is listed twice, throws instead of being dropped); the wording check skips `isRemovedPath()`
   pages; `write-site-files.mjs` drops removed pages and sitemaps from the sitemaps and adds the `NEW_ROUTES`; the export
   check fails on any link, sitemap entry or structured-data URL that still points at a removed page, and on any plain
   YouTube embed. It reads double- and single-quoted `href`/`src`, the escaped copies in Next's flight data, paths with

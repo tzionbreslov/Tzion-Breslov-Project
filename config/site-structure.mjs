@@ -93,18 +93,27 @@ export function stripRemovedUrls(json) {
 
 /**
  * The routes the site actually serves: content/routes.json minus the removed
- * paths, plus NEW_ROUTES, with no path twice (the first entry wins, so an
- * imported page is never silently replaced). Redirects from a removed path are
- * dropped. `opts` replaces the module's lists (tests). Never mutates `index`.
+ * paths, plus NEW_ROUTES, with no path twice. A new page on a path that
+ * routes.json still serves (as a page or a redirect), or listed twice in
+ * NEW_ROUTES, throws: an imported page is never silently replaced, and a new
+ * page never silently dropped. Redirects from a removed path are dropped.
+ * `opts` replaces the module's lists (tests). Never mutates `index`.
  */
 export function siteRoutes(index, { removed = REMOVED_PATHS, sections = REMOVED_SECTIONS, newRoutes = NEW_ROUTES } = {}) {
-  const seen = new Set();
-  const routes = [];
-  for (const route of [...index.routes, ...newRoutes]) {
-    if (isRemovedPath(route.path, removed, sections) || seen.has(route.path)) continue;
-    seen.add(route.path);
-    routes.push({ path: route.path, key: route.key });
+  const kept = (path) => !isRemovedPath(path, removed, sections);
+  const redirects = Object.fromEntries(Object.entries(index.redirects).filter(([from]) => kept(from)));
+  const imported = new Map();
+  const added = new Map();
+  for (const route of index.routes) if (kept(route.path) && !imported.has(route.path)) imported.set(route.path, route);
+  for (const route of newRoutes) {
+    if (!kept(route.path)) continue;
+    const clash = imported.has(route.path) ? `is already a page in content/routes.json (key ${imported.get(route.path).key})`
+      : Object.hasOwn(redirects, route.path) ? `is already a redirect in content/routes.json (to ${redirects[route.path]})`
+      : added.has(route.path) ? `is listed twice in NEW_ROUTES (key ${added.get(route.path).key})`
+      : null;
+    if (clash) throw new Error(`structure: NEW_ROUTES path ${route.path} (${route.key}) ${clash}`);
+    added.set(route.path, route);
   }
-  const redirects = Object.fromEntries(Object.entries(index.redirects).filter(([from]) => !isRemovedPath(from, removed, sections)));
+  const routes = [...imported.values(), ...added.values()].map(({ path, key }) => ({ path, key }));
   return { site: index.site, routes, redirects };
 }
