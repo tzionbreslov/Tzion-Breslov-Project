@@ -1,4 +1,7 @@
 import { loadPage } from "@/lib/content";
+import { esc, markerMissing, markerRepeated, swapHero, type HeroOptions } from "@/lib/pages/edits.mjs";
+
+export { esc, markerMissing };
 
 /**
  * Pieces of the imported Resources page (content/pages/resources.json and
@@ -18,13 +21,6 @@ export const LARGE_SPACER = '<div aria-hidden="true" class="wp-block-spacer spac
 const ARTICLES_GRID = "uagb-block-1908e9b6";
 const GRID_OPEN = '<div class="wp-block-uagb-post-grid ';
 
-/** Escapes text for HTML content and double-quoted attributes. */
-export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-/** The error every structure edit throws when its target isn't where it expects it (shared with compose.ts and contact-map.ts). */
-export const markerMissing = (name: string) => new Error(`structure: marker not found: ${name}`);
-const markerRepeated = (name: string) => new Error(`structure: marker not unique: ${name}`);
-
 /** Where `marker` occurs; it must occur exactly once, so a re-import can't make a cut pick the wrong copy. */
 export function findOnce(html: string, marker: string, name: string) {
   const at = html.indexOf(marker);
@@ -40,15 +36,6 @@ function nextSibling(html: string, from: number, marker: string, name: string) {
   space.exec(html);
   if (!html.startsWith(marker, space.lastIndex)) throw markerMissing(name);
   return space.lastIndex;
-}
-
-/** Replaces the only match of `pattern`; `replace` gets the match and its groups. */
-function replaceOnce(html: string, pattern: RegExp, replace: (...match: string[]) => string, name: string) {
-  const matches = [...html.matchAll(new RegExp(pattern.source, "g"))];
-  if (!matches.length) throw markerMissing(name);
-  if (matches.length > 1) throw markerRepeated(name);
-  const [match] = matches;
-  return html.slice(0, match.index) + replace(...match) + html.slice(match.index + match[0].length);
 }
 
 /** The whole `<div …>…</div>` element starting at `start` (nested divs balanced). */
@@ -77,17 +64,9 @@ export function resourcesHero(): string {
   return main.slice(start, spacer + SMALL_SPACER.length);
 }
 
-/** The Resources hero with another image (no srcset), heading and optional subheading (left out when not given). */
-export function renderHero({ image, heading, subheading }: { image: string; heading: string; subheading?: string }): string {
-  let html = resourcesHero();
-  html = replaceOnce(html, /<img [^>]*class="wp-block-cover__image-background[^>]*>/, (img) =>
-    img.replace(/ src="[^"]*"/, ` src="${esc(image)}"`).replace(/ (?:srcset|sizes)="[^"]*"/g, ""), "hero image");
-  html = replaceOnce(html, /(<h2 class="wp-block-heading[^"]*"><strong>)[^<]*(<\/strong><\/h2>)/, (_, open, close) =>
-    `${open}${esc(heading)}${close}`, "hero heading");
-  // The small spacer and the uppercase line under the heading.
-  const sub = /(<\/h2>)(\s*<div aria-hidden="true" class="wp-block-spacer spacer-small-height "><\/div>\s*<p class="has-text-align-center is-style-main[^>]*>)[^<]*(<\/p>)/;
-  return replaceOnce(html, sub, (_, h2End, before, pEnd) =>
-    subheading === undefined ? h2End : `${h2End}${before}${esc(subheading)}${pEnd}`, "hero subheading");
+/** The Resources hero with another image (no srcset), heading and optional subheading (left out when not given): lib/pages/edits.mjs. */
+export function renderHero(options: HeroOptions): string {
+  return swapHero(resourcesHero(), options);
 }
 
 /** From the large spacer to the end of the Resources entry content: "Live Speaking Engagements", the quote and the donate prompt. */
