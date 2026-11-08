@@ -824,9 +824,13 @@ passes in (`lib/client/config.ts`).
 
 1. **RSVPs:** `node scripts/check-rsvp-availability.mjs` must print "RSVPs OK".
    - It checks that every upcoming event that takes RSVPs in `https://tzionbreslov.org/events.json` is listed by
-     `https://api.tzionbreslov.org/v1/rsvp/availability`. A 200 alone isn't enough: with every event skipped it would
-     list none.
-   - It fails if either address doesn't answer a plain 200 (the Worker never follows a redirect).
+     `https://api.tzionbreslov.org/v1/rsvp/availability`, and that the answer says `"ok": true`. A 200 alone isn't
+     enough: with every event skipped it would list none.
+   - It fails at once if either address doesn't answer a plain 200 (the Worker never follows a redirect), or if the
+     answer lacks `"ok": true`.
+   - Right after a redeploy of the site, the Worker can still hold the previous events for up to 90 s (its 60 s feed
+     cache, then the 30 s shared availability answer). So while events are missing, it says so and checks again every
+     30 s, up to 2 minutes, before it fails.
    - It exits with 2 when no upcoming event takes RSVPs: add one to the calendar, redeploy, and check again.
 2. **Health:** `curl -s "https://api.tzionbreslov.org/health"` → `{"ok":true}` (PowerShell: `curl.exe`).
 3. **Privacy page:** `curl -sI "https://tzionbreslov.org/privacy/"` answers 200. In a browser it shows "Last updated …"
