@@ -179,7 +179,8 @@ The only exceptions are the changes the owner asked for, in `tests/wording/owner
 routes, the exact checkpoint-001 text node, its new text (or `null` when it is removed), the date and the owner's own
 words. The check applies them to the baseline before comparing, and fails on an entry that is no longer used, that
 would reach a second node on a route, or that has no date or owner's words. **Add an entry only with the owner's
-words.** Today it holds the footer's credit line (2026-11-08).
+words.** A summary of an answer the owner gave to a question may sit beside them, labelled as the controller's
+summary, never as the owner's words. Today it holds the footer's credit line (2026-11-08).
 
 ## Configuration (GitHub → Settings → Secrets and variables → Actions → **Variables**)
 
