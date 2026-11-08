@@ -296,8 +296,22 @@ from `rsvps`. *Owner's go-ahead.*
 **Before:** back up `.env.worker`, which 3.1 writes to. The undos below restore it, so that a later `--secrets-file`
 upload can't push a deleted webhook's secret or a revoked key. It holds secrets: it is copied, never printed.
 - Both shells: `node -e "require('fs').copyFileSync('.env.worker', '.env.worker.bak', require('fs').constants.COPYFILE_EXCL)"`
-- If it stops with `EEXIST`, a backup already exists, from an earlier try at this step. Keep it: it is the older,
-  clean copy.
+- If it stops with `EEXIST`, a backup already exists, from an earlier try at this step. Decide whether it may stay.
+  - Compare the two files (both shells). It prints variable names only, never a value: the names in only one of the
+    files, the names whose value differs between them, and whether the files are byte-identical:
+    `node -e "const fs = require('fs'); const vars = f => new Map(fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)/)).filter(Boolean).map(m => [m[1], m[2].trim()])); const a = vars('.env.worker'), b = vars('.env.worker.bak'); const show = x => x.join(' ') || '(none)'; console.log('only in .env.worker:', show([...a.keys()].filter(n => b.has(n) === false))); console.log('only in .env.worker.bak:', show([...b.keys()].filter(n => a.has(n) === false))); console.log('value changed:', show([...a.keys()].filter(n => b.has(n) && (a.get(n) === b.get(n)) === false))); console.log(fs.readFileSync('.env.worker').equals(fs.readFileSync('.env.worker.bak')) ? 'identical' : 'different')"`
+  - **`identical`:** keep the backup.
+  - **`different`, with `value changed: (none)`, `only in .env.worker.bak: (none)`, and nothing under "only in
+    .env.worker" but `RESEND_EVENTS_TOPIC_ID` (or nothing at all):** keep it. No variable was added, removed or
+    changed since that backup, apart from the line the earlier try at 3.1 wrote, so it is the older, clean copy.
+  - **Otherwise** (any name under `value changed`, e.g. a rotated key; any name under "only in .env.worker.bak"; any
+    other name under "only in .env.worker"; or you can't tell): `.env.worker` was changed since that backup, on
+    purpose or by an earlier try, and the check can't tell which. Treat the backup as stale: restoring it could bring
+    an old value back. Delete it and take a fresh copy:
+    1. If the comparison listed `RESEND_EVENTS_TOPIC_ID` under "only in .env.worker", remove that line from
+       `.env.worker` by hand (in an editor, never printed). 3.1 writes it again.
+    2. `node -e "require('fs').rmSync('.env.worker.bak')"` (both shells).
+    3. The copy line above again. It must not stop with `EEXIST` this time.
 - `git check-ignore -v .env.worker.bak` must print `.gitignore:3:.env.*` and the file name: the backup is
   git-ignored. Never commit it.
 
@@ -319,7 +333,9 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
    - **`webhook created` or `send-only key created`:** an unplanned live change, and the script has written its
      signing secret (`RESEND_WEBHOOK_SECRET`) or key (`RESEND_TRANSACTIONAL_API_KEY`) into `.env.worker`. The undo:
      delete that webhook, or revoke that key, in Resend, then restore `.env.worker` from the backup:
-     `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells).
+     `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells). If `.env.worker` was
+     changed on purpose since the backup, remove the lines by hand instead: the `RESEND_EVENTS_TOPIC_ID=` line, and
+     the `RESEND_WEBHOOK_SECRET=` or `RESEND_TRANSACTIONAL_API_KEY=` line that 3.1 wrote.
    - **`webhook … already exists but its secret isn't in .env.worker — delete it in Resend (or ask Claude) and
      re-run.`:** `.env.worker` has lost `RESEND_WEBHOOK_SECRET`, which the live Worker still uses to check Resend's
      webhooks. Don't follow the message's advice on switch day: a new webhook means a new secret for the Worker. The
@@ -342,7 +358,8 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
 - Restore `.env.worker` from the backup made before 3.1:
   `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells). That removes the
   `RESEND_EVENTS_TOPIC_ID` line, and any webhook secret or key that 3.1 wrote. If `.env.worker` was changed on
-  purpose since 3.1 (e.g. a rotated key), remove the `RESEND_EVENTS_TOPIC_ID=` line by hand instead.
+  purpose since the backup (e.g. a rotated key), remove the lines by hand instead: the `RESEND_EVENTS_TOPIC_ID=`
+  line, and any webhook secret or key line that 3.1 wrote.
 
 #### 4. Worker deploy: RSVPs, announcements, Workers Logs
 
@@ -528,13 +545,20 @@ two hosts to its new home. *Owner's go-ahead.*
 
    | Rule name | Expression | URL |
    |---|---|---|
-   | `tzion_removed_archives_to_articles` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo/*"))` | `https://tzionbreslov.org/articles/` |
-   | `tzion_removed_resources_to_classes` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path eq "/resources/") or (http.request.uri.path wildcard "/video/*"))` | `https://tzionbreslov.org/classes/` |
-   | `tzion_removed_about_to_about_us` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and (http.request.uri.path eq "/about/")` | `https://tzionbreslov.org/about-us/` |
+   | `tzion_removed_archives_to_articles` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo") or (http.request.uri.path wildcard "/author/esti-wolo/*"))` | `https://tzionbreslov.org/articles/` |
+   | `tzion_removed_resources_to_classes` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path in {"/resources/" "/resources"}) or (http.request.uri.path wildcard "/video") or (http.request.uri.path wildcard "/video/*"))` | `https://tzionbreslov.org/classes/` |
+   | `tzion_removed_about_to_about_us` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and (http.request.uri.path in {"/about/" "/about"})` | `https://tzionbreslov.org/about-us/` |
 
-   `*` also matches nothing, so `/video/*` covers `/video/video-1/` and `/category/uncategorized/*` covers
-   `/category/uncategorized/` itself. The archives rule comes first, so `/resources/page/2/` can never meet the
-   Classes rule.
+   How Cloudflare matches the path (Rules language → Operators,
+   https://developers.cloudflare.com/ruleset-engine/rules-language/operators/#wildcard-matching):
+   - `wildcard` must match the whole path and ignores case. Each `*` matches any characters, or none, and `/` has no
+     special meaning. So `/video/*` covers `/video/` and `/video/video-1/`, and `/category/uncategorized/*` covers
+     `/category/uncategorized/` itself.
+   - `eq` and `in` match the exact path, case included.
+   - So each address typed without its final slash gets its own exact match, which ignores case just when its slash
+     form does: `wildcard "/video"` (no `*`: the whole path, any case), `in {"/resources/" "/resources"}`. A shorter
+     pattern would catch pages it shouldn't: `/video*` also matches `/video-x`, and `/about*` matches `/about-us/`.
+   - The archives rule comes first, so `/resources/page/2/` can never meet the Classes rule.
 
 *Verify:*
 - **Now:** the dashboard lists the three rules after `tzion_org_to_com_temporary`.
@@ -547,13 +571,20 @@ two hosts to its new home. *Owner's go-ahead.*
   | Address | `location` |
   |---|---|
   | `/resources/` | `/classes/` |
+  | `/resources` | `/classes/` |
   | `/video/video-1/` | `/classes/` |
+  | `/video` | `/classes/` |
   | `/resources/page/2/` | `/articles/` |
   | `/category/uncategorized/` | `/articles/` |
+  | `/category/uncategorized` | `/articles/` |
   | `/author/esti-wolo/page/2/` | `/articles/` |
+  | `/author/esti-wolo` | `/articles/` |
   | `/about/` | `/about-us/` |
+  | `/about` | `/about-us/` |
 
   Test each with `curl -sI "https://tzionbreslov.org/resources/"`, swapping in the address.
+- **After step 9:** no rule catches a page that exists or a look-alike address. `/about-us/`, `/articles/` and
+  `/classes/` answer 200, and `/resources-x/` and `/video-x/` answer 404, each without a 301.
 
 *Undo:* delete the three rules (the export shows what was there before). Browsers keep a 301 they already followed,
 so the undo is only complete before go-live.
@@ -791,7 +822,8 @@ passes in (`lib/client/config.ts`).
    and its six sections, and the footer's Privacy link opens it.
 4. **CSP, live:** `node scripts/check-csp.mjs https://tzionbreslov.org` and
    `node scripts/check-csp.mjs https://www.tzionbreslov.org` must report zero violations.
-5. **Redirects:** the six addresses in step 6 answer 301 with their `location`.
+5. **Redirects:** the eleven addresses in step 6 answer 301 with their `location`, and the five addresses it says no
+   rule catches answer without a 301.
 6. **Test sign-ups**, each with an address the owner reads:
    - **Event announcements:** on `/events/`, "Get event announcements" with **only** "Event announcements" ticked.
      - The confirmation email arrives; "Confirm my subscription" on the site succeeds.
@@ -846,6 +878,6 @@ switch day (step 5, which also drops `https://www.youtube.com`).
    copy. Until then they show "temporarily unavailable — email us".
 4. Switch day (above), in its order, including the Cloudflare 301 redirects for the removed addresses (step 6):
    `/resources/` and `/video/…` → `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`,
-   `/about/` → `/about-us/`.
+   `/about/` → `/about-us/`, each also without its final slash.
 5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first), and confirm that
    `PAYPAL_AUTOPAY_URL` there is where the owner's monthly donors manage their gift.
