@@ -396,8 +396,9 @@ missing.
   tokens included), its headers and the visitor's IP.
 - So Workers Logs are expected to keep only the Worker's own log lines, for up to 7 days (3 days on Workers Free
   until December 1, 2026), under dashboard → Workers & Pages → tzion-breslov-api → **Observability**.
-- Those lines are codes such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED`, `RSVP_CLEANUP_FEED_UNAVAILABLE`
-  and `EVENTS_FEED_EVENT_SKIPPED`, plus the method and path (never the query string) and request or correlation ids.
+- Those lines are codes such as `RSVP_ORGANIZER_EMAIL_FAILED`, `RSVP_CANCEL_FAILED`, `RSVP_CONFIRM_FAILED`,
+  `RSVP_CLEANUP_FEED_UNAVAILABLE` and `EVENTS_FEED_EVENT_SKIPPED`, plus the method and path (never the query string)
+  and request or correlation ids.
   They hold no personal data.
 - Cloudflare's own fields in a stored event are `$`-prefixed (e.g. `$workers.event.request.url`, `$metadata.…`). The
   Worker's own fields are not (`correlationId`, `method`, `path`, `error`, `code`).

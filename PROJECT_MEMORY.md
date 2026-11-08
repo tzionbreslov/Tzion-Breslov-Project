@@ -112,8 +112,13 @@
     event has started or while `/events.json` can't be read.
   - Migration 0002 was edited in place again (`rsvps.confirmed_at`; only ever applied to local D1s, which must be
     re-created). An RSVP is confirmed once the guest's email has gone out. A second request with the same requestId
-    waits up to 5 s for the first one's outcome instead of answering 202 at once. An attempt gives back only the
-    unconfirmed row it holds, and a row left unconfirmed for 5 minutes is booked again.
+    waits for the first one's outcome instead of answering 202 at once. An attempt confirms or gives back only the
+    row it holds. Its emails and confirmation run under `waitUntil`, so a visitor's dropped connection doesn't cut
+    them off, and each Resend call gives up after 10 s. A row still unconfirmed after 30 s was left by an attempt
+    that stopped anyway: the site's retry (same requestId and token) waits for it to turn 30 s old, then books it
+    again in that one call, with the same email keys. A failed confirmation is logged (`RSVP_CONFIRM_FAILED`) and the
+    organizer is still emailed. (Review fix round 1 of PR #33; the 10 s, 30 s and 200 ms values are the
+    implementer's, not the brief's.)
   - With the feed down, the daily clean-up deletes RSVPs whose stored end is more than 7 days past (before: none).
   - The RSVP dialog takes a new requestId when a retry changes its details.
   - `scripts/check-rsvp-availability.mjs` checks `ok` and retries for 2 minutes while events are missing.

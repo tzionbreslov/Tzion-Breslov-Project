@@ -14,7 +14,9 @@ export default defineConfig({
       // load a developer's local .dev.vars (or, without one, process.env) for the secrets wrangler.jsonc declares,
       // and print "Missing required secrets" for each one it can't find there, although every binding a test uses
       // is given below. So the tests never see a local .dev.vars, and wrangler's real warnings stay where they
-      // matter: `npm run worker:dev` and the deploy.
+      // matter: `npm run worker:dev` and the deploy. Only the settings mapped below are carried over: a binding
+      // type wrangler.jsonc gains later (KV, services, rate limits, Durable Objects…) reaches the tests only once
+      // it is mapped here too, and a wrangler upgrade that renames `unstable_readConfig` fails this config loudly.
       const wrangler = unstable_readConfig({ config: path.join(projectRoot, "wrangler.jsonc") });
       return {
         main: wrangler.main,

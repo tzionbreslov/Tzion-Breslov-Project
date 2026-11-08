@@ -73,6 +73,18 @@ The Cloudflare rate-limit rule on `/v1/rsvp/availability` stays open decision 14
     undo);
   - an event moved later loses its RSVPs at its old end; the organizer still has them by email.
 
+Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment call rather than a defect:
+- **An RSVP attempt that stops before it confirms keeps its seats unless the visitor retries.** Its emails and
+  confirmation run under `waitUntil`, so a dropped connection no longer stops it. It can still stop if the Worker's
+  run ends, or if D1 fails both to confirm the RSVP and to give the seats back (`RSVP_CANCEL_FAILED`). Its row then
+  holds the seats unconfirmed until the event ends, and nobody is emailed about it, unless the visitor retries the
+  same submission (same requestId), which books it again. Before Group 6 such a row also kept its seats.
+- **The timing values are the implementer's, not rulings:** each Resend call gives up after 10 s; a row unconfirmed
+  for 30 s counts as stopped, and a retry waits up to that long for it; a waiting request looks every 200 ms.
+- **A confirmation that fails after the guest's email** (D1, logged `RSVP_CONFIRM_FAILED`) leaves the booking
+  standing but unconfirmed. The organizer is still emailed and the visitor gets the success answer. A replay of that
+  requestId waits until the row is 30 s old, then books it again with the same email keys (no second copy).
+
 ## Look and feel (owner-visible)
 
 - **The page jumps when the header turns fixed** (the original theme's behaviour, kept for fidelity). On desktop
@@ -116,7 +128,9 @@ These were out of the final review's reach and remain open questions:
 - the 26 Shorts;
 - 375 px thumbnails;
 - turquoise contrast (open decision 3);
-- an RSVP retry after more than 300 s;
+- an RSVP retry after more than 300 s (since Group 6, a retry with the same requestId is how an RSVP whose attempt
+  stopped gets booked again, within 30 s; a retry after 300 s most likely fails its Turnstile check and starts a new
+  RSVP, so the stopped attempt's row would keep its seats, as in "Worker and RSVPs" above);
 - the 24 h form;
 - the live Cloudflare and Resend state;
 - the broadcast unsubscribe (open decision 6).
