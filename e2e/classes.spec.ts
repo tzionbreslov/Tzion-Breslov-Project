@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 type Clip = { id: string; title: string; published: string };
 const readContent = <T>(file: string): T => JSON.parse(fs.readFileSync(path.join(__dirname, "..", "content", file), "utf8")) as T;
@@ -475,6 +475,42 @@ test("thumbnails are as wide as on the Resources Classes tab", async ({ page }, 
   testInfo.annotations.push({ type: "thumbnail widths", description: RESOURCES_THUMBNAIL_WIDTHS.map(([viewport, width], i) => `${viewport}px: ${classes[i]} (Resources ${width})`).join(", ") });
   RESOURCES_THUMBNAIL_WIDTHS.forEach(([viewport, width], i) =>
     expect(Math.abs(classes[i] - width), `at ${viewport}px: classes ${classes[i]} vs Resources ${width}`).toBeLessThanOrEqual(2));
+  await expectClean(page, errors);
+});
+
+// Safari before 14.1 has no flex gap: app/video-library.css then spaces the channel button's icon, the tabs, the
+// sort pills (half the gap round each, the row pulled out by as much: below 375px they wrap) and the open search
+// box's icon, field and clear button with margins (@supports not (inset: 0), which those browsers also lack). This
+// browser has both, so the fallback's rules are applied here unconditionally and must lay everything out exactly as
+// the gaps do (e2e/helpers.ts). The two tests below run it with the search box closed, then open.
+const GAP_WIDTHS = [320, 360, 374, 375, 390, 480, 767, 768, 1024, 1440];
+test("without flex gap, margins space the channel button, tabs and sort pills exactly as the gaps do", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
+  const errors = trackPageErrors(page);
+  await openClasses(page);
+  await expectGapFallbackLayout(page, {
+    containers: [".tz-vl__channel", ".tz-vl__tabs", ".tz-vl__sort"],
+    // The sort row's own box is where its margins go: its pills, and the bar and grid around it, are compared.
+    targets: { contents: [".tz-vl__channel", ".tz-vl__tabs", ".tz-vl__sort > button", ".tz-vl__search"], boxes: [".tz-vl__profile", ".tz-vl__bar", ".tz-vl__grid[data-kind=video]"] },
+    widths: GAP_WIDTHS
+  });
+  await expectClean(page, errors);
+});
+
+test("without flex gap, margins space the open search box exactly as the gaps do", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
+  const errors = trackPageErrors(page);
+  await openClasses(page);
+  // Below 768px the open box takes its own row under the tabs.
+  await page.locator(".tz-vl__search-open").click();
+  await expect(page.locator(".tz-vl__search-field")).toBeVisible();
+  await expectGapFallbackLayout(page, {
+    containers: [".tz-vl__search-field"],
+    targets: { contents: [".tz-vl__search-field", ".tz-vl__tabs"], boxes: [".tz-vl__bar", ".tz-vl__grid[data-kind=video]"] },
+    widths: GAP_WIDTHS
+  });
   await expectClean(page, errors);
 });
 

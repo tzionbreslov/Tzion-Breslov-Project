@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, trackPageErrors } from "./helpers";
 
 // The Events page (lib/pages/events.ts, lib/events.mjs) as the committed empty
 // default builds it: content/events.json is only filled by the deploy's calendar
@@ -19,7 +19,9 @@ test("/events/ opens with its own hero (eagle-in-the-sky.png, \"Upcoming events\
   await expect(heroImage).toHaveAttribute("src", "/wp-content/uploads/2023/06/eagle-in-the-sky.png");
   expect(await heroImage.getAttribute("srcset")).toBeNull();
   expect(await heroImage.getAttribute("sizes")).toBeNull();
-  await expect(hero.locator("h2 > strong")).toHaveText("Upcoming events");
+  // The hero's heading is the page's main heading: its only h1.
+  await expect(hero.locator("h1 > strong")).toHaveText("Upcoming events");
+  await expect(page.locator("h1")).toHaveCount(1);
   await expect(hero.locator("p")).toHaveCount(0);
   await expect(page.getByText("Resources for those seeking spiritual growth.")).toHaveCount(0);
 
@@ -98,6 +100,27 @@ test.describe("Get event announcements", () => {
     const alert = form.getByRole("alert");
     await expect(alert).toHaveText("This form is temporarily unavailable. Please email us at tzionbreslovproject@gmail.com.");
     await expect(alert).toContainText("tzionbreslovproject@gmail.com");
+    await expectClean(page, errors);
+  });
+
+  // Safari before 14.1 has no flex gap: app/events.css then spaces each checkbox from its label and the two lists
+  // (which wrap below 480px, under their legend) with margins (@supports not (inset: 0), which those browsers also
+  // lack). This browser has both, so the fallback's rules are applied here unconditionally and must lay the form out
+  // exactly as the gaps do (e2e/helpers.ts).
+  test("without flex gap, margins space the checkboxes and the lists exactly as the gaps do", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
+    const errors = trackPageErrors(page);
+    await page.goto("/events/");
+    await page.waitForSelector("[data-tz-announcements=ready]");
+    await expectGapFallbackLayout(page, {
+      containers: [".tz-announce__lists", ".tz-announce .tz-check"],
+      // The lists' own box is where their margins go: its legend and lists, and the form around it, are compared.
+      targets: { contents: [".tz-announce__lists > legend", ".tz-announce .tz-check"], boxes: [".tz-announce", ".tz-announce__form > :not(.tz-announce__lists)"] },
+      // Around where the lists start to share a line (about 464px) and where the row stops growing with the
+      // card (its content width) on phones (about 550-570px) and above (about 620-650px).
+      widths: [320, 360, 390, 414, 463, 464, 465, 479, 480, 550, 565, 600, 601, 630, 768, 1024, 1440]
+    });
     await expectClean(page, errors);
   });
 

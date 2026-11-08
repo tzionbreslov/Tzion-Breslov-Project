@@ -34,6 +34,13 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`playwright.config.ts:11`'s 60 s timeout** covers an unexplained local stall. CI is steady. Checked.
   Left as it is: a full local `npm run check` on 2026-11-08 (290 browser tests, 10 workers) didn't reproduce the
   stall. The slowest test took 11.5 s, and none took more than 30 s, so there's no evidence to change the timeout.
+  Group 9 (later on 2026-11-08) saw timeouts like it in both of its full local runs: 6 and then 3 desktop or mobile
+  tests timed out, different ones each time, each in a `goto`, a click's navigation or a wait for a still element.
+  All passed when re-run. In one trace, about 20 requests to the local static server (`scripts/serve-out.mjs` on port
+  3100: Next's chunks, the theme's CSS, jQuery, GSAP) got no answer for the test's last 40 s, so `load` never fired.
+  It isn't proven to be the same stall: those runs also had Group 9's 50 new tests, among them long resize proofs
+  (since marked `test.slow()`). After that, one full run went green, and one run without the resize proofs had 2
+  `goto` timeouts in tests Group 9 didn't change (both passed alone). Not proven further; CI stays steady.
 
 ## Code
 
@@ -47,10 +54,9 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 ## Events and calendar
 
 - **Floating times in a UTC calendar are read as Israel time.**
-- **Without JavaScript, a started event's card also says "To RSVP, email us…".** Since 2026-11-08 (Group 5) the build
-  marks the events that had started by then (`data-started`), so the line could be dropped from their cards without
-  new text. Left as it is: an accepted trade-off, outside Group 5's scope. An event that starts after the build still
-  can't be known without JavaScript.
+- **Without JavaScript, a card whose event started after the build still says "To RSVP, email us…".** Since Group 9
+  (2026-11-08) a card the build marked as started (`data-started`) shows neither the button nor the line, with or
+  without JavaScript; an event that starts between two builds can't be known without JavaScript.
 - **The RSVP button can still move the page on load, for an event that started after the page was built.** Since
   2026-11-08 (Group 5) the build marks the events that had started by then (`data-started`), and their RSVP slot never
   takes room. A card whose event starts between two builds still drops its button when JavaScript loads, which moves
@@ -119,8 +125,8 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   doesn't focus a tapped `<button>`, so on a 12.9"/13" iPad Pro in landscape (1366 px, the desktop menu) without
   JavaScript the panel could no longer be opened at all. The sticky hover is what opens it there.
 - **No `h1`** on the imported Home, About, Contact or Donate — this needs a site-wide accessibility pass (their markup
-  is kept for fidelity). /gallery/'s hero heading is its h1 since Group 7; /events/ and /privacy/ build the same hero
-  and have no h1 either: `renderHero`'s `headingTag: "h1"` would do it there too (outside Group 7's brief).
+  is kept for fidelity). The new pages each have one: the hero heading on /gallery/ (Group 7), /events/ and /privacy/
+  (Group 9).
 - **Gallery:**
   - the focus ring's radius doesn't match the placeholders' baked corners;
   - on phones the gallery is as wide as Articles (330 px at 390), while the Classes cards keep a 16 px inset (298 px).
@@ -129,13 +135,12 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   - The map links' external-link icon is hidden below 390px (Group 7): there a phone's pill has no room for "Open in
     Google Maps" and the icon on one line, so common phone widths (360, 375, 384px) get no new-tab cue on those links.
     Options: let the label wrap to two lines, or use smaller pill type on phones (owner's call).
-- **No flex `gap` before Safari 14.1, outside the Contact map** (found by Group 7, 2026-11-08). The map has a margin
-  fallback since Group 7 (`app/pages.css`, `@supports not (inset: 0)`). The other new pieces still space flex items
-  with `gap` only, so there they touch:
-  - Classes: the tabs, the sort pills, the search box and the channel button's icon;
-  - Events: its flex rows in `app/events.css`;
-  - the Donate form's rows, the confirmation notice, and the viewer's caption lines.
-  Left as it is: outside Group 7's brief. The same `@supports not (inset: 0)` pattern would cover them.
+- **No `inset` before Safari 14.1** (found by Group 9, 2026-11-08; not checked in a real old Safari). The browsers
+  that get the flex-gap margins (`@supports not (inset: 0)` in `app/*.css`) also ignore `inset: 0`. Two live pieces
+  are placed with it alone: the dialogs' backdrop (`.tz-dialog-overlay` in `app/dialog.css`: the Classes player, the
+  Gallery viewer, the RSVP form) and the Classes cards' play overlay (`.tz-vl__play`). There neither would stretch
+  over what it should cover (the page, the thumbnail). Left as it is: outside Group 9's brief.
+  `top: 0; right: 0; bottom: 0; left: 0` in the same rules would cover it.
 - **No-JS footer: "a lighter blue" is the theme's own fade-in, not a defect.** Investigated by Group 7 (2026-11-08):
   the theme fades the whole page in over 1 s (`.site-container { animation: fadein 1s }` in its `style.css`), with or
   without JavaScript, and on the checkpoint-001 build too. During that second the footer's `#003a71` shows lighter

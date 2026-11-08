@@ -140,6 +140,14 @@
   .footer-widgets .tz-menu-group > .tz-menu-group-label { padding-bottom: 0; }
 }
 
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, a margin spaces the caret from the label
+ * exactly as the gap does elsewhere (e2e/navigation.spec.ts applies it and compares). */
+@supports not (inset: 0) {
+  .tz-menu-parent > .tz-submenu-toggle { gap: 0; }
+  .tz-menu-parent > .tz-submenu-toggle::after { margin-left: 8px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tz-menu-parent > .tz-submenu-toggle::after { transition: none; }
   .nav-primary .tz-menu-parent > .tz-sub-menu { animation: none; }

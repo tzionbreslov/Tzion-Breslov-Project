@@ -146,6 +146,18 @@
     for it), so the pills fit on one row from 722px (was 668px); margins replace the flex gaps in Safari before 14.1.
   - Left: the iOS sticky `:hover` before the scripts load, the no-JS footer's "lighter blue" (the theme's 1 s
     fade-in), and the map links' icon below 390px (owner's call): `docs/superpowers/follow-ups.md`.
+- Follow-up Group 9 (2026-11-08): the last new-page fixes that need no owner decision, no new wording.
+  - Events and Privacy: the hero heading is the page's h1 (it looks as before), as on Gallery. The imported Home,
+    About, Contact and Donate still have none (fidelity).
+  - Events without JavaScript: a card the build marked as started shows neither the RSVP button nor "To RSVP, email
+    us…" (as with JavaScript). A card whose event starts between two builds still shows the line.
+  - Safari before 14.1 (no flex gap): margins replace the gaps in the other new pieces too, under the Contact map's
+    `@supports not (inset: 0)`: the Classes channel button, tabs, search box and sort pills; the Events cards' icons,
+    the checkboxes (signup and RSVP form) and the signup's lists; the subscription notices; the Donate frequency and
+    other-amount rows; the Gallery viewer's caption; and the Resources menu toggle's caret. Each spec applies the
+    fallback in Chromium and compares every box (`expectGapFallbackLayout`, `e2e/helpers.ts`).
+  - Found and left: the dialogs' backdrop and the Classes play overlay also rely on `inset`
+    (`docs/superpowers/follow-ups.md`).
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,

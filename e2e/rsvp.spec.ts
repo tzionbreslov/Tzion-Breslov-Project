@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { FIXTURE_IDS } from "../scripts/fixtures/write-events-fixture.mjs";
-import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 // RSVPs on the Events page (lib/events.mjs, lib/client/rsvp.ts) against the
 // fixture build (scripts/fixtures/write-events-fixture.mjs: an event that
@@ -538,7 +538,7 @@ test.describe("before the islands are ready, and without JavaScript", () => {
     test("each RSVP button and the signup form give way to a line offering email", async ({ page }) => {
       const errors = trackPageErrors(page);
       await page.goto("/events/");
-      for (const id of [FIXTURE_IDS.open, FIXTURE_IDS.limited, FIXTURE_IDS.started]) {
+      for (const id of [FIXTURE_IDS.open, FIXTURE_IDS.limited]) {
         const event = card(page, id);
         await expect(event.locator("button.tz-event__rsvp")).toHaveCount(1);
         await expect(event.locator("button.tz-event__rsvp")).toBeHidden();
@@ -547,6 +547,16 @@ test.describe("before the islands are ready, and without JavaScript", () => {
         await expect(note).toHaveText(TEXT.rsvpByEmail);
         await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", EMAIL_LINK);
       }
+      // An event that had started when the page was built (data-started): RSVPs have closed, so neither the
+      // button nor the line shows, and its RSVP slot takes no room, as with JavaScript.
+      const started = card(page, FIXTURE_IDS.started);
+      await expect(started).toHaveAttribute("data-started", "");
+      await expect(started.locator(".tz-event__actions")).toHaveCount(1);
+      await expect(started.locator(".tz-event__actions")).toBeHidden();
+      await expect(started.locator(".tz-event__actions")).toHaveCSS("display", "none");
+      await expect(started.locator(".tz-event__noscript")).toHaveCount(1);
+      await expect(started.locator(".tz-event__noscript")).toBeHidden();
+      await expect(started.locator("button.tz-event__rsvp")).toBeHidden();
       // "No RSVP": nothing to offer.
       await expect(card(page, FIXTURE_IDS.noRsvp).locator(".tz-event__noscript, button")).toHaveCount(0);
 
@@ -583,6 +593,52 @@ test.describe("the cards, in either fixture build", () => {
     await expect(card(page, FIXTURE_IDS.open).getByRole("button")).toHaveCount(0);
     // The next event, a day later, still takes RSVPs.
     await expect(rsvpButton(page, FIXTURE_IDS.limited)).toBeVisible();
+    await expectClean(page, errors);
+  });
+
+  // Safari before 14.1 has no flex gap: app/events.css then spaces each card's calendar and place icons from their
+  // text, and the RSVP form's consent checkbox from its label, with margins (@supports not (inset: 0), which those
+  // browsers also lack). This browser has both, so the fallback's rules are applied here unconditionally and must lay
+  // everything out exactly as the gaps do (e2e/helpers.ts; the signup form: e2e/events.spec.ts).
+  const GAP_WIDTHS = [320, 390, 600, 601, 768, 1024, 1440];
+  test("without flex gap, margins space the cards' icons exactly as the gaps do", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await openEvents(page);
+    await expectGapFallbackLayout(page, {
+      containers: [".tz-event__when", ".tz-event__where"],
+      targets: { contents: [".tz-event__when", ".tz-event__where"], boxes: ["article.tz-event", ".tz-event__summary", ".tz-event__actions"] },
+      widths: GAP_WIDTHS
+    });
+    await expectClean(page, errors);
+  });
+
+  test("without flex gap, a margin spaces the RSVP form's consent checkbox exactly as the gap does", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await openEvents(page);
+    await openRsvp(page);
+    await expectGapFallbackLayout(page, {
+      containers: [".tz-rsvp-dialog .tz-check"],
+      targets: { contents: [".tz-rsvp-dialog .tz-check"], boxes: [".tz-rsvp-dialog", ".tz-rsvp__form > *"] },
+      widths: GAP_WIDTHS
+    });
+    await expectClean(page, errors);
+  });
+
+  // The cards' titles are h2s under the hero's heading, the page's only h1 (e2e/events.spec.ts: the empty state).
+  test("with events listed, the hero's heading is still the page's only h1", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await page.goto("/events/");
+    await expect(page.locator("article.tz-event")).toHaveCount(Object.keys(FIXTURE_IDS).length);
+    await expect(page.locator(".hero h1 > strong")).toHaveText("Upcoming events");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("article.tz-event h2.tz-event__title")).toHaveCount(Object.keys(FIXTURE_IDS).length);
     await expectClean(page, errors);
   });
 

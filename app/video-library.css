@@ -195,6 +195,30 @@
   .tz-vl .tz-vl__channel svg { width: 14px; height: 14px; }
 }
 
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, margins space the channel button's icon, the
+ * tabs, the search box's icon, field and clear button, and the sort pills (4px round each, the row
+ * pulled out by as much: below 375px they wrap) exactly as the gaps do elsewhere (e2e/classes.spec.ts
+ * applies these rules and compares). Every selector outranks the theme's and .tz-vl button's. */
+@supports not (inset: 0) {
+  .tz-vl .tz-vl__channel,
+  .tz-vl .tz-vl__tabs,
+  .tz-vl .tz-vl__search-field,
+  .tz-vl .tz-vl__sort { gap: 0; }
+  .tz-vl .tz-vl__channel svg { margin-left: 8px; }
+  .tz-vl .tz-vl__tabs button + button { margin-left: 32px; }
+  .tz-vl .tz-vl__search-field > svg { margin-right: 8px; }
+  .tz-vl .tz-vl__search-field > .tz-vl__search-clear { margin-left: 8px; }
+  .tz-vl .tz-vl__sort { margin: -4px; }
+  .tz-vl .tz-vl__sort button { margin: 4px; }
+  @media (max-width: 767px) {
+    .tz-vl .tz-vl__tabs button + button { margin-left: 20px; }
+  }
+  @media (max-width: 374.98px) {
+    .tz-vl .tz-vl__channel svg { margin-left: 6px; }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tz-vl .tz-vl__thumb img, .tz-vl .tz-vl__play, .tz-vl .tz-vl__channel,
   .tz-vl .tz-vl__tabs button, .tz-vl .tz-vl__sort button,

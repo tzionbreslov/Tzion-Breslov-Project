@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, trackPageErrors } from "./helpers";
 
 // The Donate form (components/donate-form.tsx, a client island) and its
 // "Manage your monthly donation" link to PayPal's automatic payments page, for
@@ -174,5 +174,25 @@ test("keyboard: the arrow keys stay inside the frequency choice; Tab goes freque
   // And the frequency still comes right after the amount.
   await page.keyboard.press("Shift+Tab");
   await expect(form(page).getByRole("radio", { name: /\$150/ })).toBeFocused();
+  await expectClean(page, errors);
+});
+
+// Safari before 14.1 has no flex gap: app/enhancements.css then spaces each frequency's radio from its label, and the
+// "Other amount" field from its "$", with margins (@supports not (inset: 0), which those browsers also lack). This
+// browser has both, so the fallback's rules are applied here unconditionally and must lay the form out exactly as
+// the gaps do (e2e/helpers.ts).
+test("without flex gap, margins space the frequency choices and the other amount exactly as the gaps do", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
+  const errors = trackPageErrors(page);
+  await openDonate(page);
+  // "Other amount" shows its field.
+  await form(page).getByRole("radio", { name: "Other amount" }).check();
+  await expect(form(page).locator(".tz-donate__custom")).toBeVisible();
+  await expectGapFallbackLayout(page, {
+    containers: [".tz-donate__freq", ".tz-donate__custom"],
+    targets: { contents: [".tz-donate__freq", ".tz-donate__custom"], boxes: [".tz-donate__tier--other", ".tz-donate__frequency", "form.tz-donate__form"] },
+    widths: [320, 390, 600, 601, 768, 1024, 1440]
+  });
   await expectClean(page, errors);
 });
