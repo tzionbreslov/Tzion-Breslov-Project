@@ -36,8 +36,9 @@ const card = (page: Page, id: string) => page.locator(`article.tz-event[data-eve
 const rsvpButton = (page: Page, id: string) => card(page, id).getByRole("button", { name: "RSVP", exact: true });
 const dialog = (page: Page) => page.getByRole("dialog");
 
-/** A minimal Turnstile: renders nothing and hands out a token at once. */
-const TURNSTILE = "window.turnstile = { render: function () { return 'stub-widget'; }, getResponse: function () { return 'test-token'; }, reset: function () {}, remove: function () {} };";
+/** A minimal Turnstile: renders nothing and hands out a token at once. It counts its resets (`window.tzTurnstileResets`). */
+const TURNSTILE = "window.tzTurnstileResets = 0; window.turnstile = { render: function () { return 'stub-widget'; }, getResponse: function () { return 'test-token'; }, reset: function () { window.tzTurnstileResets += 1; }, remove: function () {} };";
+const turnstileResets = (page: Page) => page.evaluate(() => (window as unknown as { tzTurnstileResets: number }).tzTurnstileResets);
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type", "Access-Control-Allow-Methods": "GET, POST, OPTIONS" };
 
@@ -268,6 +269,48 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.error);
     expect(posts).toHaveLength(2);
     expect(posts[1].requestId).toBe(posts[0].requestId);
+    await expectClean(page, errors);
+  });
+
+  test("after a 502, a retry with the same details keeps the requestId; one with changed details gets a new one", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    const posts = await stubServices(page, {}, reply(502, { ok: false, error: "UPSTREAM_FAILURE", correlationId: "x" }));
+    await openEvents(page);
+    await openRsvp(page);
+    await fillRsvp(page);
+    const box = dialog(page);
+    const send = box.getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    // The same submission again: the Worker answers it once (idempotency), so it keeps its requestId and token.
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].requestId).toBe(posts[0].requestId);
+    expect(await turnstileResets(page)).toBe(0);
+
+    // Changed details are a new submission: a new requestId (Resend would refuse the old email key with another
+    // text), and a fresh Turnstile token (the old one was redeemed under the old requestId).
+    await box.getByLabel("Name", { exact: true }).fill("Ada King");
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(3);
+    expect(posts[2]).toMatchObject({ name: "Ada King" });
+    expect(posts[2].requestId).not.toBe(posts[0].requestId);
+    expect(await turnstileResets(page)).toBe(1);
+    // And a retry of that one keeps its new requestId.
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts[3].requestId).toBe(posts[2].requestId);
+
+    // Every field counts: the number of guests too.
+    await box.getByLabel("Number of guests").fill("2");
+    await send.click();
+    await expect(box.getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(5);
+    expect(posts[4]).toMatchObject({ guests: 2 });
+    expect(posts[4].requestId).not.toBe(posts[3].requestId);
+    expect(await turnstileResets(page)).toBe(2);
     await expectClean(page, errors);
   });
 
