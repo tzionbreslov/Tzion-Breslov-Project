@@ -212,13 +212,6 @@
     on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 on every request.
     Nothing is set up; the owner decides after go-live.
 
-## Before switch day (not owner decisions)
-
-- Fix the stale-backup gap in README → Switch day, step 3.1. When `.env.worker.bak` already exists, the
-  `webhook created` / `send-only key created` branch restores it with no condition, and could bring back a rotated
-  key. Details and the fix: `docs/superpowers/follow-ups.md` → "Before switch day". Use its own pull request with a
-  review.
-
 ## Local reference setup notes
 
 - `.wpress` extracted with a small Node script (4377-byte headers per file; skip empty-name directory entries).

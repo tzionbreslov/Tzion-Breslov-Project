@@ -9,18 +9,6 @@ keeps the ones still open, so they outlive the review notes. None blocks the pre
 
 Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisions still open".
 
-## Before switch day
-
-- **Stale `.env.worker.bak` in step 3.1** (`README.md` → Switch day, step 3, "Before" and the STOP branches).
-  - If the backup already exists (`EEXIST`), the runbook keeps the old one. The `webhook created` / `send-only key
-    created` branch then restores from it with no condition.
-  - A backup left from an earlier attempt, with a key rotated since, would bring a dead value back. That is the
-    problem the backup was added to prevent.
-  - Fix: give that restore the hedge step 3's undo already has: "if `.env.worker` was changed on purpose since the
-    backup, remove the lines by hand instead". Better still, say to delete an old backup and take a fresh one when
-    `.env.worker` changed since.
-  - Checked.
-
 ## Checks and tests
 
 - **The `.org` build misses an old-domain link inside an event card.**
