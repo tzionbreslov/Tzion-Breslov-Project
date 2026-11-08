@@ -11,17 +11,6 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Checks and tests
 
-- **The `.org` build misses an old-domain link inside an event card.**
-  - Where: `scripts/check-static-export.mjs:121`.
-  - The tzionbreslov.com check now reads the page with the event cards removed (so calendar *text* can't fail a
-    deploy), and nothing replaces it for links. An `<a href="https://tzionbreslov.com/…">` rendered inside a card
-    would pass.
-  - Latent: cards never turn calendar text into links today.
-  - Fix: when `SWITCHED`, also test the whole page for `/\b(?:href|src)="[^"]*\/\/tzionbreslov\.com/`, as the YouTube
-    line does.
-  - Checked.
-- **Other gaps in the export guard:** single-quoted `href`, `/about` with no slash, `http://` and `www.` forms of
-  the origin, and escaped `href=\"` in flight data.
 - **Flaky browser test** `e2e/classes.spec.ts:71` [desktop], "Oldest and Most popular reorder the videos".
   - `aria-pressed` stayed "false" once in CI: PR #26, run 42426373302, attempt 1.
   - It passed on re-run, in the push run and locally. Root cause not investigated.
@@ -49,8 +38,7 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 ## Code
 
 - **`esc()` is copied 7 times** (`lib/events.mjs`, `lib/instagram-feed.ts`, `lib/navigation.mjs`,
-  `lib/pages/{classes,gallery,parts}.ts`, `lib/youtube-feed.ts`). `escapeRegExp` and origin-URL matching are also
-  duplicated (`config/site-structure.mjs`, `scripts/check-static-export.mjs`). Consolidate in phase 2. Checked.
+  `lib/pages/{classes,gallery,parts}.ts`, `lib/youtube-feed.ts`). Consolidate in phase 2. Checked.
 - **The contact address is hard-coded twice:** `lib/events.mjs:92` (`CONTACT_EMAIL`) and `lib/client/config.ts:7`
   (`contactEmail`). Checked.
 - **An import cycle:** `lib/content.ts` → registry → pages → `parts`/`compose` → `lib/content.ts`. It is a TDZ risk
