@@ -303,10 +303,15 @@ export async function rsvpGuestTotals(env: Env, eventIds: string[]): Promise<Map
  * event it lists takes that event's current end, so an event moved in the
  * calendar keeps its RSVPs until its new end (it keeps its id when moved). An
  * event the feed no longer lists (removed, or already over) keeps the end its
- * RSVPs stored. Then the RSVPs whose end has passed are deleted. With no feed
- * (null: it couldn't be read), no RSVP is deleted that day: losing a moved
- * event's guest list, and reopening its seats, is worse than keeping RSVPs a
- * day longer. The other clean-ups never depend on the feed.
+ * RSVPs stored. Then the RSVPs whose end has passed are deleted.
+ *
+ * With no feed (null: it couldn't be read), only the RSVPs whose stored end is
+ * more than 7 days past are deleted (Ruling for follow-up Group 6): an event
+ * moved in the calendar could have a later end the Worker can't see, so
+ * losing its guest list, and reopening its seats, is worse than keeping RSVPs
+ * a few days longer; but nothing is kept for good while the feed is down. The
+ * feed is normally up, so RSVPs normally go within a day of the event. The
+ * other clean-ups never depend on the feed.
  */
 export async function cleanExpiredData(env: Env, feed: FeedEvent[] | null) {
   const now = Date.now();
@@ -319,7 +324,9 @@ export async function cleanExpiredData(env: Env, feed: FeedEvent[] | null) {
        WHERE rsvps.event_id = feed.id AND rsvps.event_ends_at <> feed.ends_at`
     ).bind(JSON.stringify(feed.map((event) => ({ id: event.id, end: sqliteTime(event.endsAt) })))),
     env.DB.prepare("DELETE FROM rsvps WHERE event_ends_at < datetime('now')")
-  ] : [];
+  ] : [
+    env.DB.prepare("DELETE FROM rsvps WHERE event_ends_at < datetime('now', '-7 days')")
+  ];
   await env.DB.batch([
     env.DB.prepare("DELETE FROM rate_limits WHERE expires_at < ?").bind(Math.floor(now / 1000)),
     env.DB.prepare("DELETE FROM subscription_confirmations WHERE expires_at < ?").bind(now),

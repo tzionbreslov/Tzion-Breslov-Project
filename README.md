@@ -133,7 +133,9 @@ publishes the list as `/events.json` for the forms Worker, which reads it (`EVEN
 and gives the RSVPs of every event listed there that event's current end, so a moved event (it keeps its id) keeps its
 RSVPs until its new end; an event no longer listed keeps the end its RSVPs stored. Then it deletes the RSVPs whose end
 has passed, normally within a day. If `/events.json` can't be read, it logs `RSVP_CLEANUP_FEED_UNAVAILABLE` and
-deletes no RSVP that day (Ruling R44). The copies already emailed to the organizer's inbox stay there.
+that day deletes only the RSVPs whose stored end is more than 7 days past: a moved event's later end can't be seen
+then (Ruling R44 keeps a moved event's RSVPs), but no RSVP outlives its event by much more than a week while the feed
+is down. The copies already emailed to the organizer's inbox stay there.
 The RSVP route, migration 0002 and the "Event announcements" Resend topic are built and tested but **not deployed**:
 they go live on switch day (Switch day below, steps 1–4, then step 10 turns the forms on; each step has its
 undo). Owner steps and details:
@@ -416,8 +418,8 @@ missing.
   After step 9 it answers 200 `{"ok":true,"events":{…}}` (step 11).
 
 **Expected until go-live (step 9):** from this deploy until the site is live on tzionbreslov.org, the daily clean-up
-logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes no RSVP (none can be made yet). The other clean-ups run as
-usual, and the line stops once the site is live (step 11).
+logs `RSVP_CLEANUP_FEED_UNAVAILABLE` every day and deletes only RSVPs that ended more than 7 days before (there are
+none: none can be made yet). The other clean-ups run as usual, and the line stops once the site is live (step 11).
 
 **Log-probe check, at once, before step 10 turns the forms on:**
 - **Force a stored line.** On a healthy deploy the Worker only logs failures. Pick a probe of letters, digits and

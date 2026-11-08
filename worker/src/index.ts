@@ -555,8 +555,9 @@ async function fetchHandler(request: Request, env: Env) {
 /**
  * The daily cron. It reads the site's /events.json first, so RSVPs follow
  * the calendar's current end of each event (cleanExpiredData). If the feed
- * can't be read, it logs a code (no personal data) and deletes no RSVP that
- * day; the other clean-ups run either way.
+ * can't be read, it logs a code (no personal data) and that day deletes only
+ * the RSVPs whose stored end is more than 7 days past; the other clean-ups
+ * run either way.
  */
 async function scheduledCleanup(env: Env) {
   let feed: FeedEvent[] | null = null;

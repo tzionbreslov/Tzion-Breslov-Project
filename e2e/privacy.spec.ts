@@ -51,7 +51,8 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
     expect(await section.locator("p").count(), heading).toBeGreaterThan(0);
   }
   // The RSVP retention the forms Worker enforces (worker/src/database.ts cleanExpiredData, owner decision 2026-11-07):
-  // "normally", because a day the site's events list can't be read deletes no RSVP (Ruling R44).
+  // "normally", because a day the site's events list can't be read deletes only RSVPs whose event ended more than 7 days
+  // before (Ruling R44 keeps a moved event's RSVPs; the 7 days bound how long the feed being down can keep one).
   const keep = sections.nth(HEADINGS.indexOf("How long we keep it"));
   await expect(keep.locator("p").filter({ hasText: /^RSVPs / })).toHaveText(
     "RSVPs are kept by the forms service until its daily clean-up after the event ends, normally within a day, then deleted. Each RSVP is also emailed to our inbox."

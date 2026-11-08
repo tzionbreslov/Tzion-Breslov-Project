@@ -1770,7 +1770,9 @@ describe("scheduled cleanup", () => {
     movedEarlierEnded: "c00000000000000000000010",
     movedEarlierUpcoming: "c00000000000000000000011",
     removedEnded: "c00000000000000000000012",
-    removedUpcoming: "c00000000000000000000013"
+    removedUpcoming: "c00000000000000000000013",
+    endedSixDaysAgo: "c00000000000000000000014",
+    endedEightDaysAgo: "c00000000000000000000015"
   } as const;
   const nameOf = (id: string) => Object.entries(CLEANUP).find(([, value]) => value === id)?.[0] ?? id;
 
@@ -1860,7 +1862,35 @@ describe("scheduled cleanup", () => {
     expect(await remaining()).toEqual({ removedUpcoming: sqliteTime(removedUpcoming.endsAt) });
   });
 
-  it("deletes no RSVP while the feed can't be read, logs only a code, and still runs the other clean-ups", async () => {
+  it("while the feed can't be read, still deletes the RSVPs whose stored end is more than 7 days past: 8 days deleted, 6 days kept", async () => {
+    await reserveEach([
+      feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(-8 * DAY - 2 * HOUR), endsAt: at(-8 * DAY) }),
+      feedEvent({ id: CLEANUP.endedSixDaysAgo, startsAt: at(-6 * DAY - 2 * HOUR), endsAt: at(-6 * DAY) }),
+      feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })
+    ]);
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const outbound = mockProviders("cleanup", { feedResponse: () => new Response("", { status: 503 }) });
+    await runScheduledCleanup();
+    expect(outbound.feed()).toHaveLength(1);
+    expect(Object.keys(await remaining()).sort()).toEqual(["endedSixDaysAgo", "endedYesterday"]);
+    expect(logs.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      { code: "RSVP_CLEANUP_FEED_UNAVAILABLE", error: "EVENTS_UNAVAILABLE" }
+    ]);
+  });
+
+  it("with the feed read, the 7 days play no part: the feed's end decides (a long-ended stored end moved later is kept)", async () => {
+    // Stored 8 days ago, since moved to tomorrow in the calendar; and one the feed no longer lists, ended 6 days ago.
+    await reserveEach([
+      feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(-8 * DAY - 2 * HOUR), endsAt: at(-8 * DAY) }),
+      feedEvent({ id: CLEANUP.endedSixDaysAgo, startsAt: at(-6 * DAY - 2 * HOUR), endsAt: at(-6 * DAY) })
+    ]);
+    const movedLater = feedEvent({ id: CLEANUP.endedEightDaysAgo, startsAt: at(DAY), endsAt: at(DAY + 2 * HOUR) });
+    mockProviders("cleanup", { feedEvents: [movedLater] });
+    await runScheduledCleanup();
+    expect(await remaining()).toEqual({ endedEightDaysAgo: sqliteTime(movedLater.endsAt) });
+  });
+
+  it("while the feed can't be read, keeps the RSVPs that ended within the last 7 days, logs only a code, and still runs the other clean-ups", async () => {
     await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
     await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -1875,7 +1905,7 @@ describe("scheduled cleanup", () => {
     ]);
   });
 
-  it("gives up on a feed that doesn't answer within 10 s: no RSVP deleted, the other clean-ups still run", async () => {
+  it("gives up on a feed that doesn't answer within 10 s: an RSVP that ended yesterday is kept, the other clean-ups still run", async () => {
     await reserveEach([feedEvent({ id: CLEANUP.endedYesterday, startsAt: at(-DAY - 2 * HOUR), endsAt: at(-DAY) })]);
     await env.DB.prepare("INSERT INTO rate_limits (key, bucket, count, expires_at) VALUES ('k', 1, 1, 1)").run();
     const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
