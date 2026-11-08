@@ -24,7 +24,10 @@ const OUT = path.resolve(".tmp/visual");
 const args = process.argv.slice(2);
 const MASK_NAV = args.includes("--mask-nav");
 const pageArgs = args.filter((arg) => !arg.startsWith("--"));
-const NAV_SELECTORS = "header.site-header, .mobile-menu-wrap, #genesis-footer-widgets";
+const NAV_SELECTORS = ["header.site-header", ".mobile-menu-wrap", "#genesis-footer-widgets"];
+// Each container and everything in it: a descendant with its own `visibility: visible` (an
+// open menu panel, say) would still paint inside a hidden container.
+const NAV_MASK = `${NAV_SELECTORS.flatMap((selector) => [selector, `${selector} *`]).join(", ")}{visibility:hidden!important}`;
 // One of each template the site serves (the removed pages are gone: config/site-structure.mjs).
 const PAGES = pageArgs.length ? pageArgs : [
   "/", "/about-us/", "/contact/", "/donate/", "/articles/", "/classes/",
@@ -69,7 +72,7 @@ async function capture(page, url) {
   await page.addStyleTag({ content: "iframe{visibility:hidden!important}" });
   let footerTop = null;
   if (MASK_NAV) {
-    await page.addStyleTag({ content: `${NAV_SELECTORS}{visibility:hidden!important}` });
+    await page.addStyleTag({ content: NAV_MASK });
     // Where the footer widgets start, in page coordinates (null if the page has none).
     footerTop = await page.evaluate(() => {
       const footer = document.querySelector("#genesis-footer-widgets");
