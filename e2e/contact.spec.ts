@@ -140,6 +140,60 @@ test("both map links lift on hover and focus as the theme's buttons do, and not 
   await expectClean(page, errors);
 });
 
+// Safari before 14.1 has no flex `gap`: app/pages.css then spaces the map card's parts and its buttons with
+// margins (@supports not (inset: 0), which those browsers also lack). This browser has both, so the fallback's
+// rules are applied here as they are, unconditionally, and must lay everything out exactly as the gaps do.
+test("without flex gap the margins space the map card and its buttons exactly as the gaps do", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await openContact(page);
+  const fallback = await page.evaluate(() => {
+    if (!CSS.supports("inset: 0") || !CSS.supports("gap: 1px")) return null;
+    const rules: string[] = [];
+    const walk = (list: CSSRuleList, inside: boolean) => {
+      for (const rule of list) {
+        if (rule instanceof CSSSupportsRule) walk(rule.cssRules, rule.conditionText.replace(/\s+/g, "") === "not(inset:0)");
+        else if (rule instanceof CSSMediaRule) {
+          const inner: string[] = [];
+          for (const child of rule.cssRules) if (inside) inner.push(child.cssText);
+          if (inner.length) rules.push(`@media ${rule.conditionText} { ${inner.join(" ")} }`);
+          else walk(rule.cssRules, inside);
+        } else if (inside) rules.push(rule.cssText);
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try { walk(sheet.cssRules, false); } catch { /* another origin's sheet */ }
+    }
+    return rules.join("\n");
+  });
+  expect(fallback, "the fallback's rules (and a browser with inset and gap)").toBeTruthy();
+  expect(fallback).toContain(".tz-map");
+
+  const boxes = () => section(page).evaluate(async (map) => {
+    map.getBoundingClientRect();
+    await Promise.all(map.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    // The card, its heading and map, each button and its icon (the buttons' row box itself is where the margins go).
+    return [".tz-map__card", ".tz-map__title", ".tz-map__frame", ".wp-block-button:first-child a", ".wp-block-button:last-child a",
+      ".wp-block-button:first-child svg", ".wp-block-button:last-child svg"].map((selector) => {
+      const { x, y, width, height } = map.querySelector(selector)!.getBoundingClientRect();
+      return [x, y, width, height].map((n) => Math.round(n * 100) / 100);
+    });
+  });
+  const widths = [320, 390, 600, 601, 640, 668, 722, 768, 1440];
+  const withGap = [];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 800 });
+    withGap.push(await boxes());
+  }
+  await page.addStyleTag({ content: fallback! });
+  for (const [i, width] of widths.entries()) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await boxes(), `${width}px`).toEqual(withGap[i]);
+  }
+  await expectClean(page, errors);
+});
+
 test("the map card has the Contact cards' look, and the map keeps its full height before it loads", async ({ page }) => {
   const errors = trackPageErrors(page);
   // Hold Google's answer, so the frame is measured while it is still empty.

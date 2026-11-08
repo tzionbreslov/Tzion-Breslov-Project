@@ -93,6 +93,25 @@
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link { width: 100%; padding-left: 16px; padding-right: 16px; text-align: center; }
 }
 
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, margins space the card's parts, the buttons
+ * (.25em round each, the row pulled out by as much) and each icon exactly as the gaps do elsewhere
+ * (e2e/contact.spec.ts applies these rules and compares). Every selector outranks the theme's. */
+@supports not (inset: 0) {
+  .tz-map .tz-map__card { gap: 0; }
+  .tz-map .tz-map__card > .tz-map__frame { margin-top: 30px; }
+  .tz-map .tz-map__card > .tz-map__links { gap: 0 !important; margin: calc(30px - .25em) -.25em -.25em; }
+  .tz-map .tz-map__links .wp-block-button,
+  .tz-map .tz-map__links .wp-block-button + .wp-block-button { margin: .25em; }
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link { gap: 0; }
+  .tz-map .tz-map__links .wp-block-button__link svg { margin-left: 8px; }
+  @media (max-width: 600px) {
+    .tz-map .tz-map__card > .tz-map__frame { margin-top: 20px; }
+    .tz-map .tz-map__card > .tz-map__links { margin-top: calc(20px - .25em); }
+    .tz-map .tz-map__links .wp-block-button { width: calc(100% - .5em); }
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link { transition: none; }
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link:hover,
