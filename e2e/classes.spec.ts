@@ -271,6 +271,39 @@ test("a card plays its video in the dialog; Escape, the close button and the bac
   await expectClean(page, errors);
 });
 
+// The exit animation's length is written once, in app/dialog.css: lib/client/dialog.ts reads it and waits that long.
+test("closing plays the dialog's exit animation, then removes the player", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await stubPlayer(page);
+  await openClasses(page);
+  await shown(page, "video").first().locator("a.tz-vl__trigger").click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.evaluate(() => {
+    const dialog = document.querySelector<HTMLElement>(".tz-dialog")!;
+    let closedAt = 0;
+    let duration = "";
+    (window as unknown as { tzExit: Promise<{ duration: string; removedAfter: number }> }).tzExit = new Promise((resolve) => {
+      new MutationObserver((_, observer) => {
+        if (!closedAt && dialog.dataset.state === "closed") {
+          closedAt = performance.now();
+          duration = getComputedStyle(dialog).animationDuration;
+        }
+        if (closedAt && !dialog.isConnected) {
+          observer.disconnect();
+          resolve({ duration, removedAfter: performance.now() - closedAt });
+        }
+      }).observe(document.body, { attributes: true, childList: true, subtree: true });
+    });
+  });
+  await page.keyboard.press("Escape");
+  const { duration, removedAfter } = await page.evaluate(() => (window as unknown as { tzExit: Promise<{ duration: string; removedAfter: number }> }).tzExit);
+  expect(duration).toBe("0.22s");
+  expect(removedAfter).toBeGreaterThanOrEqual(200);
+  expect(removedAfter).toBeLessThan(1500);
+  expect(await page.locator(".tz-dialog, .tz-dialog-overlay").count()).toBe(0);
+  await expectClean(page, errors);
+});
+
 test("with reduced motion the player closes at once", async ({ page }) => {
   const errors = trackPageErrors(page);
   await page.emulateMedia({ reducedMotion: "reduce" });

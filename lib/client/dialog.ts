@@ -23,10 +23,22 @@ export type DialogOptions = {
   onClose?: () => void;
 };
 
-const EXIT_MS = 220;
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, [tabindex]:not([tabindex="-1"])';
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * How long the closing dialog's exit animation runs, in ms: its animation-duration, as app/dialog.css sets it for
+ * `.tz-dialog[data-state="closed"]` (the one place the length is written). The dialog is removed when it ends.
+ */
+function exitMs(dialog: HTMLElement) {
+  const durations = getComputedStyle(dialog).animationDuration.split(",").map((value) => {
+    const time = Number.parseFloat(value);
+    if (!Number.isFinite(time)) return 0;
+    return value.trim().endsWith("ms") ? time : time * 1000;
+  });
+  return Math.round(Math.max(0, ...durations));
+}
 
 function focusGuard() {
   const guard = document.createElement("span");
@@ -95,7 +107,7 @@ export function openDialog({ label, content, opener, className, onClose }: Dialo
       if (focusWasInside) opener?.focus();
     };
     if (reducedMotion()) finish();
-    else window.setTimeout(finish, EXIT_MS);
+    else window.setTimeout(finish, exitMs(dialog));
   }
 
   document.body.append(overlay, dialog);
