@@ -30,7 +30,7 @@ import {
 } from "./database";
 import { findRsvpEvent, loadEventFeed, type FeedEvent } from "./events";
 import { sendEmail, subscribeToTopics, validateTurnstile } from "./providers";
-import { PublicError, requireBinding, type Env } from "./types";
+import { PublicError, requireBinding, requireSalt, type Env } from "./types";
 import {
   readJson,
   subscribeTopics,
@@ -117,9 +117,7 @@ function remoteIp(request: Request) {
 }
 
 async function privateHash(env: Env, purpose: string, value: string) {
-  const salt = requireBinding(env, "RATE_LIMIT_SALT");
-  if (salt.length < 32) throw new PublicError("SERVICE_NOT_CONFIGURED", "RATE_LIMIT_SALT must be at least 32 characters");
-  return sha256Hex(`${salt}:${purpose}:${value}`);
+  return sha256Hex(`${requireSalt(env)}:${purpose}:${value}`);
 }
 
 async function rateLimitValue(env: Env, route: string, purpose: "ip" | "email", value: string, limit: number) {

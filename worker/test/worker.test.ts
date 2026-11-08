@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
-import { reserveRsvp } from "../src/database";
+import { reserveRsvp, rsvpConfirmationId } from "../src/database";
 import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
 import worker, { fetchHandler } from "../src/index";
 import type { RsvpInput } from "../src/validation";
@@ -1300,6 +1300,15 @@ describe("POST /v1/rsvp", () => {
     }
     expect(ids.size).toBe(3);
     expect(await count("rsvps")).toBe(3);
+  });
+
+  it("refuses to derive a confirmation id from a RATE_LIMIT_SALT under 32 characters (SERVICE_NOT_CONFIGURED)", async () => {
+    const shortSalt = { ...env, RATE_LIMIT_SALT: "too-short-salt" };
+    await expect(rsvpConfirmationId(shortSalt, crypto.randomUUID())).rejects.toMatchObject({ code: "SERVICE_NOT_CONFIGURED" });
+    await expect(reserveRsvp(shortSalt, reserveInput(), feedEvent(), "hash")).rejects.toMatchObject({ code: "SERVICE_NOT_CONFIGURED" });
+    expect(await count("rsvps")).toBe(0);
+    // 32 characters is enough.
+    await expect(rsvpConfirmationId({ ...env, RATE_LIMIT_SALT: "x".repeat(32) }, crypto.randomUUID())).resolves.toMatch(UUID);
   });
 
   it("logs a failed seat release after a failed guest email (code and request id only)", async () => {

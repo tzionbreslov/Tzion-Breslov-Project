@@ -48,3 +48,14 @@ export function requireBinding(env: Env, name: Exclude<keyof Env, "DB">) {
   }
   return value.trim();
 }
+
+/**
+ * RATE_LIMIT_SALT, the key of every salted hash the Worker makes (rate-limit
+ * keys, subscription tokens, RSVP confirmation ids). Fails closed when it is
+ * missing or shorter than 32 characters.
+ */
+export function requireSalt(env: Env) {
+  const salt = requireBinding(env, "RATE_LIMIT_SALT");
+  if (salt.length < 32) throw new PublicError("SERVICE_NOT_CONFIGURED", "RATE_LIMIT_SALT must be at least 32 characters");
+  return salt;
+}

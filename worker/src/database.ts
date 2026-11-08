@@ -1,7 +1,7 @@
 import type { SubscribeTopic } from "../../lib/api-contract";
 import { sha256Hex } from "./crypto";
 import type { FeedEvent } from "./events";
-import { PublicError, requireBinding, type Env } from "./types";
+import { PublicError, requireSalt, type Env } from "./types";
 import type { RsvpInput } from "./validation";
 
 type RequestRow = {
@@ -148,9 +148,10 @@ async function rsvpForRequest(env: Env, requestId: string, eventId: string, emai
  * it. A RATE_LIMIT_SALT-keyed SHA-256, so it reveals nothing and can't be
  * guessed from the requestId, shaped like a UUID (version 8, "custom"): 122
  * random-looking bits, unique as long as requestIds are (request_id is UNIQUE).
+ * Like every salted hash, it fails closed on a salt under 32 characters.
  */
 export async function rsvpConfirmationId(env: Env, requestId: string) {
-  const hex = await sha256Hex(`${requireBinding(env, "RATE_LIMIT_SALT")}:rsvp-confirmation:${requestId}`);
+  const hex = await sha256Hex(`${requireSalt(env)}:rsvp-confirmation:${requestId}`);
   const variant = ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
