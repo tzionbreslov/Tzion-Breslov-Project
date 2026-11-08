@@ -1,6 +1,7 @@
 // The site's wording as an ordered list, and the check that a page still says
 // everything a baseline page said, in the same order (owner rule: never change
-// existing wording). Used by scripts/check-wording.mjs.
+// existing wording); the form fields' placeholders are listed the same way.
+// Used by scripts/check-wording.mjs.
 import * as cheerio from "cheerio";
 
 // Elements whose content is never shown as page text.
@@ -37,6 +38,28 @@ export function extractWording(html) {
   };
   walk($("body").contents().toArray());
   return wording;
+}
+
+/**
+ * Every non-empty `placeholder` attribute in <body>, in document order (the hint
+ * text in form fields, which extractWording doesn't read), skipping the same
+ * elements as extractWording.
+ * @param {string} html
+ * @returns {string[]}
+ */
+export function extractPlaceholders(html) {
+  const $ = cheerio.load(html);
+  const placeholders = [];
+  const walk = (nodes) => {
+    for (const node of nodes) {
+      if (!("name" in node) || SKIPPED.has(node.name)) continue;
+      const placeholder = collapse(node.attribs?.placeholder ?? "");
+      if (placeholder) placeholders.push(placeholder);
+      walk(node.children ?? []);
+    }
+  };
+  walk($("body").contents().toArray());
+  return placeholders;
 }
 
 /**
