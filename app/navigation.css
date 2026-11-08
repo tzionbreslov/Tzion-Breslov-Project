@@ -126,6 +126,15 @@
 .mobile-menu .tz-sub-menu > .menu-item:last-child { margin-bottom: 0; }
 
 /* ------------------------------------------------------------ Footer Quick Links */
+/* Side by side, so the footer is shorter (owner, 2026-11-08): two columns, read down the first, then the second, in
+ * the menu's order; Resources stays in one column with its two pages. A column is never narrower than the list's
+ * widest word, "Resources" (82.4px; 84px in Chromium on Linux), so no label overflows or breaks mid-word: where the
+ * list has no room for two such columns it stays one. That is only the four-column footer from 960px to just under
+ * 1280px, where the list is 129-177px wide. The gap is small (6px) so two columns fit from 1280px (177px); the
+ * labels are short and left-aligned, so the second column still starts well clear of the first's words (9px at
+ * 1280px, 16px at 1440px). Only the layout changes: the links keep the theme's look (e2e/navigation.spec.ts). */
+.footer-widgets #menu-mobile-menu-1 { column-count: 2; column-width: 8.5rem; column-gap: .6rem; }
+.footer-widgets #menu-mobile-menu-1 > li { break-inside: avoid; }
 /* Resources heads its two pages, styled like the links around it. */
 .footer-widgets .tz-menu-group > .tz-menu-group-label {
   display: block;

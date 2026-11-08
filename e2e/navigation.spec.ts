@@ -387,6 +387,100 @@ test("the footer Quick Links follow the menu", async ({ page }) => {
   await expectClean(page, errors);
 });
 
+// The footer Quick Links side by side (owner, 2026-11-08; app/navigation.css): two columns, read down the first,
+// then the second, in the menu's order. Resources keeps its two pages with it, in one column.
+const QUICK_LINKS_TOP = QUICK_LINKS.filter((label) => !["Classes", "Articles"].includes(label));
+/** The Quick Links' top-level items (Resources with its pages is one) and whether every label fits its column. */
+const quickLinksLayout = (page: Page) => page.locator("#menu-mobile-menu-1").evaluate((list) => {
+  const box = (node: Element) => node.getBoundingClientRect();
+  const items = [...list.children].map((li) => ({
+    label: li.firstElementChild!.textContent!.trim(), x: Math.round(box(li).left), y: Math.round(box(li).top)
+  }));
+  const labels = [...list.querySelectorAll("a, .tz-menu-group-label")];
+  // A label wider than its column (its own li) or out of the list.
+  const overflowing = labels.filter((label) => box(label).right > box(label.closest("li")!).right + 0.5 ||
+    box(label).right > box(list).right + 0.5 || list.scrollWidth > list.clientWidth).map((label) => label.textContent!.trim());
+  // A label broken mid-word: one of its words on two lines.
+  const broken = labels.filter((label) => {
+    const text = label.firstChild as Text;
+    let at = 0;
+    return text.data.split(/(\s+)/).some((part) => {
+      const range = document.createRange();
+      range.setStart(text, at);
+      range.setEnd(text, at + part.length);
+      at += part.length;
+      return part.trim() !== "" && new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size > 1;
+    });
+  }).map((label) => label.textContent!.trim());
+  // Resources' two pages sit under it, indented, in its column (not at the top of the next one).
+  const group = list.querySelector(".tz-menu-group")!;
+  const resourcesTogether = [...group.querySelectorAll("li")].every((li) => {
+    const indent = box(li).left - box(group).left;
+    return indent >= 0 && indent < 30 && box(li).top > box(group).top;
+  });
+  return { items, overflowing, broken, resourcesTogether };
+});
+/** Two columns, in the menu's order down each (left column top to bottom, then the right one), Resources whole. */
+async function expectQuickLinksInTwoColumns(page: Page, at: string) {
+  const layout = await quickLinksLayout(page);
+  const columns = [...new Set(layout.items.map((item) => item.x))].sort((a, b) => a - b);
+  expect(columns, `${at}: column x positions`).toHaveLength(2);
+  const reading = [...layout.items].sort((a, b) => a.x - b.x || a.y - b.y).map((item) => item.label);
+  expect(reading, `${at}: read down the columns`).toEqual(QUICK_LINKS_TOP);
+  expect(layout.items.map((item) => item.label), `${at}: menu order`).toEqual(QUICK_LINKS_TOP);
+  // Both columns hold links: the first starts the menu, the second follows on from it.
+  expect(layout.items.filter((item) => item.x === columns[1]).length, `${at}: links in the second column`).toBeGreaterThan(1);
+  expect(layout, `${at}: every label fits`).toMatchObject({ overflowing: [], broken: [], resourcesTogether: true });
+}
+
+test("the footer Quick Links sit side by side in two columns, read down each in the menu's order", async ({ page }, testInfo) => {
+  const errors = trackPageErrors(page);
+  await page.goto("/contact/");
+  if (testInfo.project.name === "desktop") {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectQuickLinksInTwoColumns(page, `${width}px`);
+    }
+  } else {
+    await expectQuickLinksInTwoColumns(page, "phone");
+  }
+  await expectClean(page, errors);
+});
+
+// Every width where the list shows: no label wider than its column, none broken mid-word. Two columns wherever the
+// list has room for two of its widest word ("Resources") side by side: everywhere but the four-column footer from
+// 960px to just under 1280px, where its column is 129-177px wide and the list stays in one column.
+test("the footer Quick Links fit at every width, in two columns wherever there is room", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  const errors = trackPageErrors(page);
+  await page.goto("/contact/");
+  await page.evaluate(() => document.fonts.ready);
+  for (const width of [320, 360, 375, 414, 480, 600, 767, 768, 959, 1280, 1300, 1366, 1600, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expectQuickLinksInTwoColumns(page, `${width}px`);
+  }
+  for (const width of [960, 1024, 1100, 1199]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await quickLinksLayout(page);
+    expect(new Set(layout.items.map((item) => item.x)).size, `${width}px: one column, no room for two`).toBe(1);
+    expect(layout, `${width}px: every label fits`).toMatchObject({ overflowing: [], broken: [], resourcesTogether: true });
+  }
+  await expectClean(page, errors);
+});
+
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("the footer Quick Links are in two columns too", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    await page.goto("/contact/");
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectQuickLinksInTwoColumns(page, `${width}px without JavaScript`);
+    }
+  });
+});
+
 test("the old Resources and /about/ buttons keep their labels and go to Classes and About", async ({ page }) => {
   const errors = trackPageErrors(page);
   const link = (name: string) => page.locator("#genesis-content").getByRole("link", { name, exact: true });
