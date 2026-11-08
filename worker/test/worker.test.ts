@@ -1025,6 +1025,41 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(0);
   });
 
+  it("answers a replay of a booked RSVP with its confirmation even after the event has started, or while the feed is down", async () => {
+    const payload = rsvpPayload();
+    const booking = mockProviders("rsvp");
+    const first = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(first.status).toBe(202);
+    const { confirmationId } = await first.json<RsvpSuccess>();
+    expect(booking.emails()).toHaveLength(2);
+    booking.spy.mockRestore();
+
+    // The same event, now started an hour ago (the calendar moved it, or the retry came late).
+    resetEventFeedCache();
+    const started = mockProviders("rsvp", {
+      feedEvents: [feedEvent({ startsAt: new Date(Date.now() - HOUR).toISOString(), endsAt: new Date(Date.now() + HOUR).toISOString() })]
+    });
+    const replay = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(replay.status).toBe(202);
+    await expect(replay.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // A new RSVP to it is closed.
+    const late = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload()), env);
+    expect(late.status).toBe(409);
+    expect((await errorBody(late)).error).toBe("EVENT_CLOSED");
+    expect(started.emails()).toHaveLength(0);
+    started.spy.mockRestore();
+
+    // The feed can't be read: the replay needs only the stored RSVP.
+    resetEventFeedCache();
+    const down = mockProviders("rsvp", { feedResponse: () => new Response("", { status: 500 }) });
+    const whileDown = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(whileDown.status).toBe(202);
+    await expect(whileDown.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(down.feed()).toHaveLength(0);
+    expect(down.emails()).toHaveLength(0);
+    expect(await count("rsvps")).toBe(1);
+  });
+
   it("answers 404 EVENT_NOT_FOUND for a \"No RSVP\" event and for an id the feed doesn't list", async () => {
     const outbound = mockProviders("rsvp");
     for (const eventId of [EVENT_IDS.off, EVENT_IDS.unknown]) {

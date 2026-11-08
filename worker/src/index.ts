@@ -25,6 +25,7 @@ import {
   finishRequest,
   markSubscriptionConfirmationUsed,
   reserveRsvp,
+  rsvpForRequest,
   rsvpGuestTotals,
   storeWebhookEvent
 } from "./database";
@@ -398,6 +399,10 @@ async function handleRsvp(request: Request, env: Env, origin: string) {
   // After the challenge, so a failed one can't use up someone's email quota (as contact and subscribe).
   await validateTurnstile(env, input.turnstileToken, remoteIp(request), input.requestId, TURNSTILE_ACTIONS.rsvp);
   const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
+  // A replay of an RSVP already made answers as the first attempt did, before anything about the event is
+  // checked: it still holds once the event has started, and while the feed can't be read.
+  const replay = await rsvpForRequest(env, input.requestId, input.eventId, emailHash);
+  if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay.id } satisfies RsvpSuccessResponse, 202, origin);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");

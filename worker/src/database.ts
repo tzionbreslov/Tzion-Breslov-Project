@@ -134,7 +134,7 @@ export async function storeWebhookEvent(env: Env, provider: "resend", eventId: s
 type RsvpRequestRow = { id: string; event_id: string; email_hash: string };
 
 /** The RSVP already stored for this requestId, which must be the same visitor's RSVP to the same event. */
-async function rsvpForRequest(env: Env, requestId: string, eventId: string, emailHash: string) {
+export async function rsvpForRequest(env: Env, requestId: string, eventId: string, emailHash: string) {
   const row = await env.DB.prepare("SELECT id, event_id, email_hash FROM rsvps WHERE request_id = ?")
     .bind(requestId).first<RsvpRequestRow>();
   if (row && (row.event_id !== eventId || row.email_hash !== emailHash)) throw new PublicError("REQUEST_ID_CONFLICT");
