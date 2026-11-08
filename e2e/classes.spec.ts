@@ -46,8 +46,10 @@ test("Videos opens first, newest first, under the channel header", async ({ page
   await openClasses(page);
   await expect(page.locator("h1")).toHaveCount(1);
   await expect(page.locator("h1#tz-vl-title")).toHaveText("Classes");
-  // A no-break space ties the "·" to the handle.
-  expect(await page.locator(".tz-vl__meta").textContent()).toBe(`@tzionbreslovproject\u00a0· ${VIDEOS.length + SHORTS.length} videos`);
+  // The handle alone: no video count, which could only fall out of step with the channel's (owner, 2026-11-08).
+  expect(await page.locator(".tz-vl__meta").textContent()).toBe("@tzionbreslovproject");
+  expect(await page.locator(".tz-vl__profile").textContent()).not.toMatch(/\d\s*videos?\b|·/i);
+  await expect(page.locator(".tz-vl__count")).toHaveCount(0);
   await expect(button(page, "Videos")).toHaveAttribute("aria-pressed", "true");
   await expect(button(page, "Shorts")).toHaveAttribute("aria-pressed", "false");
   await expect(button(page, "Latest")).toHaveAttribute("aria-pressed", "true");
@@ -57,16 +59,18 @@ test("Videos opens first, newest first, under the channel header", async ({ page
   expect(videos).toHaveLength(VIDEOS.length);
   for (let i = 1; i < videos.length; i++) expect(videos[i].time).toBeLessThanOrEqual(videos[i - 1].time);
 
-  // On phones the handle never breaks, and a wrapped line starts with the count, not a bare "·".
+  // On phones the handle never breaks: one line, the meta line's only one.
   for (const width of [320, 360, 390, 414]) {
     await page.setViewportSize({ width, height: 800 });
     const meta = await page.locator(".tz-vl__meta").evaluate((node) => {
-      const handle = node.querySelector("strong")!.getClientRects();
-      const count = node.querySelector(".tz-vl__count")!.getBoundingClientRect();
-      return { handleLines: handle.length, handleTop: handle[0].top, countTop: count.top, countLeft: count.left, left: node.getBoundingClientRect().left };
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return {
+        handleLines: node.querySelector("strong")!.getClientRects().length,
+        metaLines: new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size
+      };
     });
-    expect(meta.handleLines, `handle lines at ${width}px`).toBe(1);
-    if (meta.countTop > meta.handleTop + 1) expect(Math.round(meta.countLeft), `count starts its line at ${width}px`).toBe(Math.round(meta.left));
+    expect(meta, `${width}px`).toEqual({ handleLines: 1, metaLines: 1 });
   }
   await expectClean(page, errors);
 });
@@ -360,11 +364,7 @@ test("the channel header fits from 320 to 374px, and keeps its sizes from 375px"
       label.selectNodeContents(channel.firstChild!);
       const meta = profile.querySelector<HTMLElement>(".tz-vl__meta")!;
       const avatar = box(profile.querySelector(".tz-vl__avatar")!);
-      // The handle with its "·" (they never part: the "·" sits on the handle's line).
       const handle = meta.querySelector("strong")!;
-      const dot = document.createRange();
-      dot.setStart(handle.nextSibling!, 1);
-      dot.setEnd(handle.nextSibling!, 2);
       // For the failure message: each one's natural (unwrapped) width, and the room it has.
       const natural = (node: Element, measure: (copy: Element) => number) => {
         const copy = node.cloneNode(true) as HTMLElement;
@@ -374,14 +374,11 @@ test("the channel header fits from 320 to 374px, and keeps its sizes from 375px"
         copy.remove();
         return width.toFixed(1);
       };
-      const handleAndDot = natural(meta, (copy) => {
-        const range = document.createRange();
-        range.setStartBefore(copy.querySelector("strong")!);
-        range.setEnd(copy.querySelector("strong")!.nextSibling!, 2);
-        return range.getBoundingClientRect().width;
-      });
-      const measure = `handle and dot ${handleAndDot}px in ${meta.clientWidth}px, ` +
+      const handleWidth = natural(meta, (copy) => copy.querySelector("strong")!.getBoundingClientRect().width);
+      const measure = `handle ${handleWidth}px in ${meta.clientWidth}px, ` +
         `button ${natural(channel, (copy) => copy.getBoundingClientRect().width)}px in ${box(profile).width.toFixed(1)}px`;
+      const metaText = document.createRange();
+      metaText.selectNodeContents(meta);
       return {
         measure,
         fits: {
@@ -389,7 +386,8 @@ test("the channel header fits from 320 to 374px, and keeps its sizes from 375px"
           channelInside: box(channel).right <= box(profile).right + 0.5,
           metaBesideLogo: box(meta).left >= avatar.right,
           handleOneLine: handle.getClientRects().length === 1,
-          dotWithHandle: Math.abs(dot.getBoundingClientRect().top - handle.getClientRects()[0].top) < 2,
+          // The handle is the meta line's only text: nothing after it, on its line or the next.
+          handleOnly: meta.textContent === handle.textContent && new Set([...metaText.getClientRects()].map((rect) => Math.round(rect.top))).size === 1,
           metaInside: meta.scrollWidth <= meta.clientWidth
         },
         sizes: {
@@ -400,7 +398,7 @@ test("the channel header fits from 320 to 374px, and keeps its sizes from 375px"
         }
       };
     });
-    expect(header.fits, `${width}px (${header.measure})`).toEqual({ channelOneLine: true, channelInside: true, metaBesideLogo: true, handleOneLine: true, dotWithHandle: true, metaInside: true });
+    expect(header.fits, `${width}px (${header.measure})`).toEqual({ channelOneLine: true, channelInside: true, metaBesideLogo: true, handleOneLine: true, handleOnly: true, metaInside: true });
     if (width >= 375) expect(header.sizes, `${width}px`).toEqual({ avatar: 84, title: "40px", meta: "14px", channel: "12px 10px 16px 0.4px" });
   }
   await expectClean(page, errors);

@@ -44,7 +44,6 @@
 }
 .tz-vl .tz-vl__meta { margin: 0; color: var(--tz-vl-muted); font-size: 15px; line-height: 1.5; }
 .tz-vl .tz-vl__meta strong { color: var(--tz-vl-blue); font-weight: 700; }
-.tz-vl .tz-vl__count { white-space: nowrap; }
 .tz-vl .tz-vl__channel {
   display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; padding: 11px 22px;
   border-radius: 40px; background: var(--tz-vl-blue); color: #fff; box-shadow: 3px 5px 15px #00000029;
@@ -185,7 +184,7 @@
   /* Below 375px (zoomed fractional widths too: 374.98, not 374) down to 320px: a smaller logo and
    * handle, so the handle stays beside the logo without breaking mid-word, and smaller channel-button
    * type, so "Visit our YouTube channel" keeps to one line.
-   * Each keeps room to spare at 320px (about 21px and 18px here): Chromium on Linux at a phone's
+   * Each keeps room to spare at 320px (about 27px and 18px here): Chromium on Linux at a phone's
    * 2.625 scale measures this text about 1 device pixel wider per letter (8-10px in all). */
   .tz-vl .tz-vl__profile { grid-template-columns: 56px minmax(0, 1fr); column-gap: 10px; }
   .tz-vl .tz-vl__avatar { width: 56px; height: 56px; }

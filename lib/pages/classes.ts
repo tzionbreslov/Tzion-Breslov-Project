@@ -61,16 +61,15 @@ const NO_SCRIPT = "<noscript><style>" +
 
 function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
   const text = copy.classes;
-  const count = esc(text.videoCount.replace("{count}", String(videos.length + shorts.length)));
-  const sort = (["latest", "popular", "oldest"] as const).map((order) =>
+  const sort =(["latest", "popular", "oldest"] as const).map((order) =>
     `<button type="button" data-order="${order}" aria-pressed="${order === "latest"}">${esc(text[order])}</button>`).join("");
   return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" data-no-results="${esc(text.noResults)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
     `<div class="tz-vl__profile">` +
     `<span class="tz-vl__avatar"><img src="${LOGO}" alt="" width="215" height="216"></span>` +
     `<div class="tz-vl__intro">` +
     `<h1 id="tz-vl-title" class="tz-vl__title">${esc(text.heading)}</h1>` +
-    // The "·" stays with the handle (no-break space), so a wrapped line starts with the count.
-    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong>&nbsp;· <span class="tz-vl__count">${count}</span></p>` +
+    // The handle alone: no video count, which could only fall out of step with the channel's (owner, 2026-11-08).
+    `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong></p>` +
     `<a class="tz-vl__channel" href="${CHANNEL_URL}" target="_blank" rel="noopener noreferrer">${esc(text.channel)}${EXTERNAL_LINK_ICON}</a>` +
     `</div></div>` +
     `<div class="tz-vl__bar">` +
