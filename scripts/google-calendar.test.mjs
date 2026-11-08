@@ -248,6 +248,33 @@ test('any other line that starts with "RSVP limit" is shown as written, with a w
   }
 });
 
+test('"No RSVP" with an RSVP limit: "No RSVP" wins, the limit is dropped, with a warning naming the event only', () => {
+  for (const description of ["Come early\nNo RSVP\nRSVP limit: 40", "RSVP limit: 40\nCome early\nno rsvp."]) {
+    const { event, warnings } = one({ summary: "Melave Malka", description });
+    assert.equal(event.rsvp, "off", description);
+    assert.equal(event.limit, null, description);
+    assert.equal(event.summary, "Come early", description);
+    assert.equal(warnings.length, 1, description);
+    assert.match(warnings[0], /^"Melave Malka": /);
+    assert.match(warnings[0], /No RSVP/);
+    // The title only: nothing else from the description.
+    assert.ok(!warnings[0].includes("Come early"), warnings[0]);
+    assert.ok(!warnings[0].includes("40"), warnings[0]);
+  }
+  // A weekly class: every date is the same, and the warning comes once.
+  const weekly = buildCalendarCatalog(calendar([vevent({ summary: "Weekly class", description: "No RSVP\nRSVP limit: 12", extra: ["RRULE:FREQ=WEEKLY;COUNT=5"] })]), { now: NOW });
+  assert.equal(weekly.events.length, 5);
+  assert.ok(weekly.events.every((event) => event.rsvp === "off" && event.limit === null));
+  assert.equal(weekly.warnings.length, 1);
+  assert.match(weekly.warnings[0], /^"Weekly class": /);
+  // A limit that isn't one sets no limit already: only its own warning.
+  const { event, warnings } = one({ summary: "Melave Malka", description: "No RSVP\nRSVP limit: 0" });
+  assert.equal(event.rsvp, "off");
+  assert.equal(event.limit, null);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /is not an RSVP limit of 1 or more/);
+});
+
 test("a weekly class with a bad limit warns once, not once per date", () => {
   const { warnings } = buildCalendarCatalog(calendar([vevent({ description: "RSVP limit: none", extra: ["RRULE:FREQ=WEEKLY;COUNT=5"] })]), { now: NOW });
   assert.equal(warnings.length, 1);
@@ -256,14 +283,17 @@ test("a weekly class with a bad limit warns once, not once per date", () => {
 test("markers are read from the whole description, then it is shortened to 320 characters on a word boundary", () => {
   const long = Array.from({ length: 90 }, (_, i) => `word${i}`).join(" ");
   assert.ok(long.length > 400);
-  const { event } = one({ description: `${long}\nRSVP limit: 12\nNo RSVP` });
-  assert.equal(event.limit, 12);
-  assert.equal(event.rsvp, "off");
-  assert.ok(event.summary.length <= 321, String(event.summary.length));
-  assert.ok(event.summary.endsWith("…"));
-  assert.ok(long.startsWith(event.summary.slice(0, -1)));
-  assert.match(event.summary, /word\d+…$/);
-  assert.ok(!event.summary.includes("RSVP"));
+  const limited = one({ description: `${long}\nRSVP limit: 12` }).event;
+  assert.equal(limited.limit, 12);
+  assert.equal(limited.rsvp, "open");
+  assert.equal(one({ description: `${long}\nNo RSVP` }).event.rsvp, "off");
+  for (const event of [limited, one({ description: `${long}\nNo RSVP` }).event]) {
+    assert.ok(event.summary.length <= 321, String(event.summary.length));
+    assert.ok(event.summary.endsWith("…"));
+    assert.ok(long.startsWith(event.summary.slice(0, -1)));
+    assert.match(event.summary, /word\d+…$/);
+    assert.ok(!event.summary.includes("RSVP"));
+  }
 });
 
 test("keeps the next 60 events within 370 days by default", () => {

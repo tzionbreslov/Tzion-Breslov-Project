@@ -93,7 +93,8 @@ const LIMIT_EXAMPLE = 'Write it on a line of its own like "RSVP limit: 40".';
  * them, shortened. A limit must be a whole number of at least 1; anything else
  * on a "RSVP limit:" line means no limit, and a warning for the owner. Any
  * other line that starts with "RSVP limit" (no colon, "limits", "limit40")
- * stays in the text, also with a warning.
+ * stays in the text, also with a warning. "No RSVP" with a limit means no
+ * RSVPs and no limit, with a warning that names the event (its title only).
  */
 function readDescription(value, title) {
   let rsvp = "open";
@@ -113,6 +114,10 @@ function readDescription(value, title) {
       }
       kept.push(line);
     }
+  }
+  if (rsvp === "off" && limit !== null) {
+    limit = null;
+    warnings.push(`"${title}": its description has both "No RSVP" and an RSVP limit, so the event takes no RSVPs and has no limit. Keep only one of the two lines.`);
   }
   const summary = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim();
   return { summary: shorten(summary), rsvp, limit, warnings };
