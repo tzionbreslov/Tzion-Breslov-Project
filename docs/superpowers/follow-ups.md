@@ -95,6 +95,10 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
     `e2e/classes.spec.ts` (run 42426373302) and `e2e/rsvp.spec.ts` (run 42441324412). The bad timing was never seen
     on its own (0 in 30 throttled local runs), so it isn't proven to be their cause. Both tests were hardened with
     `scrollIntoViewAndSettle` (`e2e/helpers.ts`).
+  - The same holds for `e2e/articles.spec.ts` ("pagination swaps the articles in place…", desktop, CI run
+    42466627116 on PR #33, which changed no page code): the click on page 2 left page 1 in place. Its link sits at
+    about 1,466 px; scrolling to it takes the page to 1,003 px and the link moves up 88.5 px as the header turns
+    fixed. Not reproduced (0 in 30 local runs), so not proven either; hardened the same way.
   - Any other desktop first click whose own scroll takes the page past 100 px shares this race. For example, the
     gallery's first photo (`e2e/gallery.spec.ts`, "the first photo opens in the viewer…") ends below the fold at
     1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
