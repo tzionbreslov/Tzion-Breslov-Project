@@ -406,6 +406,39 @@ test("the channel header fits from 320 to 374px, and keeps its sizes from 375px"
   await expectClean(page, errors);
 });
 
+// Between 374 and 375px (a zoomed page has fractional widths) the header keeps its smaller sizes: the 375px
+// sizes start at 375px, where the test above proves they fit. A same-origin frame zoomed 4x gives the
+// fractional width (Chromium snaps a frame's width to whole device pixels), as in e2e/gallery.spec.ts.
+test("between 374 and 375px wide, the channel header keeps its smaller sizes", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own sizes");
+  const errors = trackPageErrors(page);
+  const headerAt = async (width: number) => {
+    await page.route("**/__classes-frame/", (route) => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><body style="margin:0"><iframe src="/classes/" style="border:0;zoom:4;width:${width}px;height:600px"></iframe></body>`
+    }));
+    await page.goto("/__classes-frame/");
+    const frame = page.frame({ url: /\/classes\/$/ })!;
+    await frame.waitForLoadState("load");
+    const header = await frame.evaluate(() => {
+      const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+      return {
+        viewport: document.documentElement.getBoundingClientRect().width,
+        avatar: document.querySelector(".tz-vl__avatar")!.getBoundingClientRect().width,
+        meta: style(".tz-vl__meta").fontSize,
+        channel: `${style(".tz-vl__channel").fontSize} ${style(".tz-vl__channel").padding} ${style(".tz-vl__channel").letterSpacing}`
+      };
+    });
+    await page.unroute("**/__classes-frame/");
+    return header;
+  };
+  const smaller = await headerAt(374);
+  expect(smaller, "374px").toEqual({ viewport: 374, avatar: 56, meta: "12px", channel: "10.5px 10px normal" });
+  for (const width of [374.25, 374.5, 374.75]) expect(await headerAt(width), `${width}px`).toEqual({ ...smaller, viewport: width });
+  expect(await headerAt(375), "375px").toEqual({ viewport: 375, avatar: 84, meta: "14px", channel: "12px 10px 16px 0.4px" });
+  await expectClean(page, errors);
+});
+
 test("the channel link opens YouTube in a new tab", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openClasses(page);
