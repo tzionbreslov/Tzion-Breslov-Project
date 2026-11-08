@@ -1,4 +1,4 @@
-import { readShared } from "./content";
+import { readShared } from "./content-files";
 import { esc } from "./html.mjs";
 import { renderInstagramFeed } from "./instagram-feed";
 
