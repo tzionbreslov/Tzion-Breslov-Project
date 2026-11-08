@@ -504,7 +504,9 @@ test.describe("the cards, in either fixture build", () => {
     await expectClean(page, errors);
   });
 
-  // The calendar's words are text: "kids <10, adults >18" is neither markup nor lost.
+  // The calendar's words are text: "kids <10, adults >18" shows escaped, not as markup.
+  // The fixture is already synced, so this checks the page only; that the sync keeps such
+  // text is unit-tested (scripts/google-calendar.test.mjs).
   test("a description's \"<\" and \">\" show as text", async ({ page }) => {
     const errors = trackPageErrors(page);
     if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
