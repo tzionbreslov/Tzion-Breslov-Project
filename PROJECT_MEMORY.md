@@ -209,6 +209,10 @@
 - GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds around 07:00 and 21:00 Israel time);
   Actions limited to GitHub-owned actions, read-only token, outside-contributor workflows need approval; wiki/projects
   off; secret scanning + push protection, Dependabot alerts/updates, private vulnerability reporting on.
+- Dependencies (2026-11-08): `package.json` `overrides` pins `minimatch` to exactly 11.0.1 under `eslint`,
+  `@eslint/config-array` and `@typescript-eslint/typescript-estree` (Dependabot alert 1, GHSA-g3hv-75wg-m249,
+  development only; their releases still declare `^10`). Drop the override once they depend on minimatch ≥ 11.0.1,
+  and before any eslint upgrade that needs a newer minimatch major.
 - Instagram switched off with the Resources page (owner, 2026-11-06): no tab and no link (the footer icon stays). The
   sync script and tests stay dormant (`INSTAGRAM_ENABLED=false`; the deploy no longer syncs or caches the feed); turning
   it back on needs INSTAGRAM_ACCESS_TOKEN (secret) and INSTAGRAM_USER_ID / INSTAGRAM_API_VERSION (variables):
