@@ -50,8 +50,14 @@ test("siteRoutes throws for a new page on a path routes.json already serves, as 
   // /about/ is a redirect page in routes.json (removed by default; kept here).
   assert.throws(() => siteRoutes(raw, { ...none, newRoutes: [{ path: "/about/", key: "tz:about" }] }),
     { message: "structure: NEW_ROUTES path /about/ (tz:about) is already a redirect in content/routes.json (to /about-us/)" });
-  // Once routes.json's page or redirect is removed, its path is free.
-  assert.doesNotThrow(() => siteRoutes(raw, { ...none, removed: ["/about/"], newRoutes: [{ path: "/about-us/old/", key: "tz:x" }] }));
+});
+
+test("siteRoutes throws for a new page on a removed path, listed or under a removed section", () => {
+  const raw = routesJson();
+  assert.throws(() => siteRoutes(raw, { ...none, removed: ["/about/"], newRoutes: [{ path: "/about/", key: "tz:about" }] }),
+    { message: "structure: NEW_ROUTES path /about/ (tz:about) is a removed path (REMOVED_PATHS)" });
+  assert.throws(() => siteRoutes(raw, { ...none, sections: ["/resources/"], newRoutes: [{ path: "/resources/page/9/", key: "tz:resources" }] }),
+    { message: "structure: NEW_ROUTES path /resources/page/9/ (tz:resources) is under the removed section /resources/ (REMOVED_SECTIONS)" });
 });
 
 test("siteRoutes throws for a path listed twice in NEW_ROUTES", () => {

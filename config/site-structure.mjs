@@ -93,11 +93,12 @@ export function stripRemovedUrls(json) {
 
 /**
  * The routes the site actually serves: content/routes.json minus the removed
- * paths, plus NEW_ROUTES, with no path twice. A new page on a path that
- * routes.json still serves (as a page or a redirect), or listed twice in
- * NEW_ROUTES, throws: an imported page is never silently replaced, and a new
- * page never silently dropped. Redirects from a removed path are dropped.
- * `opts` replaces the module's lists (tests). Never mutates `index`.
+ * paths, plus NEW_ROUTES, with no path twice. A new page on a removed path
+ * (REMOVED_PATHS or under REMOVED_SECTIONS), on a path that routes.json still
+ * serves (as a page or a redirect), or listed twice in NEW_ROUTES, throws: an
+ * imported page is never silently replaced, and a new page never silently
+ * dropped. Redirects from a removed path are dropped. `opts` replaces the
+ * module's lists (tests). Never mutates `index`.
  */
 export function siteRoutes(index, { removed = REMOVED_PATHS, sections = REMOVED_SECTIONS, newRoutes = NEW_ROUTES } = {}) {
   const kept = (path) => !isRemovedPath(path, removed, sections);
@@ -106,8 +107,10 @@ export function siteRoutes(index, { removed = REMOVED_PATHS, sections = REMOVED_
   const added = new Map();
   for (const route of index.routes) if (kept(route.path) && !imported.has(route.path)) imported.set(route.path, route);
   for (const route of newRoutes) {
-    if (!kept(route.path)) continue;
-    const clash = imported.has(route.path) ? `is already a page in content/routes.json (key ${imported.get(route.path).key})`
+    const section = sections.find((prefix) => route.path.startsWith(prefix));
+    const clash = removed.includes(route.path) ? "is a removed path (REMOVED_PATHS)"
+      : section ? `is under the removed section ${section} (REMOVED_SECTIONS)`
+      : imported.has(route.path) ? `is already a page in content/routes.json (key ${imported.get(route.path).key})`
       : Object.hasOwn(redirects, route.path) ? `is already a redirect in content/routes.json (to ${redirects[route.path]})`
       : added.has(route.path) ? `is listed twice in NEW_ROUTES (key ${added.get(route.path).key})`
       : null;
