@@ -4,61 +4,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { isRemovedPath, REMOVED_SITEMAPS, siteRoutes } from "../config/site-structure.mjs";
-import { IMPORTED_ORIGIN, resolveSiteUrl } from "../config/site-url.mjs";
+import { REMOVED_SITEMAPS, siteRoutes } from "../config/site-structure.mjs";
+import { resolveSiteUrl } from "../config/site-url.mjs";
+import { exportGuard } from "./lib/export-guard.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "out");
 const rawBase = process.env.NEXT_PUBLIC_BASE_PATH?.trim() ?? "";
 const base = rawBase ? `/${rawBase.replace(/^\/+|\/+$/g, "")}` : "";
 const PRODUCTION = resolveSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
-const SWITCHED = PRODUCTION !== IMPORTED_ORIGIN;
-// After a site-URL switch nothing may still point at the imported domain
-// (plain or JSON-escaped) — canonicals, social tags, JSON-LD, sitemaps, robots.
-const OLD_DOMAIN = /\/\/tzionbreslov\.com|\\\/\\\/tzionbreslov\.com/;
+// The text checks: removed pages, tzionbreslov.com after the switch, YouTube embeds,
+// importer leftovers, canonicals. They live in scripts/lib/export-guard.mjs (unit-tested).
+const guard = exportGuard({ production: PRODUCTION, base });
 const errors = [];
 const fail = (msg) => errors.push(msg);
-
-// Nothing may point at a removed page (config/site-structure.mjs): no root-relative
-// or site-origin href/src, no sitemap <loc> and no absolute URL on the site's
-// origin anywhere in the text, plain or JSON-escaped (JSON-LD included).
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const SITE_ORIGIN = [PRODUCTION, PRODUCTION.replaceAll("/", "\\/")].map(escapeRegExp).join("|");
-const ORIGIN_URL = new RegExp(`(?:${SITE_ORIGIN})(\\\\?/[^"\\s<>]*)`, "g");
-const removedPath = (ref) => {
-  const urlPath = ref.replaceAll("\\/", "/").replace(/[?#].*$/, "");
-  return isRemovedPath(urlPath) ? urlPath : null;
-};
-/** An href/src value's path on this site: root-relative (base path taken off) or absolute on the site's origin. */
-const attributePath = (value) => {
-  if (value.startsWith("/")) return base && value.startsWith(`${base}/`) ? value.slice(base.length) : value;
-  return value.startsWith(`${PRODUCTION}/`) ? value.slice(PRODUCTION.length) : null;
-};
-/** Removed pages named by `html`'s href/src attributes, or by a site-origin URL anywhere in `text`. */
-function removedRefs(html, text = html) {
-  const found = new Set();
-  for (const m of html.matchAll(/\b(?:href|src)="([^"]*)"/g)) {
-    const ref = attributePath(m[1]);
-    if (ref) found.add(removedPath(ref));
-  }
-  for (const m of text.matchAll(ORIGIN_URL)) found.add(removedPath(m[1]));
-  found.delete(null);
-  return [...found];
-}
-
-// The Events page's cards hold calendar text (titles, places, descriptions) that
-// lib/events.mjs escapes and never links (card()). Whatever the events manager
-// types there may name a removed page, tzionbreslov.com or a YouTube embed
-// address, and must not fail the deploy, so the text checks read each page
-// without its cards. The page holds them twice: as HTML, and as an escaped
-// string in Next's flight data (`<article class=\"tz-event\"…`). Escaped
-// calendar text can't close a card early in either form (an odd one only leaves
-// text in, which fails safe). Every href/src check still reads the whole page.
-const EVENT_CARDS = [
-  /<article class="tz-event"[^>]*>[\s\S]*?<\/article>/g,
-  /\\u003carticle class=\\+"tz-event\\+"[\s\S]*?\\u003c\/article\\u003e/g
-];
-const withoutEventCards = (html) => EVENT_CARDS.reduce((text, cards) => text.replace(cards, ""), html);
 
 if (!fs.existsSync(out)) {
   console.error("Missing out/. Run `npm run build` first.");
@@ -85,12 +44,12 @@ else {
 for (const file of SITE_FILES) {
   const text = fs.existsSync(path.join(out, file)) ? fs.readFileSync(path.join(out, file), "utf8") : "";
   if (!text.includes(PRODUCTION)) fail(`${file} does not reference ${PRODUCTION}`);
-  if (SWITCHED && OLD_DOMAIN.test(text)) fail(`${file} still references tzionbreslov.com after the site-URL switch`);
+  if (guard.mentionsOldDomain(text)) fail(`${file} still references tzionbreslov.com after the site-URL switch`);
   for (const name of REMOVED_SITEMAPS) if (text.includes(name)) fail(`${file} still lists ${name}`);
 }
 for (const name of REMOVED_SITEMAPS) if (fs.existsSync(path.join(out, name))) fail(`removed sitemap exported: ${name}`);
 for (const file of fs.readdirSync(out).filter((name) => name.endsWith(".xml"))) {
-  for (const ref of removedRefs(fs.readFileSync(path.join(out, file), "utf8"))) fail(`${file} lists the removed page ${ref}`);
+  for (const ref of guard.removedRefs(fs.readFileSync(path.join(out, file), "utf8"))) fail(`${file} lists the removed page ${ref}`);
 }
 for (const { path: route } of routes) if (!fs.existsSync(htmlFor(route))) fail(`route not exported: ${route}`);
 for (const [from, to] of Object.entries(redirects)) {
@@ -114,19 +73,8 @@ const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =
 const broken = new Map();
 for (const file of walk(out)) {
   const html = fs.readFileSync(file, "utf8");
-  const text = withoutEventCards(html);
   const rel = path.relative(out, file);
-  if (html.includes("localhost:8088")) fail(`${rel} still references localhost:8088`);
-  if (html.includes("estiwolo.com/wp-content")) fail(`${rel} still references the dead staging host`);
-  if (SWITCHED && OLD_DOMAIN.test(text)) fail(`${rel} still references tzionbreslov.com after the site-URL switch`);
-  if (/\/wp-admin\/admin-ajax\.php/.test(html.replace(/var uagb_data[^;]*;/g, ""))) fail(`${rel} references admin-ajax`);
-  // Videos play only in the Classes page's own player (youtube-nocookie, on click).
-  if (text.includes("youtube.com/embed") || /\bsrc="[^"]*youtube\.com\/embed/.test(html)) fail(`${rel} still embeds a plain YouTube player`);
-  for (const ref of removedRefs(html, text)) fail(`${rel} links to the removed page ${ref}`);
-  // The broken-reference check below never sees a bare "/" (the Home links); with a base path it must carry it.
-  if (base && /\b(?:href|src)="\/"/.test(html)) fail(`${rel} links to "/" without the base path ${base}`);
-  const canonical = html.match(/<link rel="canonical" href="([^"]+)"/)?.[1];
-  if (canonical && !canonical.startsWith(PRODUCTION)) fail(`${rel} canonical is ${canonical}`);
+  for (const problem of guard.pageProblems(html)) fail(`${rel} ${problem}`);
   const refs = [...html.matchAll(/\b(?:href|src)="(\/[^"/][^"]*)"/g)].map((m) => m[1].replace(/&amp;/g, "&"));
   for (const m of html.matchAll(/\bsrcset="([^"]+)"/g)) for (const part of m[1].split(",")) refs.push(part.trim().split(/\s+/)[0]);
   for (const ref of refs) {

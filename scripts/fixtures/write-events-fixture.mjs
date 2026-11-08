@@ -41,11 +41,13 @@ const event = (fields) => ({
 });
 
 // What an events manager may paste into a description: addresses of removed pages on
-// both domains and a YouTube embed address. The calendar's words are text on the page
-// (lib/events.mjs escapes them, never links them), so they must not fail
+// both domains (also over http, with www, without the trailing slash), a YouTube embed
+// address and HTML with single-quoted attributes. The calendar's words are text on the
+// page (lib/events.mjs escapes them, never links them), so they must not fail
 // scripts/check-static-export.mjs, which CI runs on this build.
 const PASTED_LINKS = "Details: https://tzionbreslov.com/resources/ and https://tzionbreslov.org/video/video-1/ " +
-  "(the talk: https://www.youtube.com/embed/abc123).";
+  "(the talk: https://www.youtube.com/embed/abc123). Also http://www.tzionbreslov.com/about and " +
+  "<a href='/resources'>the old page</a> <img src='https://www.tzionbreslov.org/about/'>";
 
 const events = [
   // Started an hour ago and still running: listed, but RSVPs have closed.

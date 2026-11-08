@@ -1,7 +1,7 @@
 import { strict as assert } from "node:assert";
 import fs from "node:fs";
 import test from "node:test";
-import { isRemovedPath, LINK_REWRITES, NEW_ROUTES, REMOVED_PATHS, REMOVED_SECTIONS, REMOVED_SITEMAPS, siteRoutes } from "../config/site-structure.mjs";
+import { isRemovedPath, LINK_REWRITES, NEW_ROUTES, REMOVED_PATHS, REMOVED_SECTIONS, REMOVED_SITEMAPS, siteRoutes, stripRemovedUrls, escapeRegExp, originUrlRegExp } from "../config/site-structure.mjs";
 
 const routesJson = () => JSON.parse(fs.readFileSync(new URL("../content/routes.json", import.meta.url), "utf8"));
 const paths = (index) => index.routes.map((route) => route.path);
@@ -96,4 +96,35 @@ test("isRemovedPath covers the listed pages and anything under a removed section
 
 test("composed pages use tz: keys", () => {
   assert.ok(NEW_ROUTES.every((route) => route.key.startsWith("tz:")));
+});
+
+test("stripRemovedUrls points removed pages' URLs on the imported origins at the root, plain or JSON-escaped", () => {
+  // JSON-LD as Yoast writes it: some URLs with every slash escaped.
+  const json = String.raw`{"plain":"https://tzionbreslov.com/resources/page/2/",` +
+    String.raw`"query":"https://tzionbreslov.com/video/video-1/?t=1#x",` +
+    String.raw`"escaped":"https:\/\/tzionbreslov.com\/author\/esti-wolo\/",` +
+    String.raw`"http":"http://tzionbreslov.com/about/",` +
+    String.raw`"kept":"https://tzionbreslov.com/about-us/","keptEscaped":"https:\/\/tzionbreslov.com\/about-us\/",` +
+    String.raw`"nested":"https://tzionbreslov.com/?u=http://tzionbreslov.com/category/uncategorized/",` +
+    String.raw`"www":"https://www.tzionbreslov.com/about/",` +
+    String.raw`"mixed":"https://tzionbreslov.com\/about\/",` +
+    String.raw`"other":"https://tzionbreslov.org/about/"}`;
+  assert.equal(stripRemovedUrls(json), String.raw`{"plain":"https://tzionbreslov.com/",` +
+    String.raw`"query":"https://tzionbreslov.com/",` +
+    String.raw`"escaped":"https:\/\/tzionbreslov.com\/",` +
+    String.raw`"http":"http://tzionbreslov.com/",` +
+    String.raw`"kept":"https://tzionbreslov.com/about-us/","keptEscaped":"https:\/\/tzionbreslov.com\/about-us\/",` +
+    String.raw`"nested":"https://tzionbreslov.com/?u=http://tzionbreslov.com/",` +
+    String.raw`"www":"https://www.tzionbreslov.com/about/",` +
+    String.raw`"mixed":"https://tzionbreslov.com\/about\/",` +
+    String.raw`"other":"https://tzionbreslov.org/about/"}`);
+});
+
+test("originUrlRegExp captures the path of URLs on the given origins, written with the given slashes", () => {
+  const paths = (re, text) => [...text.matchAll(re)].map((m) => m[1]);
+  const text = String.raw`a https://x.org/one/?q b https:\/\/x.org\/two\/" c https://x.org.evil/three/ d https://y.org/four/ e <https://x.org/five>`;
+  assert.deepEqual(paths(originUrlRegExp(["https://x.org"]), text), ["/one/?q", "/five"]);
+  assert.deepEqual(paths(originUrlRegExp(["https://x.org"], ["\\/"]), text), [String.raw`\/two\/`]);
+  assert.deepEqual(paths(originUrlRegExp(["https://x.org", "https://y.org"], ["/", "\\/"]), text), ["/one/?q", String.raw`\/two\/`, "/four/", "/five"]);
+  assert.equal(escapeRegExp("a.b*(c)\\"), String.raw`a\.b\*\(c\)\\`);
 });

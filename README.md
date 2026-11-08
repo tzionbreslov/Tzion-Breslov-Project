@@ -26,7 +26,11 @@ WordPress backup (.wpress, private, not in git)
   from its `siteRoutes()`, so a re-import can't bring a removed page back; the wording check skips `isRemovedPath()`
   pages; `write-site-files.mjs` drops removed pages and sitemaps from the sitemaps and adds the `NEW_ROUTES`; the export
   check fails on any link, sitemap entry or structured-data URL that still points at a removed page, and on any plain
-  YouTube embed. `visual-diff.mjs` keeps its own fixed page list.
+  YouTube embed. It reads double- and single-quoted `href`/`src`, the escaped copies in Next's flight data, paths with
+  or without the trailing slash, and the site's origin over http or https, bare or `www.`; after the site-URL switch
+  it fails on the same spellings of tzionbreslov.com, Events cards included. Calendar text (the Events cards) never
+  fails it. Its matching lives in `scripts/lib/export-guard.mjs`, tested by `scripts/export-guard.test.mjs`.
+  `visual-diff.mjs` keeps its own fixed page list.
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
   the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Events ·
   Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer, and Privacy last in the footer

@@ -11,17 +11,23 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Checks and tests
 
-- **The `.org` build misses an old-domain link inside an event card.**
-  - Where: `scripts/check-static-export.mjs:121`.
-  - The tzionbreslov.com check now reads the page with the event cards removed (so calendar *text* can't fail a
-    deploy), and nothing replaces it for links. An `<a href="https://tzionbreslov.com/…">` rendered inside a card
-    would pass.
-  - Latent: cards never turn calendar text into links today.
-  - Fix: when `SWITCHED`, also test the whole page for `/\b(?:href|src)="[^"]*\/\/tzionbreslov\.com/`, as the YouTube
-    line does.
-  - Checked.
-- **Other gaps in the export guard:** single-quoted `href`, `/about` with no slash, `http://` and `www.` forms of
-  the origin, and escaped `href=\"` in flight data.
+- **Known gaps in the export guard, not exposed today** (`scripts/lib/export-guard.mjs`, found in PR #29):
+  - host matching is case-sensitive, so `https://TzionBreslov.com/about/` passes: the content spells the domain only
+    in lowercase, and `resolveSiteUrl` lowercases the site URL;
+  - unquoted attributes (`href=/about/`) aren't read: React and the imported HTML quote every attribute, and none is
+    unquoted in `content/` or `out/`;
+  - a single-quoted canonical isn't checked: Next's metadata writes the canonical, always double-quoted;
+  - a single-quoted bare `/` under the base path isn't caught: the export has no single-quoted `href`/`src` at all;
+  - the `out/**/*.txt` RSC payloads aren't walked: PR #29 measured them, and none links anywhere the page's HTML
+    doesn't (default, .org and events-fixture builds);
+  - `{"href":"…"}` props in the flight data aren't read: they belong to server-rendered elements, so the same link is
+    always in the HTML too;
+  - a URL in prose ending in `.`, `,` or `)` (`https://tzionbreslov.com/about.`) isn't read as a removed page:
+    reading prose URLs needs a tokenizer, and the export has no such URL today;
+  - an absolute site URL with an apostrophe (`https://tzionbreslov.com/video's-page`) is read by the text scan up to
+    the `'` and fails as `/video`: this fails safe, and the text scan needs that cut-off for single-quoted attributes;
+  - after the switch, an old-domain link outside an Events card gives two messages (the text one and the link one):
+    noise only, since the deploy fails either way.
 - **Flaky browser test** `e2e/classes.spec.ts:71` [desktop], "Oldest and Most popular reorder the videos".
   - `aria-pressed` stayed "false" once in CI: PR #26, run 42426373302, attempt 1.
   - It passed on re-run, in the push run and locally. Root cause not investigated.
@@ -49,8 +55,7 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 ## Code
 
 - **`esc()` is copied 7 times** (`lib/events.mjs`, `lib/instagram-feed.ts`, `lib/navigation.mjs`,
-  `lib/pages/{classes,gallery,parts}.ts`, `lib/youtube-feed.ts`). `escapeRegExp` and origin-URL matching are also
-  duplicated (`config/site-structure.mjs`, `scripts/check-static-export.mjs`). Consolidate in phase 2. Checked.
+  `lib/pages/{classes,gallery,parts}.ts`, `lib/youtube-feed.ts`). Consolidate in phase 2. Checked.
 - **The contact address is hard-coded twice:** `lib/events.mjs:92` (`CONTACT_EMAIL`) and `lib/client/config.ts:7`
   (`contactEmail`). Checked.
 - **An import cycle:** `lib/content.ts` → registry → pages → `parts`/`compose` → `lib/content.ts`. It is a TDZ risk
