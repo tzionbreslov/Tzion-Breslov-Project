@@ -34,6 +34,11 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`playwright.config.ts:11`'s 60 s timeout** covers an unexplained local stall. CI is steady. Checked.
   Left as it is: a full local `npm run check` on 2026-11-08 (290 browser tests, 10 workers) didn't reproduce the
   stall. The slowest test took 11.5 s, and none took more than 30 s, so there's no evidence to change the timeout.
+  Group 9 (later on 2026-11-08) saw it in both of its full local runs: 6 and then 3 desktop or mobile tests timed out,
+  different ones each time, each in a `goto`, a click's navigation or a wait for a still element. All passed when
+  re-run. In one trace, about 20 requests to the local static server (`scripts/serve-out.mjs` on port 3100: Next's
+  chunks, the theme's CSS, jQuery, GSAP) got no answer for the test's last 40 s, so `load` never fired. Not proven
+  further; CI stays steady.
 
 ## Code
 
