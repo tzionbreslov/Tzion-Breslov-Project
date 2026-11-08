@@ -64,17 +64,19 @@ export function exportGuard({ production, base = "" }) {
   // origin anywhere in the text, plain or JSON-escaped (JSON-LD included).
   const ORIGIN_URL = originUrlRegExp(siteForms, SLASHES);
   const SITE_ORIGIN = new RegExp(`^(?:https?:)?(?:${siteForms.map(escapeRegExp).join("|")})(?=[/?#]|$)`);
-  /** `ref` (a path as written) when it names a removed page, else null. */
-  const removedPath = (ref) => {
-    // A URL found in the text ends at a single quote too (a single-quoted attribute), and
-    // at a backslash once JSON's "\/" is undone: the end of a JSON string (`\"` in the
-    // flight data) or another JSON escape (Next writes & < > as \u escapes there).
-    const urlPath = ref.replaceAll("\\/", "/").replace(/['?#\\].*$/s, "");
+  /** `urlPath` (a path as written, without its query or fragment) when it names a removed page, else null. */
+  const removedPath = (urlPath) => {
     // A page linked without its trailing slash ("/about", "/resources") is the same page;
     // a file ("/about.html") isn't, and a longer name ("/about-us") never matches.
     const page = /\/[^/.]+$/.test(urlPath) ? `${urlPath}/` : urlPath;
     return isRemovedPath(page) ? urlPath : null;
   };
+  /** An href/src value's path ends at its query or fragment: its own quote already ended the value. */
+  const attributeUrlPath = (ref) => ref.replaceAll("\\/", "/").replace(/[?#].*$/s, "");
+  // A URL found in the text ends at a single quote too (a single-quoted attribute), and
+  // at a backslash once JSON's "\/" is undone: the end of a JSON string (`\"` in the
+  // flight data) or another JSON escape (Next writes & < > as \u escapes there).
+  const textUrlPath = (ref) => ref.replaceAll("\\/", "/").replace(/['?#\\].*$/s, "");
   /** An href/src value's path on this site: root-relative (base path taken off) or absolute on the site's origin. */
   const attributePath = (value) => {
     if (value.startsWith("/") && !value.startsWith("//")) return base && value.startsWith(`${base}/`) ? value.slice(base.length) : value;
@@ -87,9 +89,9 @@ export function exportGuard({ production, base = "" }) {
     const found = new Set();
     for (const value of attributeValues(html, text)) {
       const ref = attributePath(value);
-      if (ref) found.add(removedPath(ref));
+      if (ref) found.add(removedPath(attributeUrlPath(ref)));
     }
-    for (const m of text.matchAll(ORIGIN_URL)) found.add(removedPath(m[1]));
+    for (const m of text.matchAll(ORIGIN_URL)) found.add(removedPath(textUrlPath(m[1])));
     found.delete(null);
     return [...found];
   }

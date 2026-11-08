@@ -112,6 +112,17 @@ test("single-quoted href/src attributes are read too", () => {
   assert.deepEqual(today.pageProblems(page(`<a href='/about-us/'>x</a>`)), []);
 });
 
+test("an apostrophe inside a double-quoted href/src is part of its path", () => {
+  // The cut-off at ' and \ is for URLs found in the text; an attribute value ends at its own quote.
+  for (const guard of [today, switched]) {
+    assert.deepEqual(guard.pageProblems(page(`<a href="/video's-page">x</a>`)), []);
+    assert.deepEqual(guard.pageProblems(page(flight(`<a href="/video's-page">x</a>`))), []);
+  }
+  assert.deepEqual(preview.pageProblems(page(`<a href="${BASE}/video's-page">x</a>`)), []);
+  // A removed page is still reported, with the whole path.
+  assert.deepEqual(today.pageProblems(page(`<a href="/video/it's-here/">x</a>`)), ["links to the removed page /video/it's-here/"]);
+});
+
 test("calendar text that spells a single-quoted attribute doesn't fail the deploy", () => {
   // lib/events.mjs escapes the calendar's " but not its ', so these reach the card as text.
   const typed = { title: "See href='/about/'", location: "src='https://tzionbreslov.com/resources/'",
