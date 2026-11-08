@@ -20,6 +20,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { load } from "cheerio";
 import { INSTAGRAM_ENABLED } from "../config/site-structure.mjs";
+import { THEME_STYLESHEET, stripThemeAuthor } from "./lib/theme-header.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const argGolden = process.argv.indexOf("--golden");
@@ -281,7 +282,9 @@ function copyAssets(seed) {
     }
     const dest = path.join(publicDir, rel);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(src, dest);
+    // The theme's stylesheet without its header's author credit (owner, 2026-11-08: scripts/lib/theme-header.mjs).
+    if (rel === THEME_STYLESHEET) fs.writeFileSync(dest, stripThemeAuthor(fs.readFileSync(src, "utf8")));
+    else fs.copyFileSync(src, dest);
     if (rel.endsWith(".css")) {
       const css = fs.readFileSync(src, "utf8");
       for (const m of css.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)) {
