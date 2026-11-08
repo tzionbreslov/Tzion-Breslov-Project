@@ -56,7 +56,20 @@ export function isRemovedPath(path, removed = REMOVED_PATHS, sections = REMOVED_
   return removed.includes(path) || sections.some((section) => path.startsWith(section));
 }
 
-const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** `s` with every RegExp metacharacter escaped, to match it literally. */
+export const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Matches an absolute URL on any of `origins` whose slashes are written as any
+ * of `slashes`: "/", or JSON's escaped "\/" (`https:\/\/…`, as in JSON-LD).
+ * Group 1 is the URL's path, from its first slash up to a quote, a space or an
+ * angle bracket. Shared by stripRemovedUrls and the static-export check
+ * (scripts/lib/export-guard.mjs).
+ */
+export function originUrlRegExp(origins, slashes = ["/"]) {
+  const spelled = origins.flatMap((origin) => slashes.map((slash) => escapeRegExp(origin.replaceAll("/", slash))));
+  return new RegExp(`(?:${spelled.join("|")})((?:${slashes.map(escapeRegExp).join("|")})[^"\\s<>]*)`, "g");
+}
 
 /**
  * Points every absolute URL of a removed page inside JSON (JSON-LD), on the
@@ -68,7 +81,7 @@ export function stripRemovedUrls(json) {
   for (const origin of IMPORTED_ORIGINS) {
     for (const slash of ["/", "\\/"]) {
       const base = origin.replaceAll("/", slash);
-      const url = new RegExp(`${escapeRegExp(base)}(${escapeRegExp(slash)}[^"\\s<>]*)`, "g");
+      const url = originUrlRegExp([origin], [slash]);
       out = out.replace(url, (match, rest) => {
         const path = rest.replaceAll("\\/", "/").replace(/[?#].*$/, "");
         return isRemovedPath(path) ? `${base}${slash}` : match;

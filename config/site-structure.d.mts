@@ -10,5 +10,7 @@ export const REMOVED_SITEMAPS: string[];
 export const TEMPLATE_KEYS: string[];
 export const INSTAGRAM_ENABLED: boolean;
 export function isRemovedPath(path: string, removed?: string[], sections?: string[]): boolean;
+export function escapeRegExp(s: string): string;
+export function originUrlRegExp(origins: string[], slashes?: string[]): RegExp;
 export function stripRemovedUrls(json: string): string;
 export function siteRoutes(index: RouteIndex, opts?: { removed?: string[]; sections?: string[]; newRoutes?: Route[] }): RouteIndex;
