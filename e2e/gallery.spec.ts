@@ -64,7 +64,9 @@ test("/gallery/ opens with its own hero (hero2.png, \"Gallery\", no Resources su
   await expect(heroImage).toHaveAttribute("src", "/wp-content/uploads/2023/06/hero2.png");
   expect(await heroImage.getAttribute("srcset")).toBeNull();
   expect(await heroImage.getAttribute("sizes")).toBeNull();
-  await expect(hero.locator("h2 > strong")).toHaveText("Gallery");
+  // The hero's heading is the page's main heading: its only h1.
+  await expect(hero.locator("h1 > strong")).toHaveText("Gallery");
+  await expect(page.locator("h1")).toHaveCount(1);
   await expect(hero.locator(".wp-block-cover__inner-container > *")).toHaveCount(1);
   await expect(hero.locator("p, .wp-block-spacer")).toHaveCount(0);
   await expect(page.getByText("Resources for those seeking spiritual growth.")).toHaveCount(0);
@@ -129,6 +131,26 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
       expect(Math.abs(layout[0].w - content.width), `photo width at ${width}px`).toBeLessThan(0.5);
     }
   }
+  await expectClean(page, errors);
+});
+
+// The hero heading became an h1, styled as it was: the same look as the h2 the same hero has on /events/.
+test("the hero's h1 looks exactly like the Events hero's h2", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  const PROPS = ["display", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "color",
+    "text-align", "text-transform", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-bottom"];
+  const look = async (heading: string) => {
+    await expect(page.locator(".hero").locator(heading)).toHaveCount(1);
+    return page.locator(`.hero ${heading}`).evaluate((node, props) => {
+      const read = (el: Element) => Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el).getPropertyValue(prop)]));
+      const box = node.getBoundingClientRect();
+      return { heading: read(node), strong: read(node.querySelector("strong")!), height: Math.round(box.height * 100) / 100 };
+    }, PROPS);
+  };
+  await page.goto("/events/");
+  const events = await look("h2");
+  await openGallery(page);
+  expect(await look("h1")).toEqual(events);
   await expectClean(page, errors);
 });
 
