@@ -586,6 +586,18 @@ test.describe("the cards, in either fixture build", () => {
     await expectClean(page, errors);
   });
 
+  // The cards' titles are h2s under the hero's heading, the page's only h1 (e2e/events.spec.ts: the empty state).
+  test("with events listed, the hero's heading is still the page's only h1", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await page.goto("/events/");
+    await expect(page.locator("article.tz-event")).toHaveCount(Object.keys(FIXTURE_IDS).length);
+    await expect(page.locator(".hero h1 > strong")).toHaveText("Upcoming events");
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("article.tz-event h2.tz-event__title")).toHaveCount(Object.keys(FIXTURE_IDS).length);
+    await expectClean(page, errors);
+  });
+
   // The calendar's words are text: "kids <10, adults >18" shows escaped, not as markup.
   // The fixture is already synced, so this checks the page only; that the sync keeps such
   // text is unit-tested (scripts/google-calendar.test.mjs).

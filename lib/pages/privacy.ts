@@ -4,8 +4,8 @@ import { composePage } from "@/lib/pages/compose";
 import { LARGE_SPACER, esc, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 /**
- * The privacy notice: the Resources header with its own image and heading,
- * then the notice in Tzion's legal layout (app/pages.css, .tz-legal): the date
+ * The privacy notice: the Resources header with its own image and heading (the
+ * page's h1), then the notice in Tzion's legal layout (app/pages.css, .tz-legal): the date
  * it was last changed, an introduction and its sections, each a heading over
  * its paragraphs (plain sections, not six region landmarks: the headings
  * structure the page). Every word is content/copy/en.json `privacy`; the date is
@@ -41,7 +41,7 @@ export function privacyPage(path: string): PageContent {
     title: text.title,
     description: text.description,
     slug: "privacy",
-    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.title }) + notice() + LARGE_SPACER),
+    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.title, headingTag: "h1" }) + notice() + LARGE_SPACER),
     islands: ["signup"],
     image: HERO_IMAGE
   });

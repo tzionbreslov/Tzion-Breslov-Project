@@ -7,7 +7,7 @@ import { composePage } from "@/lib/pages/compose";
 import { LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 /**
- * The Events page: the Resources header with its own image and heading, then
+ * The Events page: the Resources header with its own image and heading (the page's h1), then
  * the upcoming events from the Google Calendar (lib/events.mjs renders the
  * cards, with an RSVP button on those that take RSVPs) and the "Get event
  * announcements" signup. The list is content/events.json, refreshed before
@@ -37,7 +37,7 @@ export function eventsPage(path: string): PageContent {
     title: text.title,
     description: text.description,
     slug: "events",
-    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading }) +
+    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading, headingTag: "h1" }) +
       renderEventsList(upcomingEvents(readEvents(), now), text, copy.rsvp, now) + renderAnnouncements(copy.announcements) + LARGE_SPACER),
     islands: ["signup", "events"],
     image: HERO_IMAGE

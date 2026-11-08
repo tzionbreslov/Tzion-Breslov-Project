@@ -134,23 +134,32 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
   await expectClean(page, errors);
 });
 
-// The hero heading became an h1, styled as it was: the same look as the h2 the same hero has on /events/.
-test("the hero's h1 looks exactly like the Events hero's h2", async ({ page }) => {
+// The hero heading (renderHero) is the page's h1 on Gallery, Events and Privacy, styled as it was: put back as
+// the h2 it replaced, in place (same attributes, same content), it looks exactly the same.
+test("each hero's h1 looks exactly like the h2 it replaced (Gallery, Events, Privacy)", async ({ page }) => {
   const errors = trackPageErrors(page);
   const PROPS = ["display", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "color",
     "text-align", "text-transform", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-bottom"];
-  const look = async (heading: string) => {
-    await expect(page.locator(".hero").locator(heading)).toHaveCount(1);
+  const look = async (heading: "h1" | "h2") => {
+    await expect(page.locator(".hero").locator("h1, h2")).toHaveCount(1);
+    await expect(page.locator(`.hero ${heading}`)).toHaveCount(1);
     return page.locator(`.hero ${heading}`).evaluate((node, props) => {
       const read = (el: Element) => Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el).getPropertyValue(prop)]));
       const box = node.getBoundingClientRect();
-      return { heading: read(node), strong: read(node.querySelector("strong")!), height: Math.round(box.height * 100) / 100 };
+      return { heading: read(node), strong: read(node.querySelector("strong")!), x: box.x, width: box.width, height: Math.round(box.height * 100) / 100 };
     }, PROPS);
   };
-  await page.goto("/events/");
-  const events = await look("h2");
-  await openGallery(page);
-  expect(await look("h1")).toEqual(events);
+  for (const path of ["/gallery/", "/events/", "/privacy/"]) {
+    await page.goto(path);
+    const h1 = await look("h1");
+    await page.locator(".hero h1").evaluate((node) => {
+      const h2 = document.createElement("h2");
+      for (const { name, value } of node.attributes) h2.setAttribute(name, value);
+      h2.innerHTML = node.innerHTML;
+      node.replaceWith(h2);
+    });
+    expect(await look("h2"), path).toEqual(h1);
+  }
   await expectClean(page, errors);
 });
 

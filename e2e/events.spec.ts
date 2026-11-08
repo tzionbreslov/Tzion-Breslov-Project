@@ -19,7 +19,9 @@ test("/events/ opens with its own hero (eagle-in-the-sky.png, \"Upcoming events\
   await expect(heroImage).toHaveAttribute("src", "/wp-content/uploads/2023/06/eagle-in-the-sky.png");
   expect(await heroImage.getAttribute("srcset")).toBeNull();
   expect(await heroImage.getAttribute("sizes")).toBeNull();
-  await expect(hero.locator("h2 > strong")).toHaveText("Upcoming events");
+  // The hero's heading is the page's main heading: its only h1.
+  await expect(hero.locator("h1 > strong")).toHaveText("Upcoming events");
+  await expect(page.locator("h1")).toHaveCount(1);
   await expect(hero.locator("p")).toHaveCount(0);
   await expect(page.getByText("Resources for those seeking spiritual growth.")).toHaveCount(0);
 

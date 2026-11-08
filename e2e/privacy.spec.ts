@@ -27,7 +27,9 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
   await expect(heroImage).toHaveAttribute("src", "/wp-content/uploads/2023/06/clouds-in-the-sky-1.png");
   expect(await heroImage.getAttribute("srcset")).toBeNull();
   expect(await heroImage.getAttribute("sizes")).toBeNull();
-  await expect(hero.locator("h2 > strong")).toHaveText("Privacy notice");
+  // The hero's heading is the page's main heading: its only h1 (the notice's sections are h2s).
+  await expect(hero.locator("h1 > strong")).toHaveText("Privacy notice");
+  await expect(page.locator("h1")).toHaveCount(1);
   await expect(hero.locator("p")).toHaveCount(0);
 
   // A fixed date (Ruling R38), never the build date.
