@@ -91,6 +91,15 @@ test("calendar text never fails the deploy: pasted removed pages, both domains, 
   for (const guard of [today, switched, preview]) assert.deepEqual(guard.pageProblems(eventsPage(PASTED)), []);
 });
 
+test("after the switch, an href/src on tzionbreslov.com fails even inside an Events card (r1)", () => {
+  // Cards never link calendar text today; if one ever did, its link must still fail.
+  const linked = cards({}).replace("</h2>", `</h2><a href="${COM}/about-us/">more</a>`);
+  const image = cards({}).replace("</h2>", `</h2><img src="http://www.tzionbreslov.com/wp-content/a.png">`);
+  assert.deepEqual(switched.pageProblems(page(linked)), [`links to ${COM}/about-us/ after the site-URL switch`]);
+  assert.deepEqual(switched.pageProblems(page(image.replace("www.", ""))), ["links to http://tzionbreslov.com/wp-content/a.png after the site-URL switch"]);
+  assert.deepEqual(today.pageProblems(page(linked)), []);
+});
+
 test("the importer's leftovers, a plain YouTube embed, a bare / under a base path and a foreign canonical fail", () => {
   assert.deepEqual(today.pageProblems(page(`<img src="http://localhost:8088/wp-content/a.png">`)), ["still references localhost:8088"]);
   assert.deepEqual(today.pageProblems(page(`<img src="https://estiwolo.com/wp-content/a.png">`)), ["still references the dead staging host"]);

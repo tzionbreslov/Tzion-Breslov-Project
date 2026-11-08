@@ -21,6 +21,14 @@ const EVENT_CARDS = [
 export const withoutEventCards = (html) => EVENT_CARDS.reduce((text, cards) => text.replace(cards, ""), html);
 
 /**
+ * The values of a page's href and src attributes, read from the whole page
+ * (`html`): calendar text can't fake one, since lib/events.mjs escapes its `"`.
+ */
+export function attributeValues(html) {
+  return [...html.matchAll(/\b(?:href|src)="([^"]*)"/g)].map((m) => m[1]);
+}
+
+/**
  * The checks for an export built for `production` (the resolved site URL,
  * config/site-url.mjs) under the base path `base` ("" or "/Name").
  */
@@ -47,8 +55,8 @@ export function exportGuard({ production, base = "" }) {
   /** Removed pages named by `html`'s href/src attributes, or by a site-origin URL anywhere in `text`. */
   function removedRefs(html, text = html) {
     const found = new Set();
-    for (const m of html.matchAll(/\b(?:href|src)="([^"]*)"/g)) {
-      const ref = attributePath(m[1]);
+    for (const value of attributeValues(html)) {
+      const ref = attributePath(value);
       if (ref) found.add(removedPath(ref));
     }
     for (const m of text.matchAll(ORIGIN_URL)) found.add(removedPath(m[1]));
@@ -66,6 +74,11 @@ export function exportGuard({ production, base = "" }) {
     if (html.includes("localhost:8088")) problems.push("still references localhost:8088");
     if (html.includes("estiwolo.com/wp-content")) problems.push("still references the dead staging host");
     if (mentionsOldDomain(text)) problems.push("still references tzionbreslov.com after the site-URL switch");
+    // The text check skips the Events cards (calendar text); a link is never calendar text, so
+    // every href/src on the page is read, cards included.
+    for (const value of new Set(attributeValues(html))) {
+      if (mentionsOldDomain(value)) problems.push(`links to ${value} after the site-URL switch`);
+    }
     if (/\/wp-admin\/admin-ajax\.php/.test(html.replace(/var uagb_data[^;]*;/g, ""))) problems.push("references admin-ajax");
     // Videos play only in the Classes page's own player (youtube-nocookie, on click).
     if (text.includes("youtube.com/embed") || /\bsrc="[^"]*youtube\.com\/embed/.test(html)) problems.push("still embeds a plain YouTube player");
