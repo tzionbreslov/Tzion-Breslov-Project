@@ -297,16 +297,17 @@ from `rsvps`. *Owner's go-ahead.*
 upload can't push a deleted webhook's secret or a revoked key. It holds secrets: it is copied, never printed.
 - Both shells: `node -e "require('fs').copyFileSync('.env.worker', '.env.worker.bak', require('fs').constants.COPYFILE_EXCL)"`
 - If it stops with `EEXIST`, a backup already exists, from an earlier try at this step. Decide whether it may stay.
-  - Compare the two files (both shells). It prints variable names only, never a value, and whether the files are
-    byte-identical:
-    `node -e "const fs = require('fs'); const names = f => fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/)).filter(Boolean).map(m => m[1]); const a = names('.env.worker'), b = names('.env.worker.bak'); console.log('only in .env.worker:', a.filter(n => b.indexOf(n) < 0).join(' ') || '(none)'); console.log('only in .env.worker.bak:', b.filter(n => a.indexOf(n) < 0).join(' ') || '(none)'); console.log(fs.readFileSync('.env.worker').equals(fs.readFileSync('.env.worker.bak')) ? 'identical' : 'different')"`
+  - Compare the two files (both shells). It prints variable names only, never a value: the names in only one of the
+    files, the names whose value differs between them, and whether the files are byte-identical:
+    `node -e "const fs = require('fs'); const vars = f => new Map(fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)/)).filter(Boolean).map(m => [m[1], m[2].trim()])); const a = vars('.env.worker'), b = vars('.env.worker.bak'); const show = x => x.join(' ') || '(none)'; console.log('only in .env.worker:', show([...a.keys()].filter(n => b.has(n) === false))); console.log('only in .env.worker.bak:', show([...b.keys()].filter(n => a.has(n) === false))); console.log('value changed:', show([...a.keys()].filter(n => b.has(n) && (a.get(n) === b.get(n)) === false))); console.log(fs.readFileSync('.env.worker').equals(fs.readFileSync('.env.worker.bak')) ? 'identical' : 'different')"`
   - **`identical`:** keep the backup.
-  - **`different`, and `.env.worker` hasn't been changed on purpose since that backup:** keep it. It is the older,
-    clean copy. For example, the only difference is the line the earlier try at 3.1 wrote: `RESEND_EVENTS_TOPIC_ID`
-    under "only in .env.worker".
-  - **Otherwise** (`.env.worker` was changed on purpose since that backup, e.g. a rotated key, which shows as
-    `different` with the same names; or you can't tell): the backup is stale, and restoring it would bring the old
-    value back. Delete it and take a fresh copy:
+  - **`different`, with `value changed: (none)`, `only in .env.worker.bak: (none)`, and nothing under "only in
+    .env.worker" but `RESEND_EVENTS_TOPIC_ID` (or nothing at all):** keep it. No variable was added, removed or
+    changed since that backup, apart from the line the earlier try at 3.1 wrote, so it is the older, clean copy.
+  - **Otherwise** (any name under `value changed`, e.g. a rotated key; any name under "only in .env.worker.bak"; any
+    other name under "only in .env.worker"; or you can't tell): `.env.worker` was changed since that backup, on
+    purpose or by an earlier try, and the check can't tell which. Treat the backup as stale: restoring it could bring
+    an old value back. Delete it and take a fresh copy:
     1. If the comparison listed `RESEND_EVENTS_TOPIC_ID` under "only in .env.worker", remove that line from
        `.env.worker` by hand (in an editor, never printed). 3.1 writes it again.
     2. `node -e "require('fs').rmSync('.env.worker.bak')"` (both shells).
