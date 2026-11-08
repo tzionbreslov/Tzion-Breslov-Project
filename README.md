@@ -83,7 +83,7 @@ Cloudflare redirect rules send them to their new homes.
 | `npm run dev` | Next dev server at http://localhost:3000 |
 | `npm run build` | Static export to `out/` |
 | `node scripts/serve-out.mjs` | Serve `out/` like GitHub Pages at http://localhost:3100 |
-| `npm run check` | Typecheck (site + Worker), lint, unit tests (`scripts/**/*.test.mjs`), Worker tests, build, export check, wording check against checkpoint-001, browser tests (Playwright on `out/` with the enforced CSP) |
+| `npm run check` | Typecheck (site + Worker), lint, unit tests (`scripts/**/*.test.mjs`), Worker tests, build, export check, wording and placeholder checks against checkpoint-001, browser tests (Playwright on `out/` with the enforced CSP) |
 | `NAV_SCREENSHOTS=1 npx playwright test e2e/navigation.spec.ts -g "screenshots" --project=desktop` | Save the header, footer and open-menu screenshots (1280, 1440 and 390 px) to `test-results/nav/` for a pull request that changes the menus; `npm run check` skips them |
 | `npm run sync:instagram` | Dormant (Instagram is switched off): pull the latest Instagram posts + photos (needs `INSTAGRAM_ACCESS_TOKEN` / `INSTAGRAM_USER_ID`; see docs/instagram-setup.md) |
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
