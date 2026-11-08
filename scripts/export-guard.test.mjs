@@ -169,6 +169,25 @@ test("other hosts are never the site's origin: localhost:8088, subdomains, look-
   }
 });
 
+test("links in Next's flight data are read too: escaped href=\\\"…\\\" attributes and URLs ending in \\\"", () => {
+  // Only in the flight data (the HTML never holds them in these tests).
+  assert.deepEqual(today.pageProblems(page(flight(`<a href="/resources/">x</a>`))), ["links to the removed page /resources/"]);
+  assert.deepEqual(today.pageProblems(page(flight(`<a href="/resources/?a=1&b=2">x</a>`))), ["links to the removed page /resources/"]);
+  assert.deepEqual(preview.pageProblems(page(flight(`<a href="${BASE}/about">x</a>`))), ["links to the removed page /about"]);
+  assert.deepEqual(today.pageProblems(page(flight(`<a href="${COM}/about/">x</a>`))), ["links to the removed page /about/"]);
+  // A string inside a JSON row is escaped twice (href=\\\"…\\\").
+  assert.deepEqual(today.pageProblems(page(flight(JSON.stringify(`<a href="/video/video-9/">x</a>`)))), ["links to the removed page /video/video-9/"]);
+  const linked = cards({}).replace("</h2>", `</h2><a href="${COM}/about-us/">more</a>`);
+  assert.deepEqual(switched.pageProblems(page(flight(linked))), [`links to ${COM}/about-us/ after the site-URL switch`]);
+});
+
+test("calendar text in the flight data still never fails the deploy, backslashes and all", () => {
+  const typed = { title: String.raw`See href=\"/resources/\"`, location: String.raw`src=\"https://tzionbreslov.com/about/\"`,
+    summary: String.raw`https://tzionbreslov.com/about/\" and <a href=\"/video/video-3/\">x</a> and <a href='/about/'>` };
+  for (const guard of [today, switched, preview]) assert.deepEqual(guard.pageProblems(eventsPage(typed)), []);
+  for (const guard of [today, switched, preview]) assert.deepEqual(guard.pageProblems(page(flight(cards(typed)))), []);
+});
+
 test("the importer's leftovers, a plain YouTube embed, a bare / under a base path and a foreign canonical fail", () => {
   assert.deepEqual(today.pageProblems(page(`<img src="http://localhost:8088/wp-content/a.png">`)), ["still references localhost:8088"]);
   assert.deepEqual(today.pageProblems(page(`<img src="https://estiwolo.com/wp-content/a.png">`)), ["still references the dead staging host"]);

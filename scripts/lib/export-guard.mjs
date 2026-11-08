@@ -22,15 +22,16 @@ export const withoutEventCards = (html) => EVENT_CARDS.reduce((text, cards) => t
 
 /**
  * The values of a page's href and src attributes.
- * - Double-quoted ones are read from the whole page (`html`): calendar text can't
- *   spell one, since lib/events.mjs escapes its `"`.
+ * - Double-quoted ones are read from the whole page (`html`), plain and as Next's
+ *   flight data escapes them (`href=\"…\"`, or `href=\\\"…\\\"` in a JSON row):
+ *   calendar text can't spell either, since lib/events.mjs escapes its `"`.
  * - Single-quoted ones are read from the page without its Events cards (`text`):
  *   lib/events.mjs leaves the calendar's `'` as it is, and card() writes only
  *   double-quoted attributes.
  */
 export function attributeValues(html, text = html) {
   return [
-    ...[...html.matchAll(/\b(?:href|src)="([^"]*)"/g)].map((m) => m[1]),
+    ...[...html.matchAll(/\b(?:href|src)=(\\*)"([^"]*?)\1"/g)].map((m) => m[2]),
     ...[...text.matchAll(/\b(?:href|src)='([^']*)'/g)].map((m) => m[1])
   ];
 }
@@ -64,8 +65,10 @@ export function exportGuard({ production, base = "" }) {
   const SITE_ORIGIN = new RegExp(`^(?:https?:)?(?:${siteForms.map(escapeRegExp).join("|")})(?=[/?#]|$)`);
   /** `ref` (a path as written) when it names a removed page, else null. */
   const removedPath = (ref) => {
-    // A URL found in the text ends at a single quote too (a single-quoted attribute).
-    const urlPath = ref.replaceAll("\\/", "/").replace(/['?#].*$/s, "");
+    // A URL found in the text ends at a single quote too (a single-quoted attribute), and
+    // at a backslash once JSON's "\/" is undone: the end of a JSON string (`\"` in the
+    // flight data) or another escape (`&`).
+    const urlPath = ref.replaceAll("\\/", "/").replace(/['?#\\].*$/s, "");
     // A page linked without its trailing slash ("/about", "/resources") is the same page;
     // a file ("/about.html") isn't, and a longer name ("/about-us") never matches.
     const page = /\/[^/.]+$/.test(urlPath) ? `${urlPath}/` : urlPath;
