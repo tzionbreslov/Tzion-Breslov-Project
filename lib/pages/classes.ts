@@ -1,5 +1,5 @@
 import copy from "@/content/copy/en.json";
-import { readShared, type PageContent } from "@/lib/content";
+import { readShared, type PageContent } from "@/lib/content-files";
 import { composePage } from "@/lib/pages/compose";
 import { closingSections, esc, resourcesHero, wrapEntry } from "@/lib/pages/parts";
 import { formatMonthYear, sortVideos, type LibraryVideo } from "@/lib/video-library.mjs";

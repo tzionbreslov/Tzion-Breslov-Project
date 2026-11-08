@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { resolve } from "node:path";
 import copy from "@/content/copy/en.json";
-import { readShared, type PageContent } from "@/lib/content";
+import { readShared, type PageContent } from "@/lib/content-files";
 import { renderAnnouncements, renderEventsList, upcomingEvents, type EventRecord } from "@/lib/events.mjs";
 import { composePage } from "@/lib/pages/compose";
 import { LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";

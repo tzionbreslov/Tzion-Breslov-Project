@@ -1,5 +1,5 @@
 import copy from "@/content/copy/en.json";
-import { readShared, type PageContent } from "@/lib/content";
+import { readShared, type PageContent } from "@/lib/content-files";
 import { composePage } from "@/lib/pages/compose";
 import { esc, LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";
 

@@ -1,4 +1,4 @@
-import { loadPage, type HeadItem, type Island, type PageContent } from "@/lib/content";
+import { loadImportedPage, type HeadItem, type Island, type PageContent } from "@/lib/content-files";
 import { markerMissing } from "@/lib/pages/parts";
 import { SITE_URL } from "@/lib/site-url";
 
@@ -48,7 +48,7 @@ function isResourcesOwn(item: HeadItem) {
 }
 
 export function composePage(def: ComposedPageDef): PageContent {
-  const template = loadPage("resources");
+  const template = loadImportedPage("resources");
   const title = `${def.title} - ${SITE_NAME}`;
   const url = `${SITE_URL}${def.path}`;
   const own: HeadItem[] = [
