@@ -98,9 +98,16 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **The page jumps when the header turns fixed** (the original theme's behaviour, kept for fidelity). On desktop
   (1280 px and up), when a scroll goes past 100 px the theme's `global.js` makes the header `position: fixed`, and
   everything under it moves up by the header's height (about 90 px), one frame after the scroll. A click pressed
-  before that frame and released after it misses: this caused the `e2e/classes.spec.ts` and `e2e/rsvp.spec.ts`
-  desktop flakes (found on 2026-11-08 and fixed in the tests with `scrollIntoViewAndSettle`). Fixing the page itself
-  (keeping the header's place) would change how the theme behaves, so it needs the owner's go-ahead.
+  before that frame and released after it misses.
+  - A deterministic replay of this timing matches both desktop CI failures found on 2026-11-08,
+    `e2e/classes.spec.ts` (run 42426373302) and `e2e/rsvp.spec.ts` (run 42441324412). The bad timing was never seen
+    on its own (0 in 30 throttled local runs), so it isn't proven to be their cause. Both tests were hardened with
+    `scrollIntoViewAndSettle` (`e2e/helpers.ts`).
+  - Any other desktop first click whose own scroll takes the page past 100 px shares this race. For example, the
+    gallery's first photo (`e2e/gallery.spec.ts`, "the first photo opens in the viewer…") ends below the fold at
+    1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
+  - Fixing the page itself (keeping the header's place) would change how the theme behaves, so it needs the owner's
+    go-ahead.
 - **Classes:**
   - "Visit our YouTube channel" wraps to 2 lines at about 351 px or narrower;
   - at 374 px or narrower, the meta line stacks under the logo;
