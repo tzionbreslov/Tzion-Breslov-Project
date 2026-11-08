@@ -83,10 +83,12 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   for 30 s counts as stopped, and a retry waits up to that long for it. (How a waiting request reads the row is the
   controller's ruling: after 200 ms, then after waits that double up to 4 s, never past the moment the row turns
   stale, within one 30 s deadline for the whole request. A full 30 s wait is 12 D1 reads, and one request makes at
-  most 22 D1 queries however other attempts race it, inside Workers Free's 50.)
+  most 22 D1 queries however other attempts race it, inside Workers Free's 50. That bound assumes the isolates'
+  clocks agree: skew can add a read per racing attempt, in theory about 33 queries, as the email's rate limit caps
+  the attempts; still well under 50.)
 - **One deadline per RSVP request** (controller's ruling): the check before the reservation and its 3 rounds share
-  one 30 s deadline. A row there when the request began waiting turns stale before it, so a retry of a stopped
-  attempt still books that row in the same call. But a row that another attempt with the same requestId took after
+  one deadline, 30 s and 1 ms after the request began waiting. A row stamped no later than that moment is stale by
+  the deadline, so a retry of a stopped attempt still books that row in the same call. But a row that another attempt with the same requestId took after
   this request began waiting, and still holds unconfirmed at the deadline, gets `REQUEST_IN_PROGRESS` (409) instead
   of up to 30 s more waiting; the site keeps the requestId and token, and its retry books that row once stale.
 - **A confirmation that fails after the guest's email** (D1, logged `RSVP_CONFIRM_FAILED`) leaves the booking
