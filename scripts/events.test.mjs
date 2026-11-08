@@ -35,6 +35,26 @@ test("a timed event reads its date, start and end in Israel time", () => {
     "Sunday, November 8, 2026 · 8:00 PM – 12:00 AM (Israel time)");
 });
 
+// Phase 2 (translations) passes its own words for "Israel time"; without them it reads as before.
+test("the \"Israel time\" label can be given, and defaults to copy.events.israelTime", () => {
+  const today = "Sunday, November 8, 2026 · 7:30 PM – 9:00 PM (Israel time)";
+  assert.equal(copy.events.israelTime, "Israel time");
+  assert.equal(formatEventWhen(record()), today);
+  assert.equal(formatEventWhen(record(), {}), today);
+  assert.equal(formatEventWhen(record(), { israelTime: undefined }), today);
+  assert.equal(formatEventWhen(record(), { israelTime: "Jerusalem time" }), "Sunday, November 8, 2026 · 7:30 PM – 9:00 PM (Jerusalem time)");
+  assert.equal(formatEventWhen(record({ endsAt: "2026-11-08T17:30:00.000Z" }), { israelTime: "Jerusalem time" }), "Sunday, November 8, 2026 · 7:30 PM (Jerusalem time)");
+  // Only Israel's zone has a label; another zone is still named as it is, an all-day event has none.
+  assert.equal(formatEventWhen(record({ timeZone: "America/New_York" }), { israelTime: "Jerusalem time" }), "Sunday, November 8, 2026 · 12:30 PM – 2:00 PM (America/New_York)");
+  assert.equal(formatEventWhen(record({ allDay: true, timeZone: "UTC", startsAt: "2026-11-08T00:00:00.000Z", endsAt: "2026-11-09T00:00:00.000Z" }), { israelTime: "Jerusalem time" }), "Sunday, November 8, 2026");
+
+  // The cards take it from the list's copy (copy.events), and read as before without it.
+  const $ = load(renderEventsList([record()], { ...copy.events, israelTime: "Jerusalem time" }, copy.rsvp));
+  assert.equal($("p.tz-event__when").text().replace(/\s/g, " "), "Sunday, November 8, 2026 · 7:30 PM – 9:00 PM (Jerusalem time)");
+  const { emptyTitle, emptyText, contactLink } = copy.events;
+  assert.equal(renderEventsList([record()], { emptyTitle, emptyText, contactLink }, copy.rsvp), renderEventsList([record()], copy.events, copy.rsvp));
+});
+
 test("a timed event over two days shows both dates", () => {
   assert.equal(formatEventWhen(record({ startsAt: "2026-11-08T18:00:00.000Z", endsAt: "2026-11-08T23:00:00.000Z" })),
     "Sunday, November 8, 2026 · 8:00 PM – Monday, November 9, 2026 · 1:00 AM (Israel time)");
