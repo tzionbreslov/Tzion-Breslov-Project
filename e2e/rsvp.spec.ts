@@ -200,11 +200,12 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
-  test("a 409 EVENT_FULL for more guests than the places left says how many are left, asking availability again", async ({ page }) => {
+  test("a 409 EVENT_FULL for more guests than the places left says how many are left, from the 409 itself", async ({ page }) => {
     const errors = trackPageErrors(page);
-    // The count when the page opened (enough for 3), then what the Worker says after the 409.
+    // The count when the page opened (enough for 3); after that only the 409's own count matters.
     const availability: Availability = { [FIXTURE_IDS.limited]: { full: false, remaining: 5 } };
-    await stubServices(page, availability, reply(409, { ok: false, error: "EVENT_FULL", correlationId: "x" }));
+    let remaining = 2;
+    const posts = await stubServices(page, availability, (route) => reply(409, { ok: false, error: "EVENT_FULL", correlationId: "x", remaining })(route));
     let asked = 0;
     page.on("request", (request) => {
       if (request.url() === `${API}/v1/rsvp/availability`) asked++;
@@ -216,21 +217,38 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     const send = dialog(page).getByRole("button", { name: "Send RSVP" });
     const alert = dialog(page).getByRole("alert");
 
-    availability[FIXTURE_IDS.limited] = { full: false, remaining: 2 };
     await send.click();
     await expect(alert).toHaveText(TEXT.placesLeft(2));
     await expect(alert).toBeFocused();
-    await expect.poll(() => asked).toBe(2);
 
-    availability[FIXTURE_IDS.limited] = { full: false, remaining: 1 };
+    remaining = 1;
     await send.click();
     await expect(alert).toHaveText(TEXT.placesLeft(1));
 
     // None left: the event is now full, as before.
-    availability[FIXTURE_IDS.limited] = { full: true, remaining: 0 };
+    remaining = 0;
     await send.click();
     await expect(alert).toHaveText(TEXT.full);
     await expect(dialog(page).locator("form")).toHaveCount(1);
+    expect(posts).toHaveLength(3);
+    // Availability was read once, when the page opened: never again after a 409.
+    expect(asked).toBe(1);
+    await expectClean(page, errors);
+  });
+
+  test("a 409 EVENT_FULL with as many places left as guests (or none given) says the event is now full", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    let body: Record<string, unknown> = { ok: false, error: "EVENT_FULL", correlationId: "x", remaining: 3 };
+    await stubServices(page, {}, (route) => reply(409, body)(route));
+    await openEvents(page);
+    await openRsvp(page, FIXTURE_IDS.limited);
+    await fillRsvp(page, "3");
+    const send = dialog(page).getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.full);
+    body = { ok: false, error: "EVENT_FULL", correlationId: "x" };
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.full);
     await expectClean(page, errors);
   });
 

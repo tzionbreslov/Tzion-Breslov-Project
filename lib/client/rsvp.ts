@@ -92,11 +92,11 @@ function readAvailability(apiBaseUrl: string, init: RequestInit = {}): Promise<R
 
 /**
  * The answer to EVENT_FULL: "now full", unless places remain but fewer than
- * `guests`, then how many. Asked again, past the browser's cache (the page's
- * count can be minutes old); if that fails, it says the event is full.
+ * `guests`, then how many. `remaining` is the Worker's own count from the
+ * refused reservation (the page's availability can be a minute old); without
+ * one, it says the event is full.
  */
-async function eventFullMessage(apiBaseUrl: string, eventId: string, guests: number) {
-  const remaining = (await readAvailability(apiBaseUrl, { cache: "no-store" }))?.events?.[eventId]?.remaining;
+function eventFullMessage(remaining: unknown, guests: number) {
   if (typeof remaining !== "number" || remaining <= 0 || remaining >= guests) return text.eventFull;
   return remaining === 1 ? text.placeLeft : text.placesLeft.split("{remaining}").join(String(remaining));
 }
@@ -273,7 +273,7 @@ function openRsvp(card: HTMLElement, opener: HTMLButtonElement) {
       if (target) {
         fieldError(...target);
         target[0].focus();
-      } else if (answer?.error === "EVENT_FULL") announce(await eventFullMessage(apiBaseUrl, eventId, payload.guests));
+      } else if (answer?.error === "EVENT_FULL") announce(eventFullMessage(answer.remaining, payload.guests));
       else if (answer?.error === "EVENT_CLOSED" || answer?.error === "EVENT_NOT_FOUND") announce(text.closed);
       else if (answer?.error === "RATE_LIMITED") announce(MESSAGES.rateLimited);
       else announce(text.error);

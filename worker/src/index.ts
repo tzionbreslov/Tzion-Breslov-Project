@@ -419,13 +419,13 @@ async function handleRsvp(request: Request, env: Env, origin: string) {
 }
 
 /**
- * `GET /v1/rsvp/availability`: for each event that takes RSVPs, whether it is
- * full and how many places remain (null = no limit). Counts only. Readable
- * cross-origin by the site's origins only; cacheable for 60 s.
+ * How long an availability answer is shared, and how long a browser keeps it:
+ * together at most 60 s, as before the shared cache.
  */
-async function handleRsvpAvailability(request: Request, env: Env) {
-  const requested = request.headers.get("origin") ?? "";
-  const origin = requested && allowedOrigins(env).has(requested) ? requested : "";
+const AVAILABILITY_MAX_AGE = 30;
+
+/** The availability answer's JSON, read now from the feed and D1. */
+async function currentAvailability(env: Env) {
   const open = (await loadEventFeed(env)).filter((event) => event.rsvp === "open");
   const totals = await rsvpGuestTotals(env, open.filter((event) => event.limit !== null).map((event) => event.id));
   const events: RsvpAvailabilityResponse["events"] = {};
@@ -433,10 +433,42 @@ async function handleRsvpAvailability(request: Request, env: Env) {
     const remaining = event.limit === null ? null : Math.max(0, event.limit - (totals.get(event.id) ?? 0));
     events[event.id] = { full: remaining === 0, remaining };
   }
+  return JSON.stringify({ ok: true, events } satisfies RsvpAvailabilityResponse);
+}
+
+/**
+ * `GET /v1/rsvp/availability`: for each event that takes RSVPs, whether it is
+ * full and how many places remain (null = no limit). Counts only. Readable
+ * cross-origin by the site's origins only.
+ *
+ * Advisory (the reservation itself enforces every limit, and its EVENT_FULL
+ * says how many places are left), so one answer is shared for 30 s through
+ * the Cache API, in the Cloudflare data center that served it. A Worker's own
+ * Cache-Control only reaches browsers: Cloudflare's cache doesn't store a
+ * Worker's responses unless Workers Cache is switched on for the whole Worker,
+ * a bigger change. The entry has one key, the path without any query string,
+ * so no caller can step past it, and no origin: the CORS headers are added per
+ * request. Only a 200 is stored; a failure is never kept.
+ */
+async function handleRsvpAvailability(request: Request, env: Env) {
+  const requested = request.headers.get("origin") ?? "";
+  const origin = requested && allowedOrigins(env).has(requested) ? requested : "";
+  const key = new URL(API_PATHS.rsvpAvailability, request.url).toString();
+  // Cloudflare's default cache (the WebWorker lib's CacheStorage type, which wins here, has no `default`).
+  const cache = (caches as unknown as { default: Cache }).default;
+  // A cache that can't be read or written only means a fresh answer.
+  let body = await cache.match(key).then((hit) => hit?.text()).catch(() => undefined);
+  if (body === undefined) {
+    body = await currentAvailability(env);
+    const stored = new Response(body, {
+      headers: { "Cache-Control": `public, max-age=${AVAILABILITY_MAX_AGE}`, "Content-Type": "application/json; charset=utf-8" }
+    });
+    await cache.put(key, stored).catch(() => undefined);
+  }
   const headers = responseHeaders(origin);
-  headers.set("Cache-Control", "public, max-age=60");
+  headers.set("Cache-Control", `public, max-age=${AVAILABILITY_MAX_AGE}`);
   headers.set("Vary", "Origin");
-  return new Response(JSON.stringify({ ok: true, events } satisfies RsvpAvailabilityResponse), { status: 200, headers });
+  return new Response(body, { status: 200, headers });
 }
 
 async function readWebhookBody(request: Request) {
@@ -513,7 +545,8 @@ async function fetchHandler(request: Request, env: Env) {
       ok: false,
       error: publicError.code,
       correlationId,
-      ...(publicError.code === "INVALID_INPUT" && publicError.field ? { field: publicError.field } : {})
+      ...(publicError.code === "INVALID_INPUT" && publicError.field ? { field: publicError.field } : {}),
+      ...(publicError.code === "EVENT_FULL" && typeof publicError.remaining === "number" ? { remaining: publicError.remaining } : {})
     };
     return json(body, publicError.status, safeOrigin);
   }

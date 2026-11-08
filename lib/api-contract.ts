@@ -22,9 +22,10 @@
  * One public GET: `/v1/rsvp/availability` (no body, no preflight), see
  * {@link RsvpAvailabilityResponse}.
  *
- * Errors are `{ ok: false, error: ApiErrorCode, correlationId, field? }` with
- * the HTTP status shown in {@link API_ERROR_STATUS}. `field` is only present on
- * `INVALID_INPUT` and names the first offending request field.
+ * Errors are `{ ok: false, error: ApiErrorCode, correlationId, field?, remaining? }`
+ * with the HTTP status shown in {@link API_ERROR_STATUS}. `field` is only present on
+ * `INVALID_INPUT` and names the first offending request field; `remaining` only
+ * on `EVENT_FULL` (see {@link ApiErrorResponse}).
  */
 
 export const API_PATHS = {
@@ -243,9 +244,12 @@ export type RsvpSuccessResponse = {
 };
 
 /**
- * `GET /v1/rsvp/availability`, HTTP 200, `Cache-Control: public, max-age=60`.
+ * `GET /v1/rsvp/availability`, HTTP 200, `Cache-Control: public, max-age=30`.
  * One entry per event of /events.json that takes RSVPs; `remaining` is null
- * when the event has no limit. Counts only, never who has replied.
+ * when the event has no limit. Counts only, never who has replied. Advisory:
+ * the Worker shares one answer for up to 30 s (per Cloudflare data center), so
+ * with a browser's 30 s it can be up to a minute old; the RSVP itself enforces
+ * every limit (`EVENT_FULL` carries the places left).
  */
 export type RsvpAvailabilityResponse = {
   ok: true;
@@ -273,7 +277,7 @@ export const API_ERROR_STATUS = {
   EVENT_NOT_FOUND: 404,
   /** RSVP: the event has started. */
   EVENT_CLOSED: 409,
-  /** RSVP: the event's limit can't take this many more guests. */
+  /** RSVP: the event's limit can't take this many more guests (`remaining` says how many places are left). */
   EVENT_FULL: 409,
   /** Same requestId is still being processed; retry shortly. */
   REQUEST_IN_PROGRESS: 409,
@@ -312,6 +316,12 @@ export type ApiErrorResponse = {
   correlationId: string;
   /** Only set when error === "INVALID_INPUT". */
   field?: ApiInputField;
+  /**
+   * Only set when error === "EVENT_FULL": the places the event had left when
+   * this RSVP was refused, as the reservation itself saw them (fewer than its
+   * guests; 0 = full).
+   */
+  remaining?: number;
 };
 
 export type ContactResponse = ContactSuccessResponse | ApiErrorResponse;

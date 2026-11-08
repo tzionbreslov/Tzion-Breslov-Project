@@ -1,7 +1,7 @@
 import type { SubscribeTopic } from "../../lib/api-contract";
 import { sha256Hex } from "./crypto";
 import type { FeedEvent } from "./events";
-import { PublicError, requireSalt, type Env } from "./types";
+import { PublicError, eventFull, requireSalt, type Env } from "./types";
 import type { RsvpInput } from "./validation";
 
 type RequestRow = {
@@ -208,7 +208,8 @@ export type Reservation = { id: string; created: false } | { id: string; created
 /**
  * Stores the RSVP if the event's limit still has room for its guests. The
  * check and the insert are ONE statement, so simultaneous RSVPs can't both
- * take the last seats. A repeated requestId answers its confirmed RSVP, after
+ * take the last seats; a refusal is EVENT_FULL with the places left as that
+ * statement saw them. A repeated requestId answers its confirmed RSVP, after
  * waiting for an attempt still in progress (confirmedRsvp); if that attempt
  * gives its seats back, this one books them. The event's end is stored with
  * it (kept up to date from the feed by the daily cleanup, which deletes the
@@ -227,7 +228,7 @@ export async function reserveRsvp(
     const confirmed = await confirmedRsvp(env, input.requestId, event.id, emailHash, waitMs);
     if (confirmed) return { id: confirmed, created: false };
     const now = Date.now();
-    const [, inserted, holder] = await env.DB.batch<Record<string, unknown>>([
+    const [, inserted, holder, booked] = await env.DB.batch<Record<string, unknown>>([
       // A row its attempt left unconfirmed for longer than PENDING_STALE_MS gives its seats back first, in the same
       // transaction, and is booked again below (Resend's idempotency keys stop a second copy of an email it had sent).
       env.DB.prepare("DELETE FROM rsvps WHERE request_id = ? AND confirmed_at IS NULL AND created_at < ?")
@@ -252,13 +253,15 @@ export async function reserveRsvp(
         now,
         event.limit
       ),
-      env.DB.prepare(RSVP_FOR_REQUEST).bind(input.requestId)
+      env.DB.prepare(RSVP_FOR_REQUEST).bind(input.requestId),
+      // The event's guests as this reservation saw them (one transaction): the places left, if it is refused.
+      env.DB.prepare("SELECT COALESCE(SUM(guests), 0) AS guests FROM rsvps WHERE event_id = ?").bind(event.id)
     ]);
     if ((inserted.meta.changes ?? 0) === 1) return { id, created: true, heldSince: now };
     // Not inserted: another attempt with this requestId holds it (the next round waits for its outcome), or the
     // event is full.
     const held = sameRequest((holder.results[0] as RsvpRequestRow | undefined) ?? null, event.id, emailHash);
-    if (!held && event.limit !== null) throw new PublicError("EVENT_FULL");
+    if (!held && event.limit !== null) throw eventFull(event.limit - Number(booked.results[0]?.guests ?? 0));
   }
   throw new PublicError("REQUEST_IN_PROGRESS");
 }

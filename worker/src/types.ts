@@ -25,6 +25,8 @@ export interface Env {
 
 export class PublicError extends Error {
   public readonly status: number;
+  /** EVENT_FULL only: the places the event had left when the RSVP was refused (fewer than its guests; 0 = full). */
+  public remaining?: number;
 
   constructor(
     public readonly code: ApiErrorCode,
@@ -35,6 +37,13 @@ export class PublicError extends Error {
     this.name = "PublicError";
     this.status = API_ERROR_STATUS[code];
   }
+}
+
+/** EVENT_FULL, with the places left as the refused reservation saw them. */
+export function eventFull(remaining: number) {
+  const error = new PublicError("EVENT_FULL");
+  error.remaining = Math.max(0, remaining);
+  return error;
 }
 
 export function invalidInput(field: ApiInputField): never {

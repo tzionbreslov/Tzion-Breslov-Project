@@ -201,13 +201,16 @@ function shortenTimeouts() {
 }
 
 async function errorBody(response: Response) {
-  return response.json<{ ok: boolean; error: string; correlationId: string; field?: string }>();
+  return response.json<{ ok: boolean; error: string; correlationId: string; field?: string; remaining?: number }>();
 }
 
 async function count(table: string) {
   const row = await env.DB.prepare(`SELECT COUNT(*) AS count FROM ${table}`).first<{ count: number }>();
   return row?.count ?? -1;
 }
+
+/** Cloudflare's default cache, where the Worker shares the availability answer (typed as the Worker reads it). */
+const sharedCache = () => (caches as unknown as { default: Cache }).default;
 
 beforeEach(async () => {
   await env.DB.batch([
@@ -217,8 +220,9 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM rate_limits"),
     env.DB.prepare("DELETE FROM webhook_events")
   ]);
-  // The feed is cached per isolate: every test reads its own.
+  // The feed is cached per isolate, and the availability answer in the Cache API: every test reads its own.
   resetEventFeedCache();
+  await sharedCache().delete("https://api.test/v1/rsvp/availability");
   vi.spyOn(console, "error").mockImplementation(() => undefined);
 });
 
@@ -856,6 +860,7 @@ type RsvpRow = {
   confirmed_at: number | null;
 };
 type RsvpSuccess = { ok: true; requestId: string; confirmationId: string };
+type RsvpAvailability = { ok: true; events: Record<string, { full: boolean; remaining: number | null }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -1135,15 +1140,22 @@ describe("POST /v1/rsvp", () => {
     expect(outbound.emails()).toHaveLength(2);
   });
 
-  it("caps attendance at the event's limit: 2 + 2 against 3 is full, 2 + 1 fits", async () => {
+  it("caps attendance at the event's limit: 2 + 2 against 3 is full, 2 + 1 fits; a refusal says how many places were left", async () => {
     const outbound = mockProviders("rsvp");
     const statuses: number[] = [];
+    const left: Array<number | undefined> = [];
     for (const guests of [2, 2, 1, 1]) {
       const response = await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests })), env);
       statuses.push(response.status);
-      if (response.status === 409) expect((await errorBody(response)).error).toBe("EVENT_FULL");
+      if (response.status === 409) {
+        const body = await errorBody(response);
+        expect(body.error).toBe("EVENT_FULL");
+        left.push(body.remaining);
+      }
     }
     expect(statuses).toEqual([202, 409, 202, 409]);
+    // 2 of 3 taken, 2 asked: 1 left. Then 3 of 3 taken: none.
+    expect(left).toEqual([1, 0]);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
     expect(outbound.emails()).toHaveLength(4);
   });
@@ -1156,7 +1168,8 @@ describe("POST /v1/rsvp", () => {
     ]);
     expect(responses.map((response) => response.status).sort()).toEqual([202, 409]);
     const refused = responses.find((response) => response.status === 409)!;
-    expect((await errorBody(refused)).error).toBe("EVENT_FULL");
+    // The places left as the refused reservation saw them: 3 - 2.
+    expect(await errorBody(refused)).toMatchObject({ error: "EVENT_FULL", remaining: 1 });
     expect(await count("rsvps")).toBe(1);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(2);
     expect(outbound.emails()).toHaveLength(2);
@@ -1176,6 +1189,7 @@ describe("POST /v1/rsvp", () => {
     expect(results.filter((value) => value === true)).toHaveLength(3);
     expect(results.filter((value) => value === "EVENT_FULL")).toHaveLength(3);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    await expect(reserveRsvp(env, input(7), event, "hash-7")).rejects.toMatchObject({ code: "EVENT_FULL", remaining: 0 });
   });
 
   it("stores an all-day event's end as its exclusive end date, at UTC midnight", async () => {
@@ -1599,9 +1613,18 @@ describe("POST /v1/rsvp", () => {
 });
 
 describe("GET /v1/rsvp/availability", () => {
-  function availability(requestOrigin?: string) {
-    return fetchHandler(new Request("https://api.test/v1/rsvp/availability", { headers: requestOrigin ? { Origin: requestOrigin } : {} }), env);
+  const AVAILABILITY_URL = "https://api.test/v1/rsvp/availability";
+
+  function availability(requestOrigin?: string, url = AVAILABILITY_URL) {
+    return fetchHandler(new Request(url, { headers: requestOrigin ? { Origin: requestOrigin } : {} }), env);
   }
+
+  /** Empties the shared cache (Cache API), as when its 30 s are over. */
+  async function expireSharedCache() {
+    await sharedCache().delete(AVAILABILITY_URL);
+  }
+
+  beforeEach(expireSharedCache);
 
   it("reports full and remaining for every open event, counts only, with CORS for allowed origins only", async () => {
     mockProviders("rsvp");
@@ -1610,7 +1633,7 @@ describe("GET /v1/rsvp/availability", () => {
     const response = await availability(origin);
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe(origin);
-    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+    expect(response.headers.get("cache-control")).toBe("public, max-age=30");
     expect(response.headers.get("vary")).toBe("Origin");
     const text = await response.text();
     expect(JSON.parse(text)).toEqual({
@@ -1624,6 +1647,7 @@ describe("GET /v1/rsvp/availability", () => {
     expect(text).not.toMatch(/@|Ada|Lovelace|example\.test/);
 
     expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env)).status).toBe(202);
+    await expireSharedCache();
     const full = await (await availability(origin)).json<{ events: Record<string, unknown> }>();
     expect(full.events[EVENT_IDS.limited]).toEqual({ full: true, remaining: 0 });
 
@@ -1635,13 +1659,56 @@ describe("GET /v1/rsvp/availability", () => {
     }
   });
 
-  it("answers 503 EVENTS_UNAVAILABLE, not cacheable, when the feed can't be read", async () => {
+  it("shares one answer for 30 s through the Cache API: every origin and query string, CORS added per request", async () => {
+    const outbound = mockProviders("rsvp");
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 2 })), env)).status).toBe(202);
+    const first = await availability(origin);
+    expect((await first.json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: false, remaining: 1 });
+
+    // Stored once, without any caller's origin, for at most 30 s.
+    const stored = await sharedCache().match(AVAILABILITY_URL);
+    expect(stored?.status).toBe(200);
+    expect(stored?.headers.get("cache-control")).toBe("public, max-age=30");
+    expect(stored?.headers.get("access-control-allow-origin")).toBeNull();
+
+    // A booking within those 30 s isn't in the shared answer yet (the reserve itself is what counts).
+    expect((await fetchHandler(publicRequest("/v1/rsvp", rsvpPayload({ eventId: EVENT_IDS.limited, guests: 1 })), env)).status).toBe(202);
+    const feedReads = outbound.feed().length;
+    for (const [caller, url] of [
+      [origin, AVAILABILITY_URL],
+      ["https://www.site.test", AVAILABILITY_URL],
+      [undefined, AVAILABILITY_URL],
+      // A query string can't get past the shared answer.
+      [origin, `${AVAILABILITY_URL}?fresh=${crypto.randomUUID()}`]
+    ] as const) {
+      const response = await fetchHandler(new Request(url, { headers: caller ? { Origin: caller } : {} }), { ...env, ALLOWED_ORIGINS: `${origin},https://www.site.test` });
+      expect(response.status, `${caller} ${url}`).toBe(200);
+      expect(response.headers.get("access-control-allow-origin"), `${caller}`).toBe(caller ?? null);
+      expect(response.headers.get("vary")).toBe("Origin");
+      expect(response.headers.get("cache-control")).toBe("public, max-age=30");
+      expect((await response.json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: false, remaining: 1 });
+    }
+    expect(outbound.feed()).toHaveLength(feedReads);
+
+    // Once the 30 s are over, the next answer is read afresh.
+    await expireSharedCache();
+    expect((await (await availability(origin)).json<RsvpAvailability>()).events[EVENT_IDS.limited]).toEqual({ full: true, remaining: 0 });
+  });
+
+  it("answers 503 EVENTS_UNAVAILABLE, not cacheable, when the feed can't be read, and stores nothing", async () => {
     mockProviders("rsvp", { feedResponse: () => new Response("", { status: 302, headers: { Location: "https://tzionbreslov.com/" } }) });
     const response = await availability(origin);
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("access-control-allow-origin")).toBe(origin);
     expect((await errorBody(response)).error).toBe("EVENTS_UNAVAILABLE");
+    expect(await sharedCache().match(AVAILABILITY_URL)).toBeUndefined();
+
+    // The feed is back: the very next request answers, nothing of the failure kept.
+    vi.restoreAllMocks();
+    resetEventFeedCache();
+    mockProviders("rsvp");
+    expect((await availability(origin)).status).toBe(200);
   });
 });
 
