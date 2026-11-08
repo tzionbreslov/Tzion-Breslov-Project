@@ -94,6 +94,27 @@ test("the map is Google Maps pinned on Bet Shemesh, with links to directions and
   await expectClean(page, errors);
 });
 
+test("both map links carry the external-link icon the Classes channel link has", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await page.goto("/classes/");
+  const channelIcon = await page.locator("a.tz-vl__channel > svg").evaluate((svg) => svg.outerHTML);
+  expect(channelIcon).toContain('aria-hidden="true"');
+  await openContact(page);
+  for (const name of ["Get directions", "Open in Google Maps"]) {
+    const icons = link(page, name).locator("svg");
+    await expect(icons, name).toHaveCount(1);
+    expect(await icons.evaluate((svg) => svg.outerHTML), name).toBe(channelIcon);
+    // Drawn as on Classes: a 16px outline in the link's own colour, after the label.
+    expect(await icons.evaluate((svg) => {
+      const style = getComputedStyle(svg);
+      const box = svg.getBoundingClientRect();
+      return { size: `${box.width}x${box.height}`, fill: style.fill, stroke: style.stroke === getComputedStyle(svg.parentElement!).color, width: style.strokeWidth, last: svg === svg.parentElement!.lastChild };
+    }), name).toEqual({ size: "16x16", fill: "none", stroke: true, width: "2px", last: true });
+  }
+  await expectClean(page, errors);
+});
+
 test("both map links lift on hover and focus as the theme's buttons do, and not with reduced motion", async ({ page, isMobile }) => {
   test.skip(isMobile, "hovering needs a mouse");
   const errors = trackPageErrors(page);
@@ -198,8 +219,9 @@ test("both map links show a keyboard focus ring", async ({ page }) => {
 });
 
 // Phones, both sides of the theme's 600px breakpoint, landscape phones (640, 667), around the width where both
-// buttons first fit on one row (668 ± 1, measured), a tablet and desktop.
-const WIDTHS = [320, 360, 390, 412, 414, 600, 601, 640, 667, 668, 669, 768, 1024, 1440];
+// buttons first fit on one row (722 ± 1, measured with their icons), a tablet and desktop; and either side of 390px,
+// where the icons start.
+const WIDTHS = [320, 360, 389, 390, 412, 414, 600, 601, 640, 667, 668, 721, 722, 723, 768, 1024, 1440];
 
 test("at every width the buttons are spaced and centred in the card, nothing scrolls sideways, and \"Bet Shemesh\" stays on one line", async ({ page }) => {
   const errors = trackPageErrors(page);
@@ -226,6 +248,27 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
         range.setEnd(title, at + word.length);
         return Math.round(range.getClientRects()[0].top);
       };
+      // Each button's label and the icon after it: the label's lines, and the icon beside its end, centred on it.
+      const labels = [...map.querySelectorAll(".tz-map__links a")].map((a) => {
+        const range = document.createRange();
+        range.selectNodeContents(a.firstChild!);
+        const rects = [...range.getClientRects()];
+        const svg = a.querySelector("svg")!;
+        const icon = svg.getBoundingClientRect();
+        const text = range.getBoundingClientRect();
+        const style = getComputedStyle(a);
+        const room = a.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) -
+          parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+        return {
+          lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+          // For the failure message: the label's own width, and the room in the pill.
+          measure: `label ${text.width.toFixed(1)}px in ${room.toFixed(1)}px`,
+          iconShown: getComputedStyle(svg).display !== "none",
+          iconAfter: icon.left >= Math.max(...rects.map((rect) => rect.right)) - 0.5,
+          iconCentred: Math.abs(icon.top + icon.height / 2 - (text.top + text.height / 2)) <= 1.5,
+          iconInside: icon.right <= a.getBoundingClientRect().right
+        };
+      });
       return {
         layout: {
           scroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -233,6 +276,7 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
           cardInView: card.left >= 0 && card.right <= document.documentElement.clientWidth,
           betShemeshTogether: lineOf("Bet") === lineOf("Shemesh")
         },
+        labels,
         oneRow,
         // Side by side: the space between them; stacked: the space between the rows.
         gap: oneRow ? second.left - first.right : second.top - first.bottom,
@@ -243,6 +287,13 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
       };
     });
     expect(fit.layout, `${width}px`).toEqual({ scroll: true, inside: true, cardInView: true, betShemeshTogether: true });
+    // From 390px the external-link icon follows each label, both on one line (below that a phone's pill has no
+    // room for both, and the icon is left out: those pills are as they were).
+    for (const [i, { lines, measure, iconShown, ...icon }] of fit.labels.entries()) {
+      if (width >= 390) expect(lines, `${width}px: button ${i + 1}'s label lines (${measure})`).toBe(1);
+      expect(iconShown, `${width}px: button ${i + 1}'s icon shown`).toBe(width >= 390);
+      if (iconShown) expect(icon, `${width}px: button ${i + 1}'s icon`).toEqual({ iconAfter: true, iconCentred: true, iconInside: true });
+    }
     // Never touching (the theme's .5em = 9px), and centred to the pixel.
     expect(fit.gap, `${width}px: gap between the buttons`).toBeGreaterThanOrEqual(8);
     expect(fit.offCentre, `${width}px: buttons off-centre by`).toBeLessThanOrEqual(1);

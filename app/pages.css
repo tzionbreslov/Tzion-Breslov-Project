@@ -39,7 +39,7 @@
 
 /* The theme's buttons, centred. The theme zeroes flex gaps (.wp-block-buttons
  * {gap:0!important}, for Safari 13) and spaces buttons with a margin on the
- * second one only, so pills that wrap to a second row (601–667px) would touch
+ * second one only, so pills that wrap to a second row (601–721px) would touch
  * and sit off-centre. Space them with the theme's .5em as a gap instead, in
  * both directions, at every width. */
 .tz-map .tz-map__links {
@@ -67,6 +67,20 @@
 @media (prefers-reduced-motion: no-preference) {
   .tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:hover,
   .tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:focus { transform: translateY(-.3em); }
+}
+/* Both open in a new tab, so each ends with the external-link icon (lib/icons.ts), drawn as
+ * on the Classes channel link: beside the label, never on a line of its own. Below 390px a phone's
+ * pill has no room for "Open in Google Maps" and the icon on one line (at 390px they have 9px to
+ * spare: text can measure a few px wider on other systems), so there it has none. */
+.tz-map .tz-map__links .wp-block-button .wp-block-button__link {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.tz-map .tz-map__links .wp-block-button__link svg {
+  flex: none; width: 16px; height: 16px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+@media (max-width: 389px) {
+  .tz-map .tz-map__links .wp-block-button__link svg { display: none; }
 }
 
 /* Phones: the third Contact card's side padding, a shorter map, and the
