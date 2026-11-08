@@ -132,7 +132,6 @@ These were out of the final review's reach and remain open questions:
 - 375 px thumbnails;
 - turquoise contrast (open decision 3);
 - an RSVP retry after more than 300 s;
-- old URLs with no trailing slash;
 - the 24 h form;
 - the live Cloudflare and Resend state;
 - the broadcast unsubscribe (open decision 6).

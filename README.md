@@ -544,13 +544,20 @@ two hosts to its new home. *Owner's go-ahead.*
 
    | Rule name | Expression | URL |
    |---|---|---|
-   | `tzion_removed_archives_to_articles` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo/*"))` | `https://tzionbreslov.org/articles/` |
-   | `tzion_removed_resources_to_classes` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path eq "/resources/") or (http.request.uri.path wildcard "/video/*"))` | `https://tzionbreslov.org/classes/` |
-   | `tzion_removed_about_to_about_us` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and (http.request.uri.path eq "/about/")` | `https://tzionbreslov.org/about-us/` |
+   | `tzion_removed_archives_to_articles` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path wildcard "/resources/page/*") or (http.request.uri.path wildcard "/category/uncategorized") or (http.request.uri.path wildcard "/category/uncategorized/*") or (http.request.uri.path wildcard "/author/esti-wolo") or (http.request.uri.path wildcard "/author/esti-wolo/*"))` | `https://tzionbreslov.org/articles/` |
+   | `tzion_removed_resources_to_classes` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and ((http.request.uri.path in {"/resources/" "/resources"}) or (http.request.uri.path wildcard "/video") or (http.request.uri.path wildcard "/video/*"))` | `https://tzionbreslov.org/classes/` |
+   | `tzion_removed_about_to_about_us` | `(http.host in {"tzionbreslov.org" "www.tzionbreslov.org"}) and (http.request.uri.path in {"/about/" "/about"})` | `https://tzionbreslov.org/about-us/` |
 
-   `*` also matches nothing, so `/video/*` covers `/video/video-1/` and `/category/uncategorized/*` covers
-   `/category/uncategorized/` itself. The archives rule comes first, so `/resources/page/2/` can never meet the
-   Classes rule.
+   How Cloudflare matches the path (Rules language → Operators,
+   https://developers.cloudflare.com/ruleset-engine/rules-language/operators/#wildcard-matching):
+   - `wildcard` must match the whole path and ignores case. Each `*` matches any characters, or none, and `/` has no
+     special meaning. So `/video/*` covers `/video/` and `/video/video-1/`, and `/category/uncategorized/*` covers
+     `/category/uncategorized/` itself.
+   - `eq` and `in` match the exact path, case included.
+   - So each address typed without its final slash gets its own exact match, which ignores case just when its slash
+     form does: `wildcard "/video"` (no `*`: the whole path, any case), `in {"/resources/" "/resources"}`. A shorter
+     pattern would catch pages it shouldn't: `/video*` also matches `/video-x`, and `/about*` matches `/about-us/`.
+   - The archives rule comes first, so `/resources/page/2/` can never meet the Classes rule.
 
 *Verify:*
 - **Now:** the dashboard lists the three rules after `tzion_org_to_com_temporary`.
@@ -563,13 +570,20 @@ two hosts to its new home. *Owner's go-ahead.*
   | Address | `location` |
   |---|---|
   | `/resources/` | `/classes/` |
+  | `/resources` | `/classes/` |
   | `/video/video-1/` | `/classes/` |
+  | `/video` | `/classes/` |
   | `/resources/page/2/` | `/articles/` |
   | `/category/uncategorized/` | `/articles/` |
+  | `/category/uncategorized` | `/articles/` |
   | `/author/esti-wolo/page/2/` | `/articles/` |
+  | `/author/esti-wolo` | `/articles/` |
   | `/about/` | `/about-us/` |
+  | `/about` | `/about-us/` |
 
   Test each with `curl -sI "https://tzionbreslov.org/resources/"`, swapping in the address.
+- **After step 9:** no rule catches a page that exists or a look-alike address. `/about-us/`, `/articles/` and
+  `/classes/` answer 200, and `/resources-x/` and `/video-x/` answer 404, each without a 301.
 
 *Undo:* delete the three rules (the export shows what was there before). Browsers keep a 301 they already followed,
 so the undo is only complete before go-live.
@@ -807,7 +821,8 @@ passes in (`lib/client/config.ts`).
    and its six sections, and the footer's Privacy link opens it.
 4. **CSP, live:** `node scripts/check-csp.mjs https://tzionbreslov.org` and
    `node scripts/check-csp.mjs https://www.tzionbreslov.org` must report zero violations.
-5. **Redirects:** the six addresses in step 6 answer 301 with their `location`.
+5. **Redirects:** the eleven addresses in step 6 answer 301 with their `location`, and the five pages it says no
+   rule catches answer without a 301.
 6. **Test sign-ups**, each with an address the owner reads:
    - **Event announcements:** on `/events/`, "Get event announcements" with **only** "Event announcements" ticked.
      - The confirmation email arrives; "Confirm my subscription" on the site succeeds.
@@ -862,6 +877,6 @@ switch day (step 5, which also drops `https://www.youtube.com`).
    copy. Until then they show "temporarily unavailable — email us".
 4. Switch day (above), in its order, including the Cloudflare 301 redirects for the removed addresses (step 6):
    `/resources/` and `/video/…` → `/classes/`, `/resources/page/N/`, `/category/…` and `/author/…` → `/articles/`,
-   `/about/` → `/about-us/`.
+   `/about/` → `/about-us/`, each also without its final slash.
 5. Wire PayPal in `lib/client/donations.ts` (add its origins to `config/security-headers.mjs` first), and confirm that
    `PAYPAL_AUTOPAY_URL` there is where the owner's monthly donors manage their gift.
