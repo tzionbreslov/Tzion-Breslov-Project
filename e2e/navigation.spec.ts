@@ -447,23 +447,44 @@ test("the footer Quick Links sit side by side in two columns, read down each in 
   await expectClean(page, errors);
 });
 
-// Every width where the list shows: no label wider than its column, none broken mid-word. Two columns wherever the
-// list has room for two of its widest word ("Resources") side by side: everywhere but the four-column footer from
-// 960px to just under 1280px, where its column is 129-177px wide and the list stays in one column.
-test("the footer Quick Links fit at every width, in two columns wherever there is room", async ({ page }, testInfo) => {
+/** The footer's four columns from 960px (logo, Quick Links, contact, sign-up): side by side, none overflowing, and the
+ * lines of the columns the Quick Links take their room from, counted as rendered. */
+const footerColumnsLayout = (page: Page) => page.locator("#genesis-footer-widgets .wp-block-columns").evaluate((row) => {
+  const lines = (node: Element | null) => {
+    if (!node) return 0;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return new Set([...range.getClientRects()].filter((rect) => rect.width > 0).map((rect) => Math.round(rect.top))).size;
+  };
+  const columns = [...row.children];
+  const signUp = columns.find((column) => column.querySelector('[data-tz-form="signup"]'))!;
+  const contact = columns.find((column) => column.querySelector('a[href^="mailto:"]'))!;
+  return {
+    sideBySide: columns.length === 4 && new Set(columns.map((column) => Math.round(column.getBoundingClientRect().top))).size === 1,
+    overflowing: columns.filter((column) => column.scrollWidth > column.clientWidth).length,
+    // "Find out about what's happening" / "at Tzion Breslov", split by its <br> only.
+    signUpLines: lines(signUp.querySelectorAll("p")[1]),
+    submitLines: lines(signUp.querySelector('button[type="submit"]')),
+    phoneLines: lines([...contact.querySelectorAll("p")].find((p) => p.textContent!.includes("972")) ?? null)
+  };
+});
+
+// Every width where the list shows: two columns, no label wider than its column, none broken mid-word. In the
+// four-column footer (from 960px) app/navigation.css widens the Quick Links column below about 1325px, taking the room
+// from the sign-up column (and the contact column below about 1020px): those keep their lines as before.
+test("the footer Quick Links fit at every width, in two columns", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
   const errors = trackPageErrors(page);
   await page.goto("/contact/");
   await page.evaluate(() => document.fonts.ready);
-  for (const width of [320, 360, 375, 414, 480, 600, 767, 768, 959, 1280, 1300, 1366, 1600, 1920]) {
+  for (const width of [320, 360, 375, 414, 480, 600, 767, 768, 959, 960, 1000, 1024, 1100, 1199, 1263, 1279, 1280, 1300,
+    1320, 1366, 1600, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await expectQuickLinksInTwoColumns(page, `${width}px`);
-  }
-  for (const width of [960, 1024, 1100, 1199]) {
-    await page.setViewportSize({ width, height: 900 });
-    const layout = await quickLinksLayout(page);
-    expect(new Set(layout.items.map((item) => item.x)).size, `${width}px: one column, no room for two`).toBe(1);
-    expect(layout, `${width}px: every label fits`).toMatchObject({ overflowing: [], broken: [], resourcesTogether: true });
+    if (width >= 960) {
+      expect(await footerColumnsLayout(page), `${width}px: the footer's other columns`)
+        .toEqual({ sideBySide: true, overflowing: 0, signUpLines: 2, submitLines: 1, phoneLines: 1 });
+    }
   }
   await expectClean(page, errors);
 });
@@ -474,7 +495,7 @@ test.describe("without JavaScript", () => {
   test("the footer Quick Links are in two columns too", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
     await page.goto("/contact/");
-    for (const width of [1440, 390]) {
+    for (const width of [1440, 1024, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await expectQuickLinksInTwoColumns(page, `${width}px without JavaScript`);
     }
