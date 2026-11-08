@@ -21,11 +21,18 @@ const EVENT_CARDS = [
 export const withoutEventCards = (html) => EVENT_CARDS.reduce((text, cards) => text.replace(cards, ""), html);
 
 /**
- * The values of a page's href and src attributes, read from the whole page
- * (`html`): calendar text can't fake one, since lib/events.mjs escapes its `"`.
+ * The values of a page's href and src attributes.
+ * - Double-quoted ones are read from the whole page (`html`): calendar text can't
+ *   spell one, since lib/events.mjs escapes its `"`.
+ * - Single-quoted ones are read from the page without its Events cards (`text`):
+ *   lib/events.mjs leaves the calendar's `'` as it is, and card() writes only
+ *   double-quoted attributes.
  */
-export function attributeValues(html) {
-  return [...html.matchAll(/\b(?:href|src)="([^"]*)"/g)].map((m) => m[1]);
+export function attributeValues(html, text = html) {
+  return [
+    ...[...html.matchAll(/\b(?:href|src)="([^"]*)"/g)].map((m) => m[1]),
+    ...[...text.matchAll(/\b(?:href|src)='([^']*)'/g)].map((m) => m[1])
+  ];
 }
 
 /**
@@ -43,7 +50,8 @@ export function exportGuard({ production, base = "" }) {
   // origin anywhere in the text, plain or JSON-escaped (JSON-LD included).
   const ORIGIN_URL = originUrlRegExp([production], ["/", "\\/"]);
   const removedPath = (ref) => {
-    const urlPath = ref.replaceAll("\\/", "/").replace(/[?#].*$/, "");
+    // A URL found in the text ends at a single quote too (a single-quoted attribute).
+    const urlPath = ref.replaceAll("\\/", "/").replace(/['?#].*$/s, "");
     return isRemovedPath(urlPath) ? urlPath : null;
   };
   /** An href/src value's path on this site: root-relative (base path taken off) or absolute on the site's origin. */
@@ -55,7 +63,7 @@ export function exportGuard({ production, base = "" }) {
   /** Removed pages named by `html`'s href/src attributes, or by a site-origin URL anywhere in `text`. */
   function removedRefs(html, text = html) {
     const found = new Set();
-    for (const value of attributeValues(html)) {
+    for (const value of attributeValues(html, text)) {
       const ref = attributePath(value);
       if (ref) found.add(removedPath(ref));
     }
@@ -76,7 +84,7 @@ export function exportGuard({ production, base = "" }) {
     if (mentionsOldDomain(text)) problems.push("still references tzionbreslov.com after the site-URL switch");
     // The text check skips the Events cards (calendar text); a link is never calendar text, so
     // every href/src on the page is read, cards included.
-    for (const value of new Set(attributeValues(html))) {
+    for (const value of new Set(attributeValues(html, text))) {
       if (mentionsOldDomain(value)) problems.push(`links to ${value} after the site-URL switch`);
     }
     if (/\/wp-admin\/admin-ajax\.php/.test(html.replace(/var uagb_data[^;]*;/g, ""))) problems.push("references admin-ajax");

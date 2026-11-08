@@ -100,6 +100,25 @@ test("after the switch, an href/src on tzionbreslov.com fails even inside an Eve
   assert.deepEqual(today.pageProblems(page(linked)), []);
 });
 
+test("single-quoted href/src attributes are read too", () => {
+  assert.deepEqual(today.pageProblems(page(`<a href='/resources/'>x</a>`)), ["links to the removed page /resources/"]);
+  assert.deepEqual(today.pageProblems(page(`<a class='x' href='${COM}/about/'>x</a>`)), ["links to the removed page /about/"]);
+  assert.deepEqual(preview.pageProblems(page(`<img src='${BASE}/video/video-2/a.png'>`)), ["links to the removed page /video/video-2/a.png"]);
+  assert.deepEqual(switched.pageProblems(page(`<a href='${ORG}/author/esti-wolo/'>x</a>`)), ["links to the removed page /author/esti-wolo/"]);
+  assert.deepEqual(switched.pageProblems(page(`<link rel='icon' href='${COM}/favicon.ico'>`)), [
+    "still references tzionbreslov.com after the site-URL switch",
+    `links to ${COM}/favicon.ico after the site-URL switch`
+  ]);
+  assert.deepEqual(today.pageProblems(page(`<a href='/about-us/'>x</a>`)), []);
+});
+
+test("calendar text that spells a single-quoted attribute doesn't fail the deploy", () => {
+  // lib/events.mjs escapes the calendar's " but not its ', so these reach the card as text.
+  const typed = { title: "See href='/about/'", location: "src='https://tzionbreslov.com/resources/'",
+    summary: "<a href='/video/video-3/'>the talk</a>, <img src='https://tzionbreslov.org/about/'>" };
+  for (const guard of [today, switched, preview]) assert.deepEqual(guard.pageProblems(eventsPage(typed)), []);
+});
+
 test("the importer's leftovers, a plain YouTube embed, a bare / under a base path and a foreign canonical fail", () => {
   assert.deepEqual(today.pageProblems(page(`<img src="http://localhost:8088/wp-content/a.png">`)), ["still references localhost:8088"]);
   assert.deepEqual(today.pageProblems(page(`<img src="https://estiwolo.com/wp-content/a.png">`)), ["still references the dead staging host"]);
