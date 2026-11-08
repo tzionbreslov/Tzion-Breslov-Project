@@ -35,7 +35,7 @@ WordPress backup (.wpress, private, not in git)
 - `lib/navigation.mjs` — the menus: the header's desktop and mobile menus and the footer Quick Links are rendered into
   the imported header/footer HTML for each page (`NAV`: Home · About · Resources ▾ Classes, Articles · Events ·
   Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer, and Privacy last in the footer
-  only). `ORIGINAL_NAV` is the WordPress menu, which `scripts/navigation.test.mjs` proves renders every imported
+  only; the footer list is in two columns, `app/navigation.css`). `ORIGINAL_NAV` is the WordPress menu, which `scripts/navigation.test.mjs` proves renders every imported
   fragment byte for byte. The Resources dropdown runs on
   `lib/client/menu.ts` (mouse, touch, keyboard; keyboard focus inside it keeps it open after the mouse leaves, a mouse
   press inside it doesn't) and `app/navigation.css` (also opens on hover/focus without JS).
@@ -96,7 +96,7 @@ Cloudflare redirect rules send them to their new homes.
 | `npm run sync:youtube` | Pull the latest uploads from the channel RSS feed into `content/youtube.json` (outage-tolerant; `-- --strict` to fail instead) |
 | `npm run sync:events` | Pull the upcoming events from the Google Calendar at `GOOGLE_CALENDAR_ICAL_URL` into `content/events.json` (outage-tolerant; `-- --strict` to fail instead; never commit the result) |
 | `npm run worker:dev` | Forms API at http://localhost:8787 (copy `.dev.vars.example` → `.dev.vars`) |
-| `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running) |
+| `node scripts/visual-diff.mjs` | Pixel-compare against the WordPress reference (needs it running), or a checkpoint build with `REF=…` (AGENTS.md). `--mask-nav` hides the menus and footer and compares what is above the footer; `--crop-footer` compares everything above the footer, header included |
 | `node scripts/compare-live.mjs` | Compare the WordPress reference's text/images/links with the live site |
 | `npm run rollback -- checkpoint-NNN` | Open a pull request that rolls every file back to a checkpoint (`--dry-run` to only list what it undoes); see ROLLBACK.md |
 
@@ -160,6 +160,26 @@ Pages are WordPress HTML in `content/pages/<slug>.json` (`main`). Edit the HTML 
 original CSS depends on them), or change the shared header/footer in `content/fragments/` — except their menus, which
 `lib/navigation.mjs` renders (edit `NAV` there; new labels go in `content/copy/en.json`). Re-running the importer
 overwrites `content/` from the WordPress snapshot, so only do that while WordPress is still the source of truth.
+
+The owner's edits of 2026-11-08 are made where each page is rendered (`lib/pages/edits.mjs`, called from
+`components/site-document.tsx`), not in `content/`, so a re-import can't undo them: every footer's last line reads
+"© 2026 Tzion Breslov" (the imported "© 2026 Tzion Beslov | Site by Esti Wolo" with its link), and the 18 Parasha
+articles name Tzion Breslov as their author in their `<meta name="author">`, `twitter:data1` and JSON-LD. Each edit
+fails the build if what it changes is missing or repeated, so editing those places in `content/` means editing the
+edit too. The importer copies the theme's `style.css` without its header's author lines
+(`scripts/lib/theme-header.mjs`).
+
+## Wording check
+
+`npm run check:wording` (part of `npm run check`) holds every page to what it said at checkpoint-001: the same text,
+in the same order, with new text allowed in between (`tests/wording/checkpoint-001.json`; the form placeholders in
+`checkpoint-001-placeholders.json`). Both baselines are never regenerated or edited.
+
+The only exceptions are the changes the owner asked for, in `tests/wording/owner-approved.json`. Each entry gives its
+routes, the exact checkpoint-001 text node, its new text (or `null` when it is removed), the date and the owner's own
+words. The check applies them to the baseline before comparing, and fails on an entry that is no longer used, that
+would reach a second node on a route, or that has no date or owner's words. **Add an entry only with the owner's
+words.** Today it holds the footer's credit line (2026-11-08).
 
 ## Configuration (GitHub → Settings → Secrets and variables → Actions → **Variables**)
 

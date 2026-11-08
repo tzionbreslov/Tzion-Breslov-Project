@@ -34,6 +34,20 @@
   Israel time (cron 07:05 and 21:05 Asia/Jerusalem, off the hour; the times are the spec's call), replacing the
   daily 04:41 UTC rebuild. Events come from one public
   Google Calendar (`GOOGLE_CALENDAR_ICAL_URL`, a repository variable the owner sets: docs/EVENT_CALENDAR.md).
+- 2026-11-08 — **The owner's small edits**, in one pull request. The owner's words: "some small edits, no need for
+  checkpoints. 1. remove "site by esti wolo", 2. at the footer of the page, lets put the quick links side by side
+  instead of one long list, that way the footer isn't massive, 3. video page should display how many actual video are
+  available on the YouTube channel and sync up. if that isn't possible then, remove the count, that way the number
+  stays true on both website and YouTube channel. also we nedd to change the phone number [new phone number withheld]
+  which also has a whatsapp with the same number." (The Checkpoint workflow still tags the merge.) The owner's answers:
+  - Video count: "Remove the count". The channel has 523 videos, the page lists 15 + 26 Shorts; no sync, no API.
+  - Also fix: the "Tzion Beslov" typo becomes "Tzion Breslov", and the articles' author in their hidden page data
+    becomes Tzion Breslov instead of Esti Wolo.
+  - Phone and WhatsApp: "Keep it out of GitHub". The repository is public, so the new number is in no commit, file or
+    pull request. **Deferred** to the contact-hiding feature, which keeps contact details from bots and stores them
+    only in the forms service's private settings; until then every page keeps "(+972) 54-671-3013".
+  - Wording the owner changes is listed, with the owner's words, in `tests/wording/owner-approved.json` (README →
+    Wording check); checkpoint-001's baseline stays as it is.
 
 ## Cloudflare state (2026-11-06)
 
@@ -158,6 +172,11 @@
     fallback in Chromium and compares every box (`expectGapFallbackLayout`, `e2e/helpers.ts`).
   - Found and left: the dialogs' backdrop and the Classes play overlay also rely on `inset`
     (`docs/superpowers/follow-ups.md`).
+- Owner edits (2026-11-08, one pull request): every footer's last line reads "© 2026 Tzion Breslov", with no credit or
+  link; the footer Quick Links are two columns (one where there is no room, 960px to just under 1280px), so the
+  footer is 377px tall at 1440 (was 486), 1004px at 768 (was 1208) and 1010px at 390 (was 1214); the Classes header
+  shows the handle alone, with no video count; the 18 articles name Tzion Breslov as author in their page data; the
+  theme stylesheet's header names no author. The new phone number and WhatsApp wait for the contact-hiding feature.
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,
