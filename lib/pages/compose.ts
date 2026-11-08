@@ -5,8 +5,8 @@ import { SITE_URL } from "@/lib/site-url";
 /**
  * A page composed in code (lib/pages/registry.ts) gets everything around its
  * main HTML from the imported Resources page: the stylesheets, theme scripts,
- * header, footer and skip links. Only its own title, description and URL
- * replace the Resources page's.
+ * header, footer and skip links. Only its own title, description, URL and
+ * share image replace the Resources page's.
  */
 
 export type ComposedPageDef = {
@@ -17,9 +17,13 @@ export type ComposedPageDef = {
   slug: string;
   main: string;
   islands: Island[];
+  /** The page's hero image (root-relative), shared as its og:image like the imported pages' heroes. Default: the Resources hero. */
+  image?: string;
 };
 
 const SITE_NAME = "Tzion Breslov";
+/** The Resources page's hero, which Classes and Articles open with (lib/pages/parts.ts resourcesHero). */
+const RESOURCES_HERO_IMAGE = "/wp-content/uploads/2023/06/resources.png";
 /** The Resources page's tabs initialiser (uag-js-28.js): new pages have no tabs. */
 const TABS_SCRIPT_ID = "uag-script-28-js";
 const PAGE_ID_CLASS = /\bpage-id-28\b/;
@@ -55,7 +59,11 @@ export function composePage(def: ComposedPageDef): PageContent {
     { t: "meta", attrs: { property: "og:title", content: title } },
     { t: "meta", attrs: { property: "og:description", content: def.description } },
     { t: "meta", attrs: { property: "og:url", content: url } },
-    { t: "meta", attrs: { property: "og:site_name", content: SITE_NAME } }
+    { t: "meta", attrs: { property: "og:site_name", content: SITE_NAME } },
+    // As every imported page has them (Yoast): its hero as the share image, a large-image card, the site's handle.
+    { t: "meta", attrs: { property: "og:image", content: `${SITE_URL}${def.image ?? RESOURCES_HERO_IMAGE}` } },
+    { t: "meta", attrs: { name: "twitter:card", content: "summary_large_image" } },
+    { t: "meta", attrs: { name: "twitter:site", content: "@tzionbreslov" } }
   ];
   // The new tags go where the Resources page's own ones began: its title, after robots, before the stylesheets.
   const at = template.head.findIndex(isResourcesOwn);

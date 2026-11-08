@@ -201,7 +201,8 @@ follow it.
   PowerShell 7 and Windows PowerShell 5.1.
 - The Cloudflare exports in steps 5, 6 and 9 read the Cloudflare API with a **read-only** token. Create it under
   dashboard → My Profile → API Tokens → Create Token → Custom token, for the zone tzionbreslov.org, with Zone · Single
-  Redirect · Read, Zone · Transform Rules · Read and Zone · DNS · Read.
+  Redirect · Read, Zone · Transform Rules · Read and Zone · DNS · Read. (9.6 adds the zone tzionbreslov.com: see
+  there.)
   - Keep it in the shell for the session only, typed without showing it:
     - bash: `read -rs CF_READ_TOKEN`
     - PowerShell 7: `$env:CF_READ_TOKEN = Read-Host -MaskInput`
@@ -210,8 +211,10 @@ follow it.
   - The exports land in `.tmp/switch-day/` (git-ignored). They hold no secrets: copy each one into the switch-day
     pull request.
   - Each export uses `curl -sS --fail`, so a refused request (e.g. a token without a permission) prints an error and
-    saves nothing. A `node -e` line after each export then checks that the saved file is the real export, not an
-    error body. **An export that fails its check is not an undo: fix the token and export again before going on.**
+    saves nothing. It also leaves an earlier file of the same name as it was, so each export first deletes its file
+    (a `node -e "require('fs').rmSync(…)"` line). A `node -e` line after each export then checks that the saved
+    file is the real export, not an error body or nothing. **An export that fails its check is not an undo: fix the
+    token and export again before going on.**
 
 #### 1. Pre-checks
 
@@ -290,6 +293,14 @@ from `rsvps`. *Owner's go-ahead.*
 
 *Owner's go-ahead.*
 
+**Before:** back up `.env.worker`, which 3.1 writes to. The undos below restore it, so that a later `--secrets-file`
+upload can't push a deleted webhook's secret or a revoked key. It holds secrets: it is copied, never printed.
+- Both shells: `node -e "require('fs').copyFileSync('.env.worker', '.env.worker.bak', require('fs').constants.COPYFILE_EXCL)"`
+- If it stops with `EEXIST`, a backup already exists, from an earlier try at this step. Keep it: it is the older,
+  clean copy.
+- `git check-ignore -v .env.worker.bak` must print `.gitignore:3:.env.*` and the file name: the backup is
+  git-ignored. Never commit it.
+
 1. `node scripts/setup-resend.mjs` (it uses the full-access key `RESEND_CONTACTS_API_KEY` in `.env.worker`, and
    re-running it reuses what exists). Expected output:
    - `domain tzionbreslov.org: verified (… DNS records → .tmp/resend-dns.json)`
@@ -301,9 +312,14 @@ from `rsvps`. *Owner's go-ahead.*
    - `RESEND_TRANSACTIONAL_API_KEY already set; left unchanged`
    - a last line where every value reads `=set`
 
-   Stop and tell the owner on any of these:
-   - **`webhook created` or `send-only key created`:** an unplanned live change. The undo is to delete that webhook,
-     or revoke that key, in Resend.
+   Stop and tell the owner on any of these. Either way, the script has already created the topic "Event
+   announcements" and written its `RESEND_EVENTS_TOPIC_ID` line to `.env.worker` (it does that before it looks at
+   the webhook and the key). **If you halt here, also apply this step's undo** (below) for the topic and its line;
+   skip its `secret delete`, since 3.2 hasn't run.
+   - **`webhook created` or `send-only key created`:** an unplanned live change, and the script has written its
+     signing secret (`RESEND_WEBHOOK_SECRET`) or key (`RESEND_TRANSACTIONAL_API_KEY`) into `.env.worker`. The undo:
+     delete that webhook, or revoke that key, in Resend, then restore `.env.worker` from the backup:
+     `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells).
    - **`webhook … already exists but its secret isn't in .env.worker — delete it in Resend (or ask Claude) and
      re-run.`:** `.env.worker` has lost `RESEND_WEBHOOK_SECRET`, which the live Worker still uses to check Resend's
      webhooks. Don't follow the message's advice on switch day: a new webhook means a new secret for the Worker. The
@@ -323,7 +339,10 @@ from `rsvps`. *Owner's go-ahead.*
   - **Once step 10 has run, people have confirmed that they want Event announcements.** Deleting the topic silently
     drops every one of those choices. After step 10, keep the topic unless the owner decides otherwise. If it must
     go, first save the list of its subscribers from Resend, so they can be asked again.
-- Remove the `RESEND_EVENTS_TOPIC_ID=` line from `.env.worker`.
+- Restore `.env.worker` from the backup made before 3.1:
+  `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells). That removes the
+  `RESEND_EVENTS_TOPIC_ID` line, and any webhook secret or key that 3.1 wrote. If `.env.worker` was changed on
+  purpose since 3.1 (e.g. a rotated key), remove the `RESEND_EVENTS_TOPIC_ID=` line by hand instead.
 
 #### 4. Worker deploy: RSVPs, announcements, Workers Logs
 
@@ -403,7 +422,9 @@ usual, and the line stops once the site is live (step 11).
      or sampling, instead.
 
 *Undo (the whole release):*
-1. **If step 10 ran, undo it first, and wait until that Deploy GitHub Pages run has finished.**
+1. **If step 10 ran, undo it first, wait until that Deploy GitHub Pages run has finished, then wait 10 more
+   minutes.** GitHub Pages serves the pages with `Cache-Control: max-age=600` (seen with `curl -sI` on 2026-11-08),
+   so a browser can keep showing the forms-on page for 10 minutes after the deploy.
    - Otherwise the site keeps sending `topics` to the old Worker. That Worker ignores them and confirms every signup
      into the Newsletter, and its rows get the default `topics_json` (`["newsletter"]`), which the DELETE below
      can't catch.
@@ -414,17 +435,30 @@ usual, and the line stops once the site is live (step 11).
    - Why the DELETE: the previous Worker confirms every signup into the Newsletter, so an events-only signup still
      pending (24 h) would land on a list its visitor never chose. Those visitors sign up again.
    - A pending signup for both lists keeps the Newsletter.
-4. Check the logging: dashboard → the Worker → Settings → Observability. Logging is a Worker setting, not part of
+4. **RSVPs: required whenever the table `rsvps` has rows.** The old Worker's daily clean-up never touches `rsvps`,
+   so they would stay forever, and the privacy notice ("deleted once the event is over") would be untrue.
+   - Count them: `npx wrangler d1 execute tzion-breslov-production --remote --json --command "SELECT COUNT(*) AS rsvps FROM rsvps;"`
+   - **If the count is above 0, run this every day** until the RSVP release is deployed again (from then on its own
+     daily clean-up does it):
+     `npx wrangler d1 execute tzion-breslov-production --remote --json --command "DELETE FROM rsvps WHERE event_ends_at < datetime('now');"`
+     - It must print `"success": true`. It is the release's own deletion: every RSVP whose event has ended, by the
+       end the RSVP stored (an event moved later loses its RSVPs at its old end; the organizer has them by email).
+     - Note each day's run, with its date and the count after it, in the switch-day pull request.
+   - **Only if the RSVP release won't come back**, undo step 2 instead: it drops the table and every RSVP in it, so
+     nothing is left to delete. Not while it may come back: applying 0002 again starts every event's count at zero,
+     so an event with an RSVP limit could be overbooked.
+5. Check the logging: dashboard → the Worker → Settings → Observability. Logging is a Worker setting, not part of
    the code, and Cloudflare's docs don't say whether a rollback restores it.
    - If it doesn't match what step 1.3 recorded, set it back by hand.
    - If step 1.3 found invocation logs on, keep them off unless the owner decides otherwise: they store request URLs
      and IPs.
-5. After that, undo steps 3 and 2 if wanted, in that order.
+6. After that, undo steps 3 and 2 if wanted, in that order (step 2's undo also ends the daily DELETE of 4).
 
-#### 5. Cloudflare "Tzion security headers" rule: the CSP
+#### 5. Cloudflare rule `tzion_security_headers`: the CSP
 
-*Changes:* the zone's response-header Transform Rule "Tzion security headers" (`tzion_security_headers`). Its
-`Content-Security-Policy-Report-Only` value becomes `CSP_REPORT_ONLY` from `config/security-headers.mjs`:
+*Changes:* the zone's response-header Transform Rule `tzion_security_headers` (its description, as PROJECT_MEMORY.md
+records it; 5.1's export confirms it). Its `Content-Security-Policy-Report-Only` value becomes `CSP_REPORT_ONLY`
+from `config/security-headers.mjs`:
 - frame-src **gains `https://www.google.com`** (the Contact page's map);
 - frame-src **loses `https://www.youtube.com`** (no plain YouTube embed remains; the Classes player uses
   youtube-nocookie);
@@ -433,15 +467,20 @@ usual, and the line stops once the site is live (step 11).
 While the header is report-only, browsers block nothing either way. *Owner's go-ahead.*
 
 1. **Export the rule first**, check the export, and copy the file into the pull request:
+   - Delete any earlier export first (both shells), so a failed export can't leave an old file that passes the check:
+     `node -e "require('fs').rmSync('.tmp/switch-day/transform-rules-before.json', { force: true })"`
    - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
    - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/transform-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_response_headers_transform/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
    - Check it (both shells):
      `node -e "const j = JSON.parse(require('fs').readFileSync('.tmp/switch-day/transform-rules-before.json', 'utf8')); console.log(j.success, j.result.rules.map(r => r.description))"`
-     must print `true` and a list that includes `'tzion_security_headers'`. A `curl: (22)` error, `false`, a
-     `TypeError` or a missing name means the export failed.
+     must print `true` and a list that includes `'tzion_security_headers'`. A `curl: (22)` error, an `ENOENT`
+     error, `false`, a `TypeError` or a missing name means the export failed.
+   - **That name is the rule to edit.** If the list holds no `'tzion_security_headers'` but another rule that sets
+     the security headers, stop: the live rule isn't the one PROJECT_MEMORY.md records, so find out why before
+     editing anything.
 2. Print the new value: `node -e "import('./config/security-headers.mjs').then(m => console.log(m.CSP_REPORT_ONLY))"`.
-3. Dashboard → tzionbreslov.org → Rules → Transform Rules → response header rules → edit "Tzion security headers" →
-   replace the value of `Content-Security-Policy-Report-Only` with that line → Save.
+3. Dashboard → tzionbreslov.org → Rules → Transform Rules → response header rules → edit
+   `tzion_security_headers` → replace the value of `Content-Security-Policy-Report-Only` with that line → Save.
 
 *Verify:* the rule already applies to .org's 302 today, so the new value shows at once:
 - bash: `curl -sI "https://tzionbreslov.org/" | grep -i "^content-security-policy"`
@@ -475,12 +514,14 @@ two hosts to its new home. *Owner's go-ahead.*
   302, this makes 4.
 
 1. **Export the redirect rules first**, check the export, and copy the file into the pull request:
+   - Delete any earlier export first (both shells):
+     `node -e "require('fs').rmSync('.tmp/switch-day/redirect-rules-before.json', { force: true })"`
    - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $CF_READ_TOKEN"`
    - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/redirect-rules-before.json "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/rulesets/phases/http_request_dynamic_redirect/entrypoint" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
    - Check it (both shells):
      `node -e "const j = JSON.parse(require('fs').readFileSync('.tmp/switch-day/redirect-rules-before.json', 'utf8')); console.log(j.success, j.result.rules.map(r => r.description))"`
-     must print `true` and a list that includes `'tzion_org_to_com_temporary'`. A `curl: (22)` error, `false`, a
-     `TypeError` or a missing name means the export failed.
+     must print `true` and a list that includes `'tzion_org_to_com_temporary'`. A `curl: (22)` error, an `ENOENT`
+     error, `false`, a `TypeError` or a missing name means the export failed.
 2. Create the rules in this order. For each: dashboard → tzionbreslov.org → Rules → Redirect Rules → Create rule →
    Custom filter expression → Edit expression. Then set: Static, the URL, status code **301**, Preserve query string
    off, Place at **Last**.
@@ -593,12 +634,15 @@ redirects to .com.
 
 **Before:** export the zone's DNS records (a BIND file) and check the export, and keep step 6's checked
 redirect-rule export, which holds the 302 rule. Copy both into the pull request.
+- Delete any earlier export first (both shells):
+  `node -e "require('fs').rmSync('.tmp/switch-day/dns-before.txt', { force: true })"`
 - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $CF_READ_TOKEN"`
 - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/dns-before.txt "https://api.cloudflare.com/client/v4/zones/a38137f548dead44f7178034ced45e15/dns_records/export" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
 - Check it (both shells):
   `node -e "const t = require('fs').readFileSync('.tmp/switch-day/dns-before.txt', 'utf8'); console.log(t.trim().startsWith('{') ? 'NOT A BIND FILE' : t.split('\n').filter(l => /\sIN\s+(A|AAAA|CNAME)\s/.test(l)).join('\n'))"`
   must list the site's records as BIND lines: the apex `A 192.0.2.1`, the apex `AAAA 100::` and the `www` CNAME. A
-  `curl: (22)` error, `NOT A BIND FILE` (a JSON error body) or no such lines means the export failed.
+  `curl: (22)` error, an `ENOENT` error, `NOT A BIND FILE` (a JSON error body) or no such lines means the export
+  failed.
 
 1. **Days before (owner account): verify the domain with GitHub**, so nobody else's Pages site can ever claim it.
    1. Owner profile → Settings → Pages → *Verified domains* → Add `tzionbreslov.org`.
@@ -630,11 +674,29 @@ redirect-rule export, which holds the 302 rule. Copy both into the pull request.
         for tzionbreslov.org with > 30 days left.
 5. **Privacy check at the edge, right after proxying:** run step 7 again, now with the HTML commands. Don't go on
    to step 10 until it passes, or until the owner's choice for each hit is done.
-6. **tzionbreslov.com, later, once its DNS is on Cloudflare (owner's word for each part).** Export .com's records
-   first, as for .org.
+6. **tzionbreslov.com, later, once its DNS is on Cloudflare (owner's word for each part).** First export .com's
+   records into a file of their own (`dns-before.txt` is .org's undo; never overwrite it), check the export, and
+   copy it into that part's pull request.
+   - The read-only token covers only the zone tzionbreslov.org. Edit it (My Profile → API Tokens) to add the zone
+     tzionbreslov.com with Zone · DNS · Read, or create a second token the same way. `<com-zone-id>` is the Zone ID
+     on .com's Overview page in the dashboard.
+   - Delete any earlier export first (both shells):
+     `node -e "require('fs').rmSync('.tmp/switch-day/dns-com-before.txt', { force: true })"`
+   - bash: `curl -sS --fail --create-dirs -o .tmp/switch-day/dns-com-before.txt "https://api.cloudflare.com/client/v4/zones/<com-zone-id>/dns_records/export" -H "Authorization: Bearer $CF_READ_TOKEN"`
+   - PowerShell: `curl.exe -sS --fail --create-dirs -o .tmp/switch-day/dns-com-before.txt "https://api.cloudflare.com/client/v4/zones/<com-zone-id>/dns_records/export" -H "Authorization: Bearer $env:CF_READ_TOKEN"`
+   - Check it (both shells):
+     `node -e "const t = require('fs').readFileSync('.tmp/switch-day/dns-com-before.txt', 'utf8'); console.log(t.trim().startsWith('{') ? 'NOT A BIND FILE' : t.split('\n').filter(l => /\sIN\s+(A|AAAA|CNAME|MX|TXT)\s/.test(l)).join('\n'))"`
+     must list .com's records as BIND lines: its web records (the apex and `www`, pointing at the WordPress host)
+     and its mail records (MX, TXT). A `curl: (22)` error, an `ENOENT` error, `NOT A BIND FILE` (a JSON error
+     body) or no such lines means the export failed.
    1. **A 302 first:** redirect every path to `https://tzionbreslov.org` + the same path, keeping its MX/TXT mail
       records. Browsers don't keep a 302, so this part can still be undone.
-      *Undo:* delete that rule, and .com serves WordPress again.
+      *Undo:* delete that rule, and .com serves WordPress again. **This holds only while .com's web records still
+      point at a WordPress host that still runs** (an open question below: what happens to the hosting).
+      - If the records changed since the export, first put them back from `dns-com-before.txt`.
+      - If that host no longer runs, deleting the rule leaves .com with nothing to serve. Keep the 302 until
+        WordPress runs again: restore the site from the WordPress backup to a host, point .com's web records at it,
+        and only then delete the rule.
    2. **A 301 once the move is stable:** when the owner decides nothing will be rolled back (e.g. after some weeks),
       change that rule's status to 301.
       - **From here on, go-live is one-way.** Browsers keep .com → .org for good, so re-creating .org's 302 → .com
@@ -647,13 +709,14 @@ redirect-rule export, which holds the 302 rule. Copy both into the pull request.
       3. Publish one SPF covering exactly those.
       4. Then tighten DMARC to `quarantine`/`reject`.
 
-      *Undo:* put back the exported records.
+      *Undo:* put back the records exported in `dns-com-before.txt`.
 
 *Verify:* step 11.
 
 *Undo, the forward steps in reverse.* **Only before 9.6.2:** once .com answers with a 301, there is no undo (see
 9.6.2).
-1. If 9.6.1 ran, delete .com's 302 first: with both redirects in place, .org → .com → .org would loop.
+1. If 9.6.1 ran, delete .com's 302 first (its undo, with its condition: a WordPress host that still runs): with
+   both redirects in place, .org → .com → .org would loop.
 2. If the forms are on, undo step 10 first.
 3. Switch the records to DNS-only. GitHub keeps serving the site.
 4. Re-create the 302 rule from the export with **Place at: First**, above step 6's three 301 rules. At "Last", the
@@ -753,7 +816,7 @@ pull request.
 
 ## Security headers
 
-`config/security-headers.mjs` is the source of truth; Cloudflare's Transform Rule "Tzion security headers" must match it.
+`config/security-headers.mjs` is the source of truth; Cloudflare's Transform Rule `tzion_security_headers` must match it.
 Any new third-party origin (e.g. PayPal) goes there first, then `npm run build && node scripts/check-csp.mjs` (serves
 `out/` with the headers enforced, visits every page and the interactive islands, fails on any violation), then the
 Cloudflare rule. The Contact page's map added `https://www.google.com` to frame-src; the Cloudflare rule gains it on

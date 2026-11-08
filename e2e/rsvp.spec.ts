@@ -11,6 +11,9 @@ import { expectClean, trackPageErrors } from "./helpers";
 //   here, so nothing leaves the machine; the enforced CSP still checks both
 //   origins before a stub answers.
 // - TZ_E2E_EVENTS=preview: built without them, as the github.io preview is.
+// The "Get event announcements" signup's live path (lib/client/announcements.ts) is tested
+// here too, on the first build, and so is what both show before their island is ready
+// and without JavaScript (Ruling R13).
 
 const API = "https://api.tzionbreslov.org";
 const TEXT = {
@@ -19,8 +22,15 @@ const TEXT = {
   closed: "RSVPs for this event have closed.",
   error: "Something went wrong sending your RSVP. Please try again.",
   consent: "I agree to the privacy notice and consent to this submission.",
-  unavailable: "RSVPs open when the new site launches. Until then, email us at tzionbreslovproject@gmail.com."
+  unavailable: "RSVPs open when the new site launches. Until then, email us at tzionbreslovproject@gmail.com.",
+  placesLeft: (n: number) => n === 1
+    ? "Sorry — only 1 place is left. Lower the number of guests, or email us at tzionbreslovproject@gmail.com."
+    : `Sorry — only ${n} places are left. Lower the number of guests, or email us at tzionbreslovproject@gmail.com.`,
+  rsvpByEmail: "To RSVP, email us at tzionbreslovproject@gmail.com.",
+  announcementsByEmail: "To get event announcements, email us at tzionbreslovproject@gmail.com.",
+  signedUp: "Almost there! Please check your inbox and click the link to confirm your subscription."
 };
+const EMAIL_LINK = "mailto:tzionbreslovproject@gmail.com";
 
 const card = (page: Page, id: string) => page.locator(`article.tz-event[data-event-id="${id}"]`);
 const rsvpButton = (page: Page, id: string) => card(page, id).getByRole("button", { name: "RSVP", exact: true });
@@ -56,8 +66,8 @@ async function openEvents(page: Page) {
   await page.waitForSelector("[data-tz-rsvp=ready]");
 }
 
-async function openRsvp(page: Page) {
-  await rsvpButton(page, FIXTURE_IDS.open).click();
+async function openRsvp(page: Page, id: string = FIXTURE_IDS.open) {
+  await rsvpButton(page, id).click();
   await expect(dialog(page)).toBeVisible();
 }
 
@@ -187,6 +197,40 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
+  test("a 409 EVENT_FULL for more guests than the places left says how many are left, asking availability again", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    // The count when the page opened (enough for 3), then what the Worker says after the 409.
+    const availability: Availability = { [FIXTURE_IDS.limited]: { full: false, remaining: 5 } };
+    await stubServices(page, availability, reply(409, { ok: false, error: "EVENT_FULL", correlationId: "x" }));
+    let asked = 0;
+    page.on("request", (request) => {
+      if (request.url() === `${API}/v1/rsvp/availability`) asked++;
+    });
+    await openEvents(page);
+    await expect.poll(() => asked).toBe(1);
+    await openRsvp(page, FIXTURE_IDS.limited);
+    await fillRsvp(page, "3");
+    const send = dialog(page).getByRole("button", { name: "Send RSVP" });
+    const alert = dialog(page).getByRole("alert");
+
+    availability[FIXTURE_IDS.limited] = { full: false, remaining: 2 };
+    await send.click();
+    await expect(alert).toHaveText(TEXT.placesLeft(2));
+    await expect(alert).toBeFocused();
+    await expect.poll(() => asked).toBe(2);
+
+    availability[FIXTURE_IDS.limited] = { full: false, remaining: 1 };
+    await send.click();
+    await expect(alert).toHaveText(TEXT.placesLeft(1));
+
+    // None left: the event is now full, as before.
+    availability[FIXTURE_IDS.limited] = { full: true, remaining: 0 };
+    await send.click();
+    await expect(alert).toHaveText(TEXT.full);
+    await expect(dialog(page).locator("form")).toHaveCount(1);
+    await expectClean(page, errors);
+  });
+
   test("a network error shows the error message and keeps the form for another try", async ({ page }) => {
     const errors = trackPageErrors(page);
     const posts = await stubServices(page, {}, (route) => route.abort("failed"));
@@ -303,5 +347,126 @@ test.describe("on the preview, without a forms API (TZ_E2E_EVENTS=preview)", () 
     await expect(dialog(page).locator("form")).toHaveCount(1);
     expect(outside).toEqual([]);
     await expectClean(page, errors);
+  });
+});
+
+const signup = (page: Page) => page.getByRole("region", { name: "Get event announcements" });
+
+test.describe("Get event announcements with the forms API (TZ_E2E_EVENTS=1)", () => {
+  test.skip(process.env.TZ_E2E_EVENTS !== "1", "needs the events fixture build (TZ_E2E_EVENTS=1, see scripts/fixtures/write-events-fixture.mjs)");
+
+  const choices = [
+    { lists: ["Event announcements"], topics: ["events"] },
+    { lists: ["Event announcements", "Newsletter"], topics: ["events", "newsletter"] }
+  ];
+  for (const { lists, topics } of choices) {
+    test(`ticking ${lists.join(" and ")} sends topics ${JSON.stringify(topics)}, then shows the signup's confirmation`, async ({ page }) => {
+      const errors = trackPageErrors(page);
+      await stubServices(page);
+      const posts: Array<Record<string, unknown>> = [];
+      await page.route(`${API}/v1/subscribe`, async (route) => {
+        if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
+        posts.push(route.request().postDataJSON() as Record<string, unknown>);
+        return reply(202, { ok: true, requestId: "r", confirmationRequired: true })(route);
+      });
+      await page.goto("/events/");
+      await page.waitForSelector("[data-tz-announcements=ready]");
+      const region = signup(page);
+      await region.getByLabel("Email", { exact: true }).fill("ada@example.com");
+      // "Event announcements" is ticked from the start.
+      await expect(region.getByRole("checkbox", { name: "Event announcements" })).toBeChecked();
+      if (lists.includes("Newsletter")) await region.getByRole("checkbox", { name: "Newsletter" }).check();
+      await region.getByRole("checkbox", { name: TEXT.consent }).check();
+      await region.getByRole("button", { name: "Sign up" }).click();
+
+      const done = region.getByRole("status");
+      await expect(done).toHaveText(TEXT.signedUp);
+      await expect(done).toBeFocused();
+      await expect(region.locator("form")).toHaveCount(0);
+      expect(posts).toHaveLength(1);
+      expect(posts[0].topics).toEqual(topics);
+      expect(posts[0]).toMatchObject({
+        email: "ada@example.com",
+        website: "",
+        "cf-turnstile-response": "test-token",
+        requestId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        startedAt: expect.any(Number),
+        submittedAt: expect.any(String)
+      });
+      await expectClean(page, errors);
+    });
+  }
+});
+
+// Ruling R13: no control may look usable but be dead. Before its island is ready an RSVP button
+// does nothing and the signup would post to the static host, so both keep their place but stay
+// hidden; without JavaScript they give way to a line offering email.
+test.describe("before the islands are ready, and without JavaScript", () => {
+  test.skip(!process.env.TZ_E2E_EVENTS, "needs an events fixture build (TZ_E2E_EVENTS=1 or preview)");
+
+  test("the RSVP buttons and the signup form stay hidden until their island is ready, without moving anything", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    const actions = card(page, FIXTURE_IDS.open).locator(".tz-event__actions");
+    const form = signup(page).locator("form");
+    // The open event's card, its RSVP slot and the signup form, measured from that card's top. (The card above,
+    // an event that has started, loses its button once the island runs, by design, and moves everything below.)
+    const boxes = () => page.evaluate((id) => {
+      const event = `article.tz-event[data-event-id="${id}"]`;
+      const top = document.querySelector(event)!.getBoundingClientRect().y;
+      const box = (selector: string) => {
+        const rect = document.querySelector(selector)!.getBoundingClientRect();
+        return { x: rect.x, y: rect.y - top, width: rect.width, height: rect.height };
+      };
+      return { card: box(event), actions: box(`${event} .tz-event__actions`), form: box(".tz-announce__form").y };
+    }, FIXTURE_IDS.open);
+
+    // Next's scripts never arrive (its stylesheet does): the page as it is before the islands start.
+    await page.route("**/_next/static/chunks/*.js", (route) => route.abort());
+    await page.goto("/events/");
+    await expect(actions).toBeHidden();
+    await expect(form).toBeHidden();
+    await expect(page.getByText(TEXT.rsvpByEmail).first()).toBeHidden();
+    await expect(page.getByText(TEXT.announcementsByEmail)).toBeHidden();
+    const before = await boxes();
+    expect(before.actions.height).toBeGreaterThan(40);
+
+    await page.unroute("**/_next/static/chunks/*.js");
+    await page.reload();
+    await page.waitForSelector("[data-tz-rsvp=ready]");
+    await page.waitForSelector("[data-tz-announcements=ready]");
+    await expect(actions.getByRole("button", { name: "RSVP", exact: true })).toBeVisible();
+    await expect(form).toBeVisible();
+    expect(await boxes()).toEqual(before);
+    await expectClean(page, errors);
+  });
+
+  test.describe("without JavaScript", () => {
+    test.use({ javaScriptEnabled: false });
+
+    test("each RSVP button and the signup form give way to a line offering email", async ({ page }) => {
+      const errors = trackPageErrors(page);
+      await page.goto("/events/");
+      for (const id of [FIXTURE_IDS.open, FIXTURE_IDS.limited, FIXTURE_IDS.started]) {
+        const event = card(page, id);
+        await expect(event.locator("button.tz-event__rsvp")).toHaveCount(1);
+        await expect(event.locator("button.tz-event__rsvp")).toBeHidden();
+        const note = event.locator(".tz-event__noscript");
+        await expect(note).toBeVisible();
+        await expect(note).toHaveText(TEXT.rsvpByEmail);
+        await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", EMAIL_LINK);
+      }
+      // "No RSVP": nothing to offer.
+      await expect(card(page, FIXTURE_IDS.noRsvp).locator(".tz-event__noscript, button")).toHaveCount(0);
+
+      const region = signup(page);
+      await expect(region.getByRole("heading", { name: "Get event announcements" })).toBeVisible();
+      await expect(region.locator("form")).toBeHidden();
+      const note = region.locator(".tz-announce__noscript");
+      await expect(note).toBeVisible();
+      await expect(note).toHaveText(TEXT.announcementsByEmail);
+      await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", EMAIL_LINK);
+      await expectClean(page, errors);
+    });
   });
 });

@@ -65,8 +65,8 @@
   (superseded in Task 7).
 - Site structure, Task 6 (2026-11-06): the Contact page has a Google map pinned on "Bet Shemesh, Israel" (owner) under
   the form and the three cards, with "Get directions" and "Open in Google Maps" links (`lib/pages/contact-map.ts`); the
-  rest of the page is unchanged. CSP frame-src now allows `https://www.google.com`: the Cloudflare rule "Tzion security
-  headers" must gain it on switch day (owner go-ahead).
+  rest of the page is unchanged. CSP frame-src now allows `https://www.google.com`: the Cloudflare rule
+  `tzion_security_headers` must gain it on switch day (owner go-ahead).
 - Site structure, Task 7 (2026-11-06): `/events/` (menu item before Gallery) lists the upcoming events of the Google
   Calendar, read at every deploy into `content/events.json` (Actions cache, never committed; git keeps the empty
   default, so until `GOOGLE_CALENDAR_ICAL_URL` is set it says "No events are currently scheduled"), and publishes them
@@ -153,8 +153,9 @@
     9. Donate: "Manage your monthly donation" → https://www.paypal.com/myaccount/autopay/ in a new tab.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
-- Worker: 34 tests pass; deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook
-  signature). A real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
+- Worker: 72 tests pass (`npm run test:worker`, the undeployed RSVP release included; 34 when it was first
+  deployed). Deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook signature). A
+  real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
 - Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
   (default opt-out); webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677; send-only key 82913060-a568-4518-8a2b-bef4f36255f5.
 - GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds around 07:00 and 21:00 Israel time);
@@ -197,6 +198,9 @@
     Settings → Observability). It was deployed on 2026-11-06 without an `observability` block, and Cloudflare turns
     Workers Logs on by default for new Workers, with invocation logs: request URLs (confirmation tokens included),
     headers and IPs. If so, turn invocation logs off before switch day (README → Switch day, step 1.3).
+14. **Rate limit on RSVP availability (after go-live):** the final review recommends a Cloudflare rate-limiting rule
+    on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 on every request.
+    Nothing is set up; the owner decides after go-live.
 
 ## Local reference setup notes
 

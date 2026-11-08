@@ -36,6 +36,7 @@ export function eventsPage(path: string): PageContent {
     slug: "events",
     main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading }) +
       renderEventsList(upcomingEvents(readEvents()), text, copy.rsvp) + renderAnnouncements(copy.announcements) + LARGE_SPACER),
-    islands: ["signup", "events"]
+    islands: ["signup", "events"],
+    image: HERO_IMAGE
   });
 }

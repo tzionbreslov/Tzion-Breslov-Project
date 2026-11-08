@@ -42,6 +42,7 @@ export function privacyPage(path: string): PageContent {
     description: text.description,
     slug: "privacy",
     main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.title }) + notice() + LARGE_SPACER),
-    islands: ["signup"]
+    islands: ["signup"],
+    image: HERO_IMAGE
   });
 }

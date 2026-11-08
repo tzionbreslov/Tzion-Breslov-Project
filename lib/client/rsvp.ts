@@ -83,6 +83,24 @@ function input(type: string, name: string, attrs: Partial<HTMLInputElement> = {}
 
 const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg>';
 
+/** GET /v1/rsvp/availability: which open events are full, and how many places remain. Null if it can't be read. */
+function readAvailability(apiBaseUrl: string, init: RequestInit = {}): Promise<RsvpAvailabilityResponse | null> {
+  return fetch(apiBaseUrl + API_PATHS.rsvpAvailability, { mode: "cors", credentials: "omit", headers: { Accept: "application/json" }, ...init })
+    .then((response) => (response.ok ? (response.json() as Promise<RsvpAvailabilityResponse>) : null))
+    .catch(() => null);
+}
+
+/**
+ * The answer to EVENT_FULL: "now full", unless places remain but fewer than
+ * `guests`, then how many. Asked again, past the browser's cache (the page's
+ * count can be minutes old); if that fails, it says the event is full.
+ */
+async function eventFullMessage(apiBaseUrl: string, eventId: string, guests: number) {
+  const remaining = (await readAvailability(apiBaseUrl, { cache: "no-store" }))?.events?.[eventId]?.remaining;
+  if (typeof remaining !== "number" || remaining <= 0 || remaining >= guests) return text.eventFull;
+  return remaining === 1 ? text.placeLeft : text.placesLeft.split("{remaining}").join(String(remaining));
+}
+
 type Control = HTMLInputElement | HTMLTextAreaElement;
 
 function openRsvp(card: HTMLElement, opener: HTMLButtonElement) {
@@ -253,7 +271,7 @@ function openRsvp(card: HTMLElement, opener: HTMLButtonElement) {
       if (target) {
         fieldError(...target);
         target[0].focus();
-      } else if (answer?.error === "EVENT_FULL") announce(text.eventFull);
+      } else if (answer?.error === "EVENT_FULL") announce(await eventFullMessage(apiBaseUrl, eventId, payload.guests));
       else if (answer?.error === "EVENT_CLOSED" || answer?.error === "EVENT_NOT_FOUND") announce(text.closed);
       else if (answer?.error === "RATE_LIMITED") announce(MESSAGES.rateLimited);
       else announce(text.error);
@@ -302,8 +320,7 @@ export function enhanceRsvp(root: ParentNode = document) {
   const controller = new AbortController();
   if (apiBaseUrl && cards.length) {
     // Counts only; an error leaves the buttons as they are (the Worker still enforces every limit).
-    fetch(apiBaseUrl + API_PATHS.rsvpAvailability, { mode: "cors", credentials: "omit", signal: controller.signal, headers: { Accept: "application/json" } })
-      .then((response) => (response.ok ? (response.json() as Promise<RsvpAvailabilityResponse>) : null))
+    readAvailability(apiBaseUrl, { signal: controller.signal })
       .then((availability) => {
         for (const card of cards) {
           if (availability?.events?.[card.dataset.eventId ?? ""]?.full === true) markFull(card);

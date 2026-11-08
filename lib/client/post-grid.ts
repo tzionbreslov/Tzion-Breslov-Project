@@ -1,8 +1,8 @@
 /**
  * Spectra post grids paginated through admin-ajax on WordPress, each grid
- * independently. Here every page of the listing is pre-rendered
- * (/resources/page/N/), so we fetch that page and swap in only the clicked
- * grid — same behaviour, no server.
+ * independently. Here every page of the listing is pre-rendered (the Articles
+ * page's /articles/page/N/), so we fetch that page and swap in only the
+ * clicked grid — same behaviour, no server.
  */
 
 const BLOCK_CLASS = /\buagb-block-[a-z0-9]+\b/;

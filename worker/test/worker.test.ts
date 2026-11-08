@@ -1062,6 +1062,24 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(0);
   });
 
+  it("cancels the feed's body when it gives up before reading it (status, content type, declared size)", async () => {
+    const answers: Array<[string, (body: ReadableStream) => Response]> = [
+      ["500", (body) => new Response(body, { status: 500 })],
+      ["HTML content type", (body) => new Response(body, { headers: { "Content-Type": "text/html" } })],
+      ["declared over 512 KB", (body) => new Response(body, { headers: { "Content-Type": "application/json", "Content-Length": "600000" } })]
+    ];
+    for (const [label, respond] of answers) {
+      vi.restoreAllMocks();
+      resetEventFeedCache();
+      let cancelled = false;
+      // A body that never ends unless it is cancelled.
+      const body = new ReadableStream({ pull: () => new Promise<void>(() => undefined), cancel: () => { cancelled = true; } });
+      mockProviders("rsvp", { feedResponse: () => respond(body) });
+      await expect(loadEventFeed(env), label).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE" });
+      await vi.waitFor(() => expect(cancelled, label).toBe(true), { timeout: 500 });
+    }
+  });
+
   it("gives up on a feed that doesn't answer within 10 s: 503 EVENTS_UNAVAILABLE", async () => {
     const asked = shortenTimeouts();
     const outbound = mockProviders("rsvp", { feedHangs: true });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Pixel-compares the WordPress reference (local Docker copy) with the Next export.
+// Pixel-compares a reference with the Next export: the local WordPress copy (Docker), or a checkpoint
+// build served by scripts/serve-out.mjs (`npm run baseline -- checkpoint-001`, AGENTS.md).
 //
 //   REF=http://localhost:8088 NEXT=http://localhost:3100 node scripts/visual-diff.mjs [--mask-nav] [/path/ ...]
 //

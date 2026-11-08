@@ -110,15 +110,18 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
       return { x: Math.round(box.x), left: box.x, right: box.right, y: box.y, w: box.width, h: box.height, natural: img.naturalWidth / img.naturalHeight, fit: getComputedStyle(img).objectFit, cellW: cell.width };
     })));
     const lefts = [...new Set(layout.map((box) => box.x))];
-    expect(lefts, `columns at ${width}px`).toHaveLength(columns);
+    // With fewer photos than columns (the owner may start with one or two), the first row is all there is.
+    const used = Math.min(columns, N);
+    expect(lefts, `columns at ${width}px`).toHaveLength(used);
     for (const box of layout) {
       // Whole: the box has the photo's own ratio and fills its cell's width (nothing cropped, nothing letterboxed).
       expect(Math.abs(box.w / box.h - box.natural), `ratio at ${width}px`).toBeLessThan(0.01);
       expect(["fill", "contain"]).toContain(box.fit);
       expect(Math.abs(box.w - box.cellW), `fills its cell at ${width}px`).toBeLessThan(1);
     }
-    if (columns > 1) expect(Math.round(layout[1].left - layout[0].right), `gap at ${width}px`).toBe(24);
-    else expect(Math.round(layout[1].y - (layout[0].y + layout[0].h)), `gap at ${width}px`).toBe(24);
+    // The gap between the first two photos: side by side in a row, or one above the other. One photo has no gap.
+    if (used > 1) expect(Math.round(layout[1].left - layout[0].right), `gap at ${width}px`).toBe(24);
+    else if (N > 1) expect(Math.round(layout[1].y - (layout[0].y + layout[0].h)), `gap at ${width}px`).toBe(24);
     if (columns === 1) {
       // On phones a photo is as wide as the theme's content box: no inset of our own on top of the theme's.
       const content = await page.locator(".entry-content").evaluate((node) => node.getBoundingClientRect());

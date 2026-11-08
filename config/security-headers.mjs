@@ -1,5 +1,5 @@
 // Response security headers for the public site. Cloudflare applies these at
-// the edge (zone Transform Rule "Tzion security headers"); scripts/serve-out.mjs
+// the edge (zone Transform Rule tzion_security_headers); scripts/serve-out.mjs
 // applies them locally and scripts/check-csp.mjs proves the CSP breaks nothing.
 // Keep this file and the Cloudflare rule in sync (README → Security headers).
 

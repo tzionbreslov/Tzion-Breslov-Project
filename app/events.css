@@ -74,6 +74,25 @@
 
 /* RSVP (lib/client/rsvp.ts): the button, or "This event is full". */
 .tz-events .tz-event__actions { margin-top: 24px; }
+
+/* Ruling R13: until its island is ready, an RSVP button does nothing and the
+ * signup would post to the static host. Both keep their place (nothing moves
+ * when they appear) but stay hidden; without JavaScript, lib/events.mjs's
+ * noscript styles take them out and a line offers email instead. */
+.tz-events .tz-events__list:not([data-tz-rsvp="ready"]) .tz-event__actions,
+.tz-events .tz-announce:not([data-tz-announcements="ready"]) .tz-announce__form { visibility: hidden; }
+.tz-events .tz-event__noscript,
+.tz-events .tz-announce__noscript { margin: 0; font-size: 16px; line-height: 1.6; color: #333; overflow-wrap: anywhere; }
+.tz-events .tz-event__noscript a,
+.tz-events .tz-announce__noscript a {
+  color: var(--wp--preset--color--dark-blue, #1e61a1);
+  font-weight: 600;
+  text-decoration: underline; text-underline-offset: 3px;
+}
+.tz-events .tz-event__noscript a:focus-visible,
+.tz-events .tz-announce__noscript a:focus-visible {
+  outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px; border-radius: 4px;
+}
 .tz-events .tz-event__full {
   margin: 0;
   font-size: 16px; font-weight: 700; line-height: 1.5;

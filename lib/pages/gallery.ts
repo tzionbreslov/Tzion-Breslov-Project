@@ -51,6 +51,7 @@ export function galleryPage(path: string): PageContent {
     description: text.description,
     slug: "gallery",
     main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading }) + grid(readImages()) + LARGE_SPACER),
-    islands: ["signup", "gallery"]
+    islands: ["signup", "gallery"],
+    image: HERO_IMAGE
   });
 }
