@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 // The photos the page renders, in gallery order: the list the build makes from
 // public/media/gallery (scripts/write-site-files.mjs), so adding or removing a
@@ -191,6 +191,25 @@ test("between 599 and 600px wide, one photo across still takes the whole content
     expect(layout, `${width}px`).toEqual({ viewport: width, columns: 1, left: true, width: true });
     await page.unroute("**/__gallery-frame/");
   }
+  await expectClean(page, errors);
+});
+
+// Safari before 14.1 has no flex gap: app/gallery.css then spaces the viewer's caption and "3 of 7" with a margin
+// (@supports not (inset: 0), which those browsers also lack). This browser has both, so the fallback's rules are
+// applied here unconditionally and must lay the caption bar out exactly as the gap does (e2e/helpers.ts).
+test("without flex gap, a margin spaces the viewer's caption and counter exactly as the gap does", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  const errors = trackPageErrors(page);
+  await openGallery(page);
+  // The first photo starts below the fold: bring it up first, so the theme's header switch can't move it mid-click.
+  await scrollIntoViewAndSettle(items(page).first());
+  await items(page).first().click();
+  await expectPhoto(page, 1);
+  await expectGapFallbackLayout(page, {
+    containers: [".tz-gallery-viewer__text"],
+    targets: { contents: [".tz-gallery-viewer__bar"], boxes: [".tz-gallery-viewer__stage"] },
+    widths: [320, 390, 767, 768, 1024, 1440]
+  });
   await expectClean(page, errors);
 });
 

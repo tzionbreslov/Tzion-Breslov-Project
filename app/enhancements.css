@@ -153,6 +153,24 @@ html.tz-lightbox-open { overflow: hidden; }
   .tz-donate__tier, .tz-donate__submit, .tz-donate__form .tz-donate__manage { transition: none; }
 }
 
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, margins space the subscription notices' parts
+ * (the prompt's text and buttons wrap: 6px 8px round each, the row pulled out by as much), each
+ * frequency's radio and the other amount's "$" exactly as the gaps do elsewhere (e2e/donate.spec.ts
+ * and e2e/subscription-notice.spec.ts apply these rules and compare). The tiers and the Name and
+ * Email row are grids, which that Safari spaces. Every selector outranks the theme's. */
+@supports not (inset: 0) {
+  .tz-notice,
+  .tz-notice .tz-notice__body,
+  .tz-donate__form .tz-donate__freq,
+  .tz-donate__form .tz-donate__custom { gap: 0; }
+  .tz-notice > button { margin-left: 16px; }
+  .tz-notice .tz-notice__body { margin: -6px -8px; }
+  .tz-notice .tz-notice__body > * { margin: 6px 8px; }
+  .tz-donate__form .tz-donate__freq input[type="radio"] { margin-right: 16px; }
+  .tz-donate__form .tz-donate__custom > span { margin-right: 6px; }
+}
+
 /* Article header ("Breeze of Breslov", the 18 Parasha posts only): show the whole
  * sky picture so the heart-shaped cloud is fully visible. The banner takes the
  * picture's own proportions (1920x739) and never goes below its original 400px;

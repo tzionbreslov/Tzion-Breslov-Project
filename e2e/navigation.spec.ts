@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, trackPageErrors } from "./helpers";
 
 // The header menus and footer Quick Links (lib/navigation.mjs, lib/client/menu.ts, app/navigation.css).
 const desktopParent = (page: Page) => page.locator("#menu-item-33");
@@ -325,6 +325,31 @@ test.describe("mobile menu", () => {
     await expect(page.locator("#menu-item-342")).toHaveClass(/\bcurrent-menu-ancestor\b/);
     await expectClean(page, errors);
   });
+});
+
+// Safari before 14.1 has no flex gap: app/navigation.css then spaces the Resources toggle's caret from its label with
+// a margin (@supports not (inset: 0), which those browsers also lack). This browser has both, so the fallback's rules
+// are applied here unconditionally and must lay the toggles out exactly as the gap does (e2e/helpers.ts). The caret
+// is a ::after, which has no box of its own to read: each toggle is sized to its content (in both layouts), so its
+// width says where the caret ends.
+test("without flex gap, a margin spaces the Resources toggle's caret exactly as the gap does", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  const errors = trackPageErrors(page);
+  await page.goto("/");
+  await menusReady(page);
+  await page.addStyleTag({ content: ".tz-menu-parent > .tz-submenu-toggle { width: max-content !important; }" });
+  await expectGapFallbackLayout(page, {
+    containers: ["#menu-item-33 > .tz-submenu-toggle", "#menu-item-342 > .tz-submenu-toggle"],
+    targets: { contents: ["#menu-item-33 > .tz-submenu-toggle", "#menu-item-342 > .tz-submenu-toggle"], boxes: ["#menu-main-menu-links > li", "#menu-mobile-menu > li"] },
+    widths: [390, 768, 1279, 1280, 1339, 1340, 1919, 1920],
+    // Below 1280px the menu is the slide-out one: open it, so its toggle has a box.
+    prepare: async (width) => {
+      if (width >= 1280 || await page.locator(".site-container.mobile-nav-active").count()) return;
+      await page.locator("button.menu-toggle").click();
+      await expect(mobileToggle(page)).toBeInViewport();
+    }
+  });
+  await expectClean(page, errors);
 });
 
 test.describe("without JavaScript", () => {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, gapFallbackRules, trackPageErrors } from "./helpers";
 
 // The map on the Contact page (lib/pages/contact-map.ts): pinned on Bet Shemesh, Israel (owner).
 const EMBED = "https://www.google.com/maps?q=Bet%20Shemesh%2C%20Israel&z=13&output=embed";
@@ -148,25 +148,7 @@ test("without flex gap the margins space the map card and its buttons exactly as
   const errors = trackPageErrors(page);
   await stubMap(page);
   await openContact(page);
-  const fallback = await page.evaluate(() => {
-    if (!CSS.supports("inset: 0") || !CSS.supports("gap: 1px")) return null;
-    const rules: string[] = [];
-    const walk = (list: CSSRuleList, inside: boolean) => {
-      for (const rule of list) {
-        if (rule instanceof CSSSupportsRule) walk(rule.cssRules, rule.conditionText.replace(/\s+/g, "") === "not(inset:0)");
-        else if (rule instanceof CSSMediaRule) {
-          const inner: string[] = [];
-          for (const child of rule.cssRules) if (inside) inner.push(child.cssText);
-          if (inner.length) rules.push(`@media ${rule.conditionText} { ${inner.join(" ")} }`);
-          else walk(rule.cssRules, inside);
-        } else if (inside) rules.push(rule.cssText);
-      }
-    };
-    for (const sheet of document.styleSheets) {
-      try { walk(sheet.cssRules, false); } catch { /* another origin's sheet */ }
-    }
-    return rules.join("\n");
-  });
+  const fallback = await gapFallbackRules(page);
   expect(fallback, "the fallback's rules (and a browser with inset and gap)").toBeTruthy();
   expect(fallback).toContain(".tz-map");
 

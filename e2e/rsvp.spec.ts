@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { FIXTURE_IDS } from "../scripts/fixtures/write-events-fixture.mjs";
-import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
+import { expectClean, expectGapFallbackLayout, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 // RSVPs on the Events page (lib/events.mjs, lib/client/rsvp.ts) against the
 // fixture build (scripts/fixtures/write-events-fixture.mjs: an event that
@@ -593,6 +593,38 @@ test.describe("the cards, in either fixture build", () => {
     await expect(card(page, FIXTURE_IDS.open).getByRole("button")).toHaveCount(0);
     // The next event, a day later, still takes RSVPs.
     await expect(rsvpButton(page, FIXTURE_IDS.limited)).toBeVisible();
+    await expectClean(page, errors);
+  });
+
+  // Safari before 14.1 has no flex gap: app/events.css then spaces each card's calendar and place icons from their
+  // text, and the RSVP form's consent checkbox from its label, with margins (@supports not (inset: 0), which those
+  // browsers also lack). This browser has both, so the fallback's rules are applied here unconditionally and must lay
+  // everything out exactly as the gaps do (e2e/helpers.ts; the signup form: e2e/events.spec.ts).
+  const GAP_WIDTHS = [320, 390, 600, 601, 768, 1024, 1440];
+  test("without flex gap, margins space the cards' icons exactly as the gaps do", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await openEvents(page);
+    await expectGapFallbackLayout(page, {
+      containers: [".tz-event__when", ".tz-event__where"],
+      targets: { contents: [".tz-event__when", ".tz-event__where"], boxes: ["article.tz-event", ".tz-event__summary", ".tz-event__actions"] },
+      widths: GAP_WIDTHS
+    });
+    await expectClean(page, errors);
+  });
+
+  test("without flex gap, a margin spaces the RSVP form's consent checkbox exactly as the gap does", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await openEvents(page);
+    await openRsvp(page);
+    await expectGapFallbackLayout(page, {
+      containers: [".tz-rsvp-dialog .tz-check"],
+      targets: { contents: [".tz-rsvp-dialog .tz-check"], boxes: [".tz-rsvp-dialog", ".tz-rsvp__form > *"] },
+      widths: GAP_WIDTHS
+    });
     await expectClean(page, errors);
   });
 

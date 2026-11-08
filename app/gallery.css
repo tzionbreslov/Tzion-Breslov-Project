@@ -103,6 +103,14 @@
   .tz-gallery-viewer .tz-gallery-viewer__counter { font-size: 12px; }
 }
 
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, a margin spaces the caption and the counter
+ * exactly as the gap does elsewhere (e2e/gallery.spec.ts applies it and compares). */
+@supports not (inset: 0) {
+  .tz-gallery-viewer .tz-gallery-viewer__text { gap: 0; }
+  .tz-gallery-viewer .tz-gallery-viewer__counter { margin-top: 2px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tz-gallery .tz-gallery__item, .tz-gallery-viewer .tz-gallery-viewer__img, .tz-gallery-viewer .tz-gallery-viewer__nav { transition: none; }
   .tz-gallery .tz-gallery__item:hover { transform: none; }
