@@ -201,6 +201,67 @@ function shortenTimeouts() {
   return asked;
 }
 
+/**
+ * Moves the clock instead of waiting: every wait of up to 4 s that the Worker asks setTimeout for passes at
+ * once, and Date.now() jumps ahead by its length. So a request that waits 30 s for an RSVP row to turn stale
+ * runs in milliseconds, its clock reading as it would. Returns the waits asked for (ms), in order.
+ */
+function fastForwardWaits() {
+  const waits: number[] = [];
+  let ahead = 0;
+  const realNow = Date.now.bind(Date);
+  const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+  vi.spyOn(Date, "now").mockImplementation(() => realNow() + ahead);
+  vi.spyOn(globalThis, "setTimeout").mockImplementation(((handler: () => void, ms?: number) => {
+    if (typeof ms !== "number" || ms <= 0 || ms > 4_000) return realSetTimeout(handler, ms);
+    waits.push(ms);
+    ahead += ms;
+    return realSetTimeout(handler, 0);
+  }) as typeof setTimeout);
+  return waits;
+}
+
+/**
+ * The tests' D1, counting the queries Cloudflare counts against "Queries per Worker invocation" (50 on Workers
+ * Free): each statement run on its own (first, run, all, raw) is one, and a batch is one, however many
+ * statements it holds. `queries` lists them in order (a statement's SQL, or "batch").
+ */
+function countingDb() {
+  const queries: string[] = [];
+  const unwrapped = new WeakMap<object, D1PreparedStatement>();
+  const runs = new Set<PropertyKey>(["first", "run", "all", "raw"]);
+  const statement = (target: D1PreparedStatement, sql: string): D1PreparedStatement => {
+    const proxy = new Proxy(target, {
+      get(inner, property) {
+        if (property === "bind") return (...values: unknown[]) => statement(inner.bind(...values), sql);
+        const value: unknown = Reflect.get(inner, property, inner);
+        if (typeof value !== "function") return value;
+        if (!runs.has(property)) return value.bind(inner);
+        return (...args: unknown[]) => {
+          queries.push(sql);
+          return value.apply(inner, args);
+        };
+      }
+    });
+    unwrapped.set(proxy, target);
+    return proxy;
+  };
+  const db = new Proxy(env.DB, {
+    get(target, property) {
+      if (property === "prepare") return (sql: string) => statement(target.prepare(sql), sql);
+      if (property === "batch") {
+        return (statements: D1PreparedStatement[]) => {
+          queries.push("batch");
+          return target.batch(statements.map((each) => unwrapped.get(each) ?? each));
+        };
+      }
+      const value = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    }
+  });
+  return { db, queries };
+}
+
 async function errorBody(response: Response) {
   return response.json<{ ok: boolean; error: string; correlationId: string; field?: string; remaining?: number }>();
 }
@@ -1079,17 +1140,18 @@ describe("POST /v1/rsvp", () => {
 
   /**
    * Books an RSVP, then leaves its row as an attempt that stopped between taking the seats and confirming them
-   * would: unconfirmed, taken `ageMs` ago.
+   * would: unconfirmed, taken `ageMs` ago (at `heldSince`).
    */
   async function cutOffRsvp(ageMs: number) {
     const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
     mockProviders("rsvp");
     const { confirmationId } = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+    const heldSince = Date.now() - ageMs;
     await env.DB.prepare("UPDATE rsvps SET confirmed_at = NULL, created_at = ? WHERE request_id = ?")
-      .bind(Date.now() - ageMs, payload.requestId).run();
+      .bind(heldSince, payload.requestId).run();
     vi.restoreAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    return { payload, confirmationId };
+    return { payload, confirmationId, heldSince };
   }
 
   it("re-books an RSVP whose first attempt was cut off (its row over 30 s old) at the site's retry, with the same emails' keys", async () => {
@@ -1108,19 +1170,44 @@ describe("POST /v1/rsvp", () => {
   });
 
   it("a retry that finds a cut-off attempt's row still under 30 s old waits for it to turn stale, then re-books it in the same call", async () => {
-    const { payload, confirmationId } = await cutOffRsvp(29_400);
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(29_400);
     const outbound = mockProviders("rsvp");
-    const started = Date.now();
     const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
     // Not REQUEST_IN_PROGRESS, which would cost the visitor another try (and one of the email's 6 per 10 minutes).
     expect(retried.status).toBe(202);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(500);
     await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
     expect(await count("rsvps")).toBe(1);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
-    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    // Booked again once the row was stale (30 s after it was taken), not before: it waited, however long the setup took.
+    const row = await rsvpRow(payload.requestId);
+    expect(row?.confirmed_at).toEqual(expect.any(Number));
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
     expect(outbound.turnstile()).toHaveLength(1);
     expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("a retry that waits the full 30 s for a cut-off attempt's row makes at most 20 D1 queries (Workers Free allows 50)", async () => {
+    // The row was taken just now and never confirmed: the retry waits the whole 30 s for it to turn stale.
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(0);
+    // The feed is read again too (the longest path).
+    resetEventFeedCache();
+    const outbound = mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    const { db, queries } = countingDb();
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // 2 rate limits, the waiting reads, 1 more read and the booking batch, then the confirmation: 17 today.
+    expect(queries.length).toBeLessThanOrEqual(20);
+    // Turnstile, the feed, the guest's email and the organizer's: the other subrequests.
+    expect(outbound.calls).toHaveLength(4);
+    // Booked again once stale, no sooner: 200 ms, doubling up to 4 s, the last wait cut to the moment it turns stale.
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, confirmed_at: expect.any(Number) });
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
+    expect(waits.slice(0, -1)).toEqual([200, 400, 800, 1_600, 3_200, 4_000, 4_000, 4_000, 4_000, 4_000]);
+    expect(waits.at(-1)).toBeLessThan(4_000);
+    expect(await count("rsvps")).toBe(1);
   });
 
   it("finishes the emails and the confirmation under waitUntil, so a visitor who disconnects can't leave the seats held unconfirmed", async () => {

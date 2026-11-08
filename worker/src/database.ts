@@ -150,8 +150,18 @@ const RSVP_FOR_REQUEST = "SELECT id, event_id, email_hash, created_at, confirmed
  * one call, well inside the token's 5 minutes and the email's rate limit.
  */
 const PENDING_STALE_MS = 30_000;
-/** How often a request looks again while another attempt with its requestId is emailing the guest. */
+/**
+ * How a request waits while another attempt with its requestId is emailing the guest (confirmedRsvp). It reads
+ * the row again after 200 ms, and each wait after that doubles, up to PENDING_POLL_MAX_MS: reads at 0, 0.2, 0.6,
+ * 1.4, 3 and 6.2 s, then every 4 s. No wait runs past the moment the row turns stale, or past the request's own
+ * deadline, so a retry books a stale row as soon as it can. A confirmed or given-back row is noticed within one
+ * wait: an attempt that finishes its emails within 2 s of the first read is seen at 3 s at the latest. A full
+ * 30 s wait reads the row 12 times (a read every 200 ms made about 150). Each read is a D1 query, and Workers
+ * Free allows 50 per invocation (D1 limits, "Queries per Worker invocation"), so the wait works on any plan.
+ */
 const PENDING_POLL_MS = 200;
+/** The longest wait between two reads of a pending row (PENDING_POLL_MS). */
+const PENDING_POLL_MAX_MS = 4_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -167,21 +177,24 @@ function sameRequest(row: RsvpRequestRow | null, eventId: string, emailHash: str
  * none to answer: never made, given back by its attempt, or left unconfirmed
  * by an attempt that stopped (PENDING_STALE_MS; reserveRsvp books it again).
  * While another attempt is still emailing the guest, it waits for that
- * attempt's outcome, at most `waitMs`: by default as long as the row can be
- * pending, so it never gives up before the row turns stale. Only a shorter
+ * attempt's outcome, reading the row again after waits that grow from 200 ms
+ * to 4 s (PENDING_POLL_MS), at most `waitMs`: by default as long as the row can
+ * be pending, so it never gives up before the row turns stale. Only a shorter
  * wait (the tests), or another isolate's clock running ahead of this one,
  * answers REQUEST_IN_PROGRESS (retry with the same requestId). A row for
  * another event or email is REQUEST_ID_CONFLICT.
  */
 export async function confirmedRsvp(env: Env, requestId: string, eventId: string, emailHash: string, waitMs = PENDING_STALE_MS) {
   const deadline = Date.now() + waitMs;
-  for (;;) {
+  for (let wait = PENDING_POLL_MS; ; wait = Math.min(wait * 2, PENDING_POLL_MAX_MS)) {
     const row = sameRequest(await env.DB.prepare(RSVP_FOR_REQUEST).bind(requestId).first<RsvpRequestRow>(), eventId, emailHash);
     if (!row) return null;
     if (row.confirmed_at !== null) return row.id;
-    if (row.created_at < Date.now() - PENDING_STALE_MS) return null;
-    if (Date.now() >= deadline) throw new PublicError("REQUEST_IN_PROGRESS");
-    await sleep(PENDING_POLL_MS);
+    const now = Date.now();
+    if (row.created_at < now - PENDING_STALE_MS) return null;
+    if (now >= deadline) throw new PublicError("REQUEST_IN_PROGRESS");
+    // Wake no later than the first millisecond the row counts as stale (the check above is strict), or the deadline.
+    await sleep(Math.min(wait, row.created_at + PENDING_STALE_MS + 1 - now, deadline - now));
   }
 }
 
