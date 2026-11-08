@@ -80,7 +80,16 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   holds the seats unconfirmed until the event ends, and nobody is emailed about it, unless the visitor retries the
   same submission (same requestId), which books it again. Before Group 6 such a row also kept its seats.
 - **The timing values are the implementer's, not rulings:** each Resend call gives up after 10 s; a row unconfirmed
-  for 30 s counts as stopped, and a retry waits up to that long for it; a waiting request looks every 200 ms.
+  for 30 s counts as stopped, and a retry waits up to that long for it. (How often a waiting request reads the row
+  is the controller's ruling: after 200 ms, then after waits that double up to 4 s, never past the moment the row
+  turns stale. A full 30 s wait is 12 D1 reads.)
+- **Only a chain of stopped attempts can take one RSVP request past 50 D1 queries** (the Workers Free limit per
+  invocation). A retry that waits the full 30 s for one stopped attempt makes 17 (`worker/test/worker.test.ts` pins
+  it at 20 or fewer). The check before the reservation and each of its 3 rounds wait afresh, though, for a row that
+  another attempt with the same requestId took between two of this request's queries. If three such attempts each
+  win that race and then stop too, the request reaches 54 queries, and on Workers Free the 51st fails (a 500; the
+  site's retry then books the stale row). Left because the fix, one wait shared by the whole request, changes more
+  than the poll, which was the ruling's scope; it is the controller's call.
 - **A confirmation that fails after the guest's email** (D1, logged `RSVP_CONFIRM_FAILED`) leaves the booking
   standing but unconfirmed. The organizer is still emailed and the visitor gets the success answer. A replay of that
   requestId waits until the row is 30 s old, then books it again with the same email keys (no second copy).
