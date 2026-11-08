@@ -11,6 +11,23 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Checks and tests
 
+- **Known gaps in the export guard, not exposed today** (`scripts/lib/export-guard.mjs`, found in PR #29):
+  - host matching is case-sensitive, so `https://TzionBreslov.com/about/` passes: the content spells the domain only
+    in lowercase, and `resolveSiteUrl` lowercases the site URL;
+  - unquoted attributes (`href=/about/`) aren't read: React and the imported HTML quote every attribute, and none is
+    unquoted in `content/` or `out/`;
+  - a single-quoted canonical isn't checked: Next's metadata writes the canonical, always double-quoted;
+  - a single-quoted bare `/` under the base path isn't caught: the export has no single-quoted `href`/`src` at all;
+  - the `out/**/*.txt` RSC payloads aren't walked: PR #29 measured them, and none links anywhere the page's HTML
+    doesn't (default, .org and events-fixture builds);
+  - `{"href":"…"}` props in the flight data aren't read: they belong to server-rendered elements, so the same link is
+    always in the HTML too;
+  - a URL in prose ending in `.`, `,` or `)` (`https://tzionbreslov.com/about.`) isn't read as a removed page:
+    reading prose URLs needs a tokenizer, and the export has no such URL today;
+  - an absolute site URL with an apostrophe (`https://tzionbreslov.com/video's-page`) is read by the text scan up to
+    the `'` and fails as `/video`: this fails safe, and the text scan needs that cut-off for single-quoted attributes;
+  - after the switch, an old-domain link outside an Events card gives two messages (the text one and the link one):
+    noise only, since the deploy fails either way.
 - **Flaky browser test** `e2e/classes.spec.ts:71` [desktop], "Oldest and Most popular reorder the videos".
   - `aria-pressed` stayed "false" once in CI: PR #26, run 42426373302, attempt 1.
   - It passed on re-run, in the push run and locally. Root cause not investigated.
