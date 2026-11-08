@@ -51,7 +51,7 @@ export async function cspViolations(page: Page): Promise<string[]> {
  * first scroll event at 100 px or more, one frame after the scroll, and everything under it moves
  * up by the header's height (89 px). When a click's own scroll crosses 100 px, that jump can land
  * between its mousedown and its mouseup: the click then goes to a common ancestor, not the
- * target, and does nothing (e2e/classes.spec.ts flaked this way in CI).
+ * target, and does nothing (e2e/classes.spec.ts and e2e/rsvp.spec.ts flaked this way in CI).
  */
 export async function scrollIntoViewAndSettle(target: Locator): Promise<void> {
   await target.scrollIntoViewIfNeeded();
