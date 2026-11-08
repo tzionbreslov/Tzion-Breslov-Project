@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
-import { cancelRsvp, confirmRsvp, confirmedRsvp, reserveRsvp, rsvpConfirmationId } from "../src/database";
+import { cancelRsvp, confirmRsvp, confirmedRsvp, reserveRsvp, rsvpConfirmationId, rsvpWait } from "../src/database";
 import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
 import worker, { fetchHandler } from "../src/index";
 import type { RsvpInput } from "../src/validation";
@@ -204,7 +204,9 @@ function shortenTimeouts() {
 /**
  * Moves the clock instead of waiting: every wait of up to 4 s that the Worker asks setTimeout for passes at
  * once, and Date.now() jumps ahead by its length. So a request that waits 30 s for an RSVP row to turn stale
- * runs in milliseconds, its clock reading as it would. Returns the waits asked for (ms), in order.
+ * runs in milliseconds, its clock reading as it would. Returns the waits asked for (ms), in order. It skips
+ * ahead through any setTimeout of 4 s or less while the test runs, not only the RSVP wait's: if the Worker
+ * ever waits on something else that short on the same path, that is skipped too.
  */
 function fastForwardWaits() {
   const waits: number[] = [];
@@ -224,9 +226,10 @@ function fastForwardWaits() {
 /**
  * The tests' D1, counting the queries Cloudflare counts against "Queries per Worker invocation" (50 on Workers
  * Free): each statement run on its own (first, run, all, raw) is one, and a batch is one, however many
- * statements it holds. `queries` lists them in order (a statement's SQL, or "batch").
+ * statements it holds. `queries` lists them in order (a statement's SQL, or "batch"). `before` runs ahead of
+ * each one (given its SQL, or "batch"), uncounted: what other attempts do to the database in the meantime.
  */
-function countingDb() {
+function countingDb(before?: (query: string) => Promise<void>) {
   const queries: string[] = [];
   const unwrapped = new WeakMap<object, D1PreparedStatement>();
   const runs = new Set<PropertyKey>(["first", "run", "all", "raw"]);
@@ -237,7 +240,8 @@ function countingDb() {
         const value: unknown = Reflect.get(inner, property, inner);
         if (typeof value !== "function") return value;
         if (!runs.has(property)) return value.bind(inner);
-        return (...args: unknown[]) => {
+        return async (...args: unknown[]) => {
+          await before?.(sql);
           queries.push(sql);
           return value.apply(inner, args);
         };
@@ -250,7 +254,8 @@ function countingDb() {
     get(target, property) {
       if (property === "prepare") return (sql: string) => statement(target.prepare(sql), sql);
       if (property === "batch") {
-        return (statements: D1PreparedStatement[]) => {
+        return async (statements: D1PreparedStatement[]) => {
+          await before?.("batch");
           queries.push("batch");
           return target.batch(statements.map((each) => unwrapped.get(each) ?? each));
         };
@@ -1210,6 +1215,49 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(1);
   });
 
+  it("one RSVP request waits 30 s at most in all and makes at most 22 D1 queries, however other attempts with its requestId race it", async () => {
+    // The first attempt's row, taken just now: it gives the seats back 10 s later (its guest email timed out).
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(0);
+    const row = (await rsvpRow(payload.requestId))!;
+    resetEventFeedCache();
+    mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    // Then two more attempts, each taking the seats just before this request's booking batch: the first gives them
+    // back 10 s later too, the second stops (it never confirms them or gives them back).
+    const others: Array<number | null> = [10_000, null];
+    let holder: { since: number; givesBackAfter: number | null } | null = { since: heldSince, givesBackAfter: 10_000 };
+    const { db, queries } = countingDb(async (query) => {
+      if (holder && holder.givesBackAfter !== null && Date.now() >= holder.since + holder.givesBackAfter) {
+        await env.DB.prepare("DELETE FROM rsvps WHERE request_id = ?").bind(payload.requestId).run();
+        holder = null;
+      }
+      if (query === "batch" && others.length) {
+        holder = { since: Date.now(), givesBackAfter: others.shift() as number | null };
+        await env.DB.prepare(
+          `INSERT INTO rsvps
+            (id, request_id, event_id, event_starts_at, event_ends_at, name, email, email_hash, guests, accessibility, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        ).bind(row.id, row.request_id, row.event_id, row.event_starts_at, row.event_ends_at, row.name, row.email, row.email_hash,
+          row.guests, row.accessibility, holder.since).run();
+      }
+    });
+    const response = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    // 2 rate limits, the waits' reads (each round goes on from the time and backoff the last one left), 2 batches.
+    expect(queries.length).toBeLessThanOrEqual(22);
+    // One 30 s deadline for the whole request. The last attempt took its row 22 s into it, so that row only turns
+    // stale after the deadline: this request answers REQUEST_IN_PROGRESS.
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(30_000);
+    expect(response.status).toBe(409);
+    expect((await errorBody(response)).error).toBe("REQUEST_IN_PROGRESS");
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toBeNull();
+    // The site keeps the requestId and token on that answer: its retry books the stopped attempt's row once stale.
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    expect(await count("rsvps")).toBe(1);
+  });
+
   it("finishes the emails and the confirmation under waitUntil, so a visitor who disconnects can't leave the seats held unconfirmed", async () => {
     const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
     const guest = holdFirstGuestEmail(payload.email);
@@ -1291,9 +1339,9 @@ describe("POST /v1/rsvp", () => {
     // Taken, not yet confirmed (its attempt is still on the guest's email).
     expect((await reserveRsvp(env, input, event, "hash")).created).toBe(true);
     const started = Date.now();
-    await expect(confirmedRsvp(env, input.requestId, event.id, "hash", 300)).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    await expect(confirmedRsvp(env, input.requestId, event.id, "hash", rsvpWait(300))).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
     expect(Date.now() - started).toBeGreaterThanOrEqual(250);
-    await expect(reserveRsvp(env, input, event, "hash", 300)).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    await expect(reserveRsvp(env, input, event, "hash", rsvpWait(300))).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
     expect(await count("rsvps")).toBe(1);
   });
 

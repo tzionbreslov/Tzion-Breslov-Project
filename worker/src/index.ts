@@ -28,6 +28,7 @@ import {
   markSubscriptionConfirmationUsed,
   reserveRsvp,
   rsvpGuestTotals,
+  rsvpWait,
   storeWebhookEvent
 } from "./database";
 import { findRsvpEvent, loadEventFeed, type FeedEvent } from "./events";
@@ -419,13 +420,15 @@ async function handleRsvp(request: Request, env: Env, origin: string, context?: 
   // A replay of an RSVP already made answers as the first attempt did, before anything about the event is
   // checked: it still holds once the event has started, and while the feed can't be read. If another attempt
   // with this requestId is still emailing the guest, this waits for its outcome, or until its row turns stale
-  // (confirmedRsvp).
-  const replay = await confirmedRsvp(env, input.requestId, input.eventId, emailHash);
+  // (confirmedRsvp). This wait and every round of the reservation's share one deadline and backoff (rsvpWait), so
+  // the request's waits add up to 30 s at most.
+  const wait = rsvpWait();
+  const replay = await confirmedRsvp(env, input.requestId, input.eventId, emailHash, wait);
   if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay } satisfies RsvpSuccessResponse, 202, origin);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
-  const reservation = await reserveRsvp(env, input, event, emailHash);
+  const reservation = await reserveRsvp(env, input, event, emailHash, wait);
   if (reservation.created) {
     const emails = sendRsvpEmails(env, input, event, reservation);
     // Kept alive even if the visitor disconnects; its failure is this request's answer, below.
