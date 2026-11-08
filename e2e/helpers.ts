@@ -154,7 +154,7 @@ export function layoutOf(page: Page, { boxes = [], contents = [] }: LayoutTarget
  * of equal specificity. In a real old Safari each block applies where it sits in app/*.css, and the theme's and
  * WordPress's stylesheets and every app/*.css rule after the block come later: one of those with the same
  * specificity that sets the same margin or gap would win there, and this proof can't see it. So each block's
- * selectors must outrank such rules (its comment says so), and that is checked by hand: the Group 9 review found
+ * selectors must outrank such rules, and that is checked by hand: the Group 9 review found
  * none on 2026-11-08.
  */
 export async function expectGapFallbackLayout(page: Page, { containers, targets, widths, height = 900, prepare }: {
