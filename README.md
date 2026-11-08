@@ -37,7 +37,8 @@ WordPress backup (.wpress, private, not in git)
   Gallery · Contact, then Donate and Taste a Class in the mobile menu and footer, and Privacy last in the footer
   only). `ORIGINAL_NAV` is the WordPress menu, which `scripts/navigation.test.mjs` proves renders every imported
   fragment byte for byte. The Resources dropdown runs on
-  `lib/client/menu.ts` (mouse, touch, keyboard) and `app/navigation.css` (also opens on hover/focus without JS).
+  `lib/client/menu.ts` (mouse, touch, keyboard; keyboard focus inside it keeps it open after the mouse leaves, a mouse
+  press inside it doesn't) and `app/navigation.css` (also opens on hover/focus without JS).
 - `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/`, `/events/`
   and `/privacy/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
@@ -45,7 +46,8 @@ WordPress backup (.wpress, private, not in git)
   through `lib/content-files.ts`, never `lib/content.ts` (which imports them: `scripts/imports.test.mjs`); their string
   edits are in `edits.mjs` (unit-tested). All markup built as strings (these pages, the menus, the feeds, the Events
   list) escapes text with the one `esc()` in `lib/html.mjs`. `contact-map.ts` adds the map
-  (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
+  (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards;
+  its two new-tab links end with the external-link icon in `lib/icons.ts`, as the Classes channel link does.
   Their new English text lives only in `content/copy/en.json`.
 - `/privacy/` (`lib/pages/privacy.ts`) — the privacy notice, linked from the footer Quick Links and from the
   "privacy notice" words in the RSVP and "Get event announcements" consent lines. Its text (`content/copy/en.json`

@@ -114,26 +114,29 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
     1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
   - Fixing the page itself (keeping the header's place) would change how the theme behaves, so it needs the owner's
     go-ahead.
-- **Classes:**
-  - "Visit our YouTube channel" wraps to 2 lines at about 351 px or narrower;
-  - at 374 px or narrower, the meta line stacks under the logo;
-  - the empty-search message (`role=status`) appears from `hidden`, so it may not be announced.
-- **Menu:**
-  - a mouse-originated focus (right-click, ctrl-click, an aborted press on Classes) keeps the Resources panel open
-    after the mouse leaves;
-  - on iOS, a sticky `:hover` before the scripts load.
+- **Menu: on iOS, a sticky `:hover` before the scripts load.** Left as it is by Group 7 (2026-11-08): a
+  `@media (hover: hover)` guard on the no-JS `:hover` rule keeps the keyboard path (`:focus-within`), but iPad Safari
+  doesn't focus a tapped `<button>`, so on a 12.9"/13" iPad Pro in landscape (1366 px, the desktop menu) without
+  JavaScript the panel could no longer be opened at all. The sticky hover is what opens it there.
+- **No `h1`** on the imported Home, About, Contact or Donate — this needs a site-wide accessibility pass (their markup
+  is kept for fidelity). /gallery/'s hero heading is its h1 since Group 7; /events/ and /privacy/ build the same hero
+  and have no h1 either: `renderHero`'s `headingTag: "h1"` would do it there too (outside Group 7's brief).
 - **Gallery:**
-  - no `h1` on /gallery/ (nor on the imported Home, About, Contact or Donate) — this needs a site-wide accessibility
-    pass;
   - the focus ring's radius doesn't match the placeholders' baked corners;
-  - a fractional gap at 599/600 px;
   - on phones the gallery is as wide as Articles (330 px at 390), while the Classes cards keep a 16 px inset (298 px).
-- **Contact:**
-  - the outline pill doesn't lift on hover like the turquoise one;
-  - there is no flex `gap` before Safari 14.1, so the pills touch;
-  - the map links don't reuse the external-link icon;
-  - "Find us in Bet Shemesh" versus the card's "Beit Shemesh, Israel" (owner's call).
-- **No-JS footer:** without JavaScript the footer may render a lighter blue. Seen once, not investigated.
+- **Contact:** "Find us in Bet Shemesh" versus the card's "Beit Shemesh, Israel" (owner's call).
+- **No flex `gap` before Safari 14.1, outside the Contact map** (found by Group 7, 2026-11-08). The map has a margin
+  fallback since Group 7 (`app/pages.css`, `@supports not (inset: 0)`). The other new pieces still space flex items
+  with `gap` only, so there they touch:
+  - Classes: the tabs, the sort pills, the search box and the channel button's icon;
+  - Events: its flex rows in `app/events.css`;
+  - the Donate form's rows, the confirmation notice, and the viewer's caption lines.
+  Left as it is: outside Group 7's brief. The same `@supports not (inset: 0)` pattern would cover them.
+- **No-JS footer: "a lighter blue" is the theme's own fade-in, not a defect.** Investigated by Group 7 (2026-11-08):
+  the theme fades the whole page in over 1 s (`.site-container { animation: fadein 1s }` in its `style.css`), with or
+  without JavaScript, and on the checkpoint-001 build too. During that second the footer's `#003a71` shows lighter
+  (for example `#2b5b89` at 0.82 opacity); once it ends, the footer is `#003a71` with JavaScript on and off, on the
+  current build and on checkpoint-001. Left as it is (the original theme's behaviour).
 
 ## Declined by the final review (not judged)
 
