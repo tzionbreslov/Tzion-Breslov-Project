@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 // The 18 Parasha titles exactly as the Resources page's "Articles" tab lists
 // them (the uagb-block-1908e9b6 grid; the page also holds the bite-size grid).
@@ -22,8 +22,12 @@ const pagination = (page: Page, name: string) =>
   page.locator("[data-tz-post-grid] .uagb-post-pagination-wrap").getByRole("link", { name, exact: true });
 // Clicks a pagination link. The grid swaps once the page it fetches has arrived, which can take seconds on a busy
 // machine, so each caller polls the titles (up to 15 s) rather than waiting for the response itself.
+// On desktop the links sit below the fold (about 1,470 px down at 1440×900): scrolling to them turns the header
+// fixed and moves them up about 89 px, so the click waits for them to hold still (e2e/helpers.ts).
 async function paginate(page: Page, name: string) {
-  await pagination(page, name).click();
+  const link = pagination(page, name);
+  await scrollIntoViewAndSettle(link);
+  await link.click();
 }
 const SWAP = { timeout: 15_000 };
 
