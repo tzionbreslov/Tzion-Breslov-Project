@@ -136,19 +136,22 @@ type RsvpRequestRow = { id: string; event_id: string; email_hash: string; create
 const RSVP_FOR_REQUEST = "SELECT id, event_id, email_hash, created_at, confirmed_at FROM rsvps WHERE request_id = ?";
 
 /**
- * How long a request waits for another attempt with its requestId (a retry
- * sent while the first is still on its way, say) to finish emailing the guest,
- * and how often it looks.
+ * How long an attempt can hold an RSVP unconfirmed. It takes the seats, emails
+ * the guest (a Resend call gives up after 10 s: providers.ts,
+ * RESEND_TIMEOUT_MS), then confirms the RSVP or gives the seats back (D1).
+ * That work runs under waitUntil (index.ts, handleRsvp), so a visitor whose
+ * connection drops doesn't stop it. An unconfirmed row older than this was
+ * left by an attempt that stopped all the same (the Worker's run ended, or D1
+ * failed to confirm it or give it back): the next attempt with its requestId
+ * books it again (reserveRsvp). Such an attempt is a retry of the same
+ * submission (the site keeps the requestId and the Turnstile token after a
+ * network failure or a 5xx), and it waits for the row to turn stale rather
+ * than answering REQUEST_IN_PROGRESS (confirmedRsvp), so the retry books it in
+ * one call, well inside the token's 5 minutes and the email's rate limit.
  */
-const PENDING_WAIT_MS = 5_000;
+const PENDING_STALE_MS = 30_000;
+/** How often a request looks again while another attempt with its requestId is emailing the guest. */
 const PENDING_POLL_MS = 200;
-/**
- * An unconfirmed RSVP older than this was left by an attempt that stopped
- * between taking the seats and either emailing the guest or giving the seats
- * back (as request_log's 5-minute reclaim): the next attempt with its
- * requestId books it again (reserveRsvp).
- */
-const PENDING_STALE_MS = 5 * 60_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -162,13 +165,15 @@ function sameRequest(row: RsvpRequestRow | null, eventId: string, emailHash: str
  * The confirmation id of this requestId's RSVP once its guest has been
  * emailed (a replay answers it and sends nothing new), or null when there is
  * none to answer: never made, given back by its attempt, or left unconfirmed
- * by an attempt that was cut off (PENDING_STALE_MS; reserveRsvp books it
- * again). While another attempt is still emailing the guest, it waits up to
- * `waitMs` for that attempt's outcome, then answers REQUEST_IN_PROGRESS (retry
- * with the same requestId). A row for another event or email is
- * REQUEST_ID_CONFLICT.
+ * by an attempt that stopped (PENDING_STALE_MS; reserveRsvp books it again).
+ * While another attempt is still emailing the guest, it waits for that
+ * attempt's outcome, at most `waitMs`: by default as long as the row can be
+ * pending, so it never gives up before the row turns stale. Only a shorter
+ * wait (the tests), or another isolate's clock running ahead of this one,
+ * answers REQUEST_IN_PROGRESS (retry with the same requestId). A row for
+ * another event or email is REQUEST_ID_CONFLICT.
  */
-export async function confirmedRsvp(env: Env, requestId: string, eventId: string, emailHash: string, waitMs = PENDING_WAIT_MS) {
+export async function confirmedRsvp(env: Env, requestId: string, eventId: string, emailHash: string, waitMs = PENDING_STALE_MS) {
   const deadline = Date.now() + waitMs;
   for (;;) {
     const row = sameRequest(await env.DB.prepare(RSVP_FOR_REQUEST).bind(requestId).first<RsvpRequestRow>(), eventId, emailHash);
@@ -220,7 +225,7 @@ export async function reserveRsvp(
   input: Pick<RsvpInput, "requestId" | "name" | "email" | "guests" | "accessibility">,
   event: FeedEvent,
   emailHash: string,
-  waitMs = PENDING_WAIT_MS
+  waitMs = PENDING_STALE_MS
 ): Promise<Reservation> {
   const id = await rsvpConfirmationId(env, input.requestId);
   // One round, unless another attempt with this requestId held the RSVP and then gave it back.
@@ -266,9 +271,14 @@ export async function reserveRsvp(
   throw new PublicError("REQUEST_IN_PROGRESS");
 }
 
-/** The guest has been emailed: the RSVP stands, a replay answers it, and no attempt gives it back. */
-export async function confirmRsvp(env: Env, id: string) {
-  await env.DB.prepare("UPDATE rsvps SET confirmed_at = ? WHERE id = ? AND confirmed_at IS NULL").bind(Date.now(), id).run();
+/**
+ * The guest has been emailed: the RSVP this attempt took at `heldSince` stands,
+ * a replay answers it, and no attempt gives it back. Only that row, as
+ * cancelRsvp: never one another attempt has since booked again.
+ */
+export async function confirmRsvp(env: Env, id: string, heldSince: number) {
+  await env.DB.prepare("UPDATE rsvps SET confirmed_at = ? WHERE id = ? AND created_at = ? AND confirmed_at IS NULL")
+    .bind(Date.now(), id, heldSince).run();
 }
 
 /**

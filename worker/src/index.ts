@@ -361,45 +361,56 @@ function rsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId
  * - Once the guest's email is sent, the RSVP is confirmed: from then on a
  *   replay answers it, and no attempt gives it back.
  * - Only the organizer's fails: the guest already holds "RSVP received" and its
- *   confirmation id, so the booking stands. It is logged (a code and the
- *   requestId, no personal data; the row is found by request_id) and the RSVP
+ *   confirmation id, so the booking stands. It is logged and the RSVP
  *   succeeds, so a replay returns the same id and sends nothing new.
+ * - Confirming fails (D1) after the guest's email: the booking stands too, and
+ *   the organizer is still emailed. It is logged; the row stays unconfirmed, so
+ *   a replay of it waits until it turns stale, then books it again with the same
+ *   emails' keys (database.ts, PENDING_STALE_MS).
+ * Each log line is a code and the requestId, no personal data (the row is found
+ * by request_id).
  */
 async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, reservation: { id: string; heldSince: number }) {
+  const logFailure = (code: string, error: unknown) => console.error(JSON.stringify({
+    code,
+    requestId: input.requestId,
+    error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
+  }));
   let organizer: Email;
   try {
     const emails = rsvpEmails(env, input, event, reservation.id);
     organizer = emails.organizer;
     await sendEmail(env, emails.guest);
   } catch (error) {
-    await cancelRsvp(env, reservation.id, reservation.heldSince).catch((cancelError: unknown) => {
-      // The seats stay taken, unconfirmed: a retry with the same requestId books it again after 5 minutes
-      // (database.ts, PENDING_STALE_MS). Say so in the logs.
-      console.error(JSON.stringify({
-        code: "RSVP_CANCEL_FAILED",
-        requestId: input.requestId,
-        error: cancelError instanceof PublicError ? cancelError.code : cancelError instanceof Error ? cancelError.name : "UnknownError"
-      }));
-    });
+    // If this fails, the seats stay taken, unconfirmed: a retry with the same requestId books them again once they
+    // are stale (database.ts, PENDING_STALE_MS). Say so in the logs.
+    await cancelRsvp(env, reservation.id, reservation.heldSince).catch((cancelError: unknown) => logFailure("RSVP_CANCEL_FAILED", cancelError));
     throw error;
   }
-  await confirmRsvp(env, reservation.id);
+  try {
+    await confirmRsvp(env, reservation.id, reservation.heldSince);
+  } catch (error) {
+    logFailure("RSVP_CONFIRM_FAILED", error);
+  }
   try {
     await sendEmail(env, organizer);
   } catch (error) {
-    console.error(JSON.stringify({
-      code: "RSVP_ORGANIZER_EMAIL_FAILED",
-      requestId: input.requestId,
-      error: error instanceof PublicError ? error.code : error instanceof Error ? error.name : "UnknownError"
-    }));
+    logFailure("RSVP_ORGANIZER_EMAIL_FAILED", error);
   }
 }
 
 /**
  * `POST /v1/rsvp`. Never touches request_log (its route CHECK is live in
  * production): rsvps.request_id is the idempotency key.
+ *
+ * Once this attempt holds the seats, its emails and the confirmation run
+ * under `context.waitUntil` as well as being awaited: a visitor whose
+ * connection drops would otherwise cancel them half done, leaving the seats
+ * held unconfirmed. The runtime gives that work up to 30 s after a disconnect,
+ * more than its two Resend calls' 10 s timeouts (providers.ts). Without a
+ * context (direct calls in the tests), it is only awaited.
  */
-async function handleRsvp(request: Request, env: Env, origin: string) {
+async function handleRsvp(request: Request, env: Env, origin: string, context?: ExecutionContextLike) {
   const input = validateRsvp(await readJson(request));
   await rateLimitValue(env, "rsvp", "ip", remoteIp(request), 30);
   // After the challenge, so a failed one can't use up someone's email quota (as contact and subscribe).
@@ -407,14 +418,20 @@ async function handleRsvp(request: Request, env: Env, origin: string) {
   const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
   // A replay of an RSVP already made answers as the first attempt did, before anything about the event is
   // checked: it still holds once the event has started, and while the feed can't be read. If another attempt
-  // with this requestId is still emailing the guest, this waits for its outcome (confirmedRsvp).
+  // with this requestId is still emailing the guest, this waits for its outcome, or until its row turns stale
+  // (confirmedRsvp).
   const replay = await confirmedRsvp(env, input.requestId, input.eventId, emailHash);
   if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay } satisfies RsvpSuccessResponse, 202, origin);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
   const reservation = await reserveRsvp(env, input, event, emailHash);
-  if (reservation.created) await sendRsvpEmails(env, input, event, reservation);
+  if (reservation.created) {
+    const emails = sendRsvpEmails(env, input, event, reservation);
+    // Kept alive even if the visitor disconnects; its failure is this request's answer, below.
+    context?.waitUntil(emails.catch(() => undefined));
+    await emails;
+  }
   return json({ ok: true, requestId: input.requestId, confirmationId: reservation.id } satisfies RsvpSuccessResponse, 202, origin);
 }
 
@@ -507,7 +524,7 @@ async function handleResendWebhook(request: Request, env: Env) {
   return json({ ok: true });
 }
 
-async function route(request: Request, env: Env) {
+async function route(request: Request, env: Env, context?: ExecutionContextLike) {
   const url = new URL(request.url);
   if (request.method === "OPTIONS" && publicPostRoutes.has(url.pathname)) return preflight(request, env);
 
@@ -526,16 +543,17 @@ async function route(request: Request, env: Env) {
     if (url.pathname === API_PATHS.contact) return handleContact(request, env, origin);
     if (url.pathname === API_PATHS.subscribe) return handleSubscription(request, env, origin);
     if (url.pathname === API_PATHS.subscribeConfirm) return handleSubscriptionConfirmation(request, env, origin);
-    if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin);
+    if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin, context);
   }
 
   throw new PublicError("NOT_FOUND");
 }
 
-async function fetchHandler(request: Request, env: Env) {
+/** The Worker's fetch handler; `context` is the runtime's (optional only for direct calls in the tests). */
+async function fetchHandler(request: Request, env: Env, context?: ExecutionContextLike) {
   const correlationId = crypto.randomUUID();
   try {
-    return await route(request, env);
+    return await route(request, env, context);
   } catch (error) {
     const publicError = error instanceof PublicError ? error : new PublicError("INTERNAL_ERROR");
     logError(correlationId, request, error);
@@ -573,8 +591,8 @@ async function scheduledCleanup(env: Env) {
 }
 
 export default {
-  fetch(request: Request, env: Env, _context: ExecutionContextLike) {
-    return fetchHandler(request, env);
+  fetch(request: Request, env: Env, context: ExecutionContextLike) {
+    return fetchHandler(request, env, context);
   },
   scheduled(_controller: ScheduledController, env: Env, context: ExecutionContextLike) {
     context.waitUntil(scheduledCleanup(env));
