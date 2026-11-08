@@ -178,6 +178,26 @@
   - checkpoint-016 (#26) — final-review fixes: calendar text can't fail the deploy, no-JS Events controls, the
     "places left" message, og:image on the new pages, runbook corrections
   - Parked review items that are still open: `docs/superpowers/follow-ups.md`.
+- **Follow-ups (2026-11-08; the owner asked to "fix everything we can in advance").** Checkpoints:
+  - checkpoint-017 (#27) — phase 1's parked review items recorded in `docs/superpowers/follow-ups.md`; a switch-day
+    prerequisite
+  - checkpoint-018 (#28) — switch-day runbook: a stale backup can't come back; redirects catch addresses without the
+    slash (Group 1)
+  - checkpoint-019 (#29) — static-export check: old-domain links in event cards, and the guard's other gaps (Group 2)
+  - checkpoint-020 (#30) — tests: the Classes sort test steadied; tighter wording, visual and CSP checks (Group 3)
+  - checkpoint-021 (#31) — tidy-up: one HTML-escape helper, one contact address, no import cycle (Group 4)
+  - checkpoint-022 (#32) — Events: "<" and ">" kept in calendar text, contradictory RSVP settings flagged (Group 5)
+  - checkpoint-023 (#34) — tests: the Articles pagination link settles before the desktop click (split out of
+    Group 6's pull request)
+  - checkpoint-024 (#33) — Worker: RSVP replays, races and retention hardening (Group 6). **Not deployed:** it ships
+    with the RSVP release at switch day, step 4.
+  - checkpoint-025 (#35) — new pages: small layout and accessibility fixes (Group 7)
+  - checkpoint-026 (#36) — dependencies: minimatch 11.0.1 for the eslint toolchain, Dependabot alert 1 (Group 8)
+  - checkpoint-027 (#37) — new pages: h1 on Events and Privacy, old-Safari spacing, no RSVP line on started events
+    (Group 9)
+  - Group 9b (`inset: 0` written out for Safari before 14.1) opened no pull request: the build folds the four sides
+    back into `inset:0`. The item stays open in `docs/superpowers/follow-ups.md`, with the two ways to fix it.
+  - What is still open: `docs/superpowers/follow-ups.md`.
 - **Final verification** (2026-11-07, Task 11, on main at 38f5132 = checkpoint-014):
   - `npm run check` is green:
     - typecheck, Worker typecheck and lint are clean;
@@ -213,9 +233,10 @@
     9. Donate: "Manage your monthly donation" → https://www.paypal.com/myaccount/autopay/ in a new tab.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
-- Worker: 72 tests pass (`npm run test:worker`, the undeployed RSVP release included; 34 when it was first
-  deployed). Deployed and smoke-tested live (health/D1, CORS, Turnstile, confirm redirect, webhook signature). A
-  real email has not been sent yet (needs a Turnstile token from tzionbreslov.org, i.e. switch day).
+- Worker: 93 tests pass (`npm run test:worker` on 2026-11-08 at checkpoint-027 reports "93 passed (93)"; the
+  undeployed RSVP release and Group 6 included; 34 when it was first deployed). Deployed and smoke-tested live
+  (health/D1, CORS, Turnstile, confirm redirect, webhook signature). A real email has not been sent yet (needs a
+  Turnstile token from tzionbreslov.org, i.e. switch day).
 - Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
   (default opt-out); webhook 3ade2dad-e974-4e65-ad11-4c3db16a9677; send-only key 82913060-a568-4518-8a2b-bef4f36255f5.
 - GitHub: Pages preview live at https://tzionbreslov.github.io/Tzion-Breslov-Project/ (rebuilds around 07:00 and 21:00 Israel time);
@@ -264,10 +285,22 @@
 11. **RSVP dialog privacy link:** "privacy notice" in the RSVP dialog opens in the same tab, so a visitor who follows
     it loses what they typed.
 12. **Manage-donation link:** it opens PayPal in a new tab with no cue that it does.
-13. **Live Worker logging:** check whether `tzion-breslov-api` stores invocation logs today (dashboard → the Worker →
-    Settings → Observability). It was deployed on 2026-11-06 without an `observability` block, and Cloudflare turns
-    Workers Logs on by default for new Workers, with invocation logs: request URLs (confirmation tokens included),
-    headers and IPs. If so, turn invocation logs off before switch day (README → Switch day, step 1.3).
+13. **Live Worker logging: answered** (2026-11-08). The question was whether `tzion-breslov-api`, deployed on
+    2026-11-06 without an `observability` block, stores invocation logs (request URLs with confirmation tokens,
+    headers, IPs). The controller checked it read-only, with Cloudflare API GETs and Workers Observability queries;
+    nothing was changed.
+    - The Worker's script settings had `observability: null`, `logpush: false` and no tail consumers.
+    - The Workers Observability dataset had no events from any Worker in the previous 7 days, although the live
+      Worker runs a daily cron.
+    - So Workers Logs stored nothing for this Worker, invocation logs included.
+    - Switch day, step 4's deploy **starts** storing the Worker's own log lines (codes such as
+      `RSVP_CONFIRM_FAILED`). `wrangler.jsonc` sets
+      `"observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } }`, so
+      no per-request invocation records are stored. Step 4's log-probe check confirms that a stored line carries no
+      request fields.
+    - The privacy notice already covers those lines: "error records from the forms service, designed to contain no
+      personal details, for up to 7 days" (`content/copy/en.json` → privacy). So no new owner decision arises.
+    - README → Switch day, step 1.3 still checks the dashboard on the day, since the setting can change before then.
 14. **Rate limit on RSVP availability (after go-live):** the final review recommends a Cloudflare rate-limiting rule
     on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 whenever its shared
     30 s answer (per Cloudflare data center, since 2026-11-08) has expired.
