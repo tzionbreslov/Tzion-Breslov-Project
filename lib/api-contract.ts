@@ -187,7 +187,10 @@ export type SubscribeRequest = SecurityEnvelope & {
  * `EVENT_NOT_FOUND` (not in /events.json, or "No RSVP"), `EVENT_CLOSED` (it has
  * started), `EVENT_FULL` (its "RSVP limit" can't take `guests` more),
  * `EVENTS_UNAVAILABLE` (the Worker can't read /events.json; retry later).
- * Resending the same `requestId` returns the first RSVP's confirmation.
+ * Resending the same `requestId` returns the first RSVP's confirmation, even
+ * once the event has started. While the first attempt is still emailing the
+ * guest, a resend waits up to 5 s for its outcome, then answers
+ * `REQUEST_IN_PROGRESS`: retry with the same `requestId`.
  */
 export type RsvpRequest = SecurityEnvelope & {
   /** {@link EVENT_ID_PATTERN}: `data-event-id` of the event's card. */

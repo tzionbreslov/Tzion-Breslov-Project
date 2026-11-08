@@ -253,6 +253,27 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
+  test("a 409 REQUEST_IN_PROGRESS shows the error message, and the retry keeps the requestId", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    let answer = reply(409, { ok: false, error: "REQUEST_IN_PROGRESS", correlationId: "x" });
+    const posts = await stubServices(page, {}, (route) => answer(route));
+    await openEvents(page);
+    await openRsvp(page);
+    await fillRsvp(page);
+    const send = dialog(page).getByRole("button", { name: "Send RSVP" });
+    await send.click();
+    await expect(dialog(page).getByRole("alert")).toHaveText(TEXT.error);
+    expect(posts).toHaveLength(1);
+
+    // The first attempt booked meanwhile: the retry is the same submission, answered with its confirmation.
+    answer = reply(202, { ok: true, requestId: "r", confirmationId: "c" });
+    await send.click();
+    await expect(dialog(page).getByRole("status")).toHaveText(TEXT.success);
+    expect(posts).toHaveLength(2);
+    expect(posts[1].requestId).toBe(posts[0].requestId);
+    await expectClean(page, errors);
+  });
+
   test("the dialog stays usable on short and narrow screens: it scrolls inside, nothing sticks out", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
     const errors = trackPageErrors(page);

@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEventWhen } from "../../lib/events.mjs";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
-import { reserveRsvp, rsvpConfirmationId } from "../src/database";
+import { cancelRsvp, confirmRsvp, confirmedRsvp, reserveRsvp, rsvpConfirmationId } from "../src/database";
 import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
 import worker, { fetchHandler } from "../src/index";
 import type { RsvpInput } from "../src/validation";
@@ -121,8 +121,10 @@ function rsvpPayload(overrides: Record<string, unknown> = {}) {
 
 type MockOptions = {
   contactsCreateStatus?: number;
-  /** Resend's answer to an email, or one per recipient. */
-  emailStatus?: number | ((to: string) => number);
+  /** Resend's answer to an email, or one per recipient (a promise holds that email until the test settles it). */
+  emailStatus?: number | ((to: string) => number | Promise<number>);
+  /** Holds every /events.json answer until this settles. */
+  feedGate?: Promise<void>;
   /** The events /events.json lists (default: defaultFeedEvents()). */
   feedEvents?: FeedEvent[];
   /** Answers /events.json instead (a failure, a redirect, a malformed body). */
@@ -145,6 +147,7 @@ function mockProviders(action: string, options: MockOptions = {}) {
     const body = typeof rawBody === "string" ? JSON.parse(rawBody) : rawBody;
     calls.push({ url, method, body, headers: new Headers(init?.headers), redirect: init?.redirect ?? (input instanceof Request ? input.redirect : undefined) });
     if (url === FEED_URL) {
+      if (options.feedGate) await options.feedGate;
       if (options.feedHangs) {
         const signal = init?.signal;
         return new Promise<Response>((_, reject) => {
@@ -160,7 +163,7 @@ function mockProviders(action: string, options: MockOptions = {}) {
     }
     if (url === "https://api.resend.com/emails") {
       const to = (body as { to?: string[] } | undefined)?.to?.[0] ?? "";
-      const status = typeof options.emailStatus === "function" ? options.emailStatus(to) : options.emailStatus ?? 200;
+      const status = typeof options.emailStatus === "function" ? await options.emailStatus(to) : options.emailStatus ?? 200;
       return Response.json(status === 200 ? { id: "email-id" } : { message: "failure" }, { status });
     }
     if (url === "https://api.resend.com/contacts" && method === "POST") {
@@ -850,6 +853,7 @@ type RsvpRow = {
   guests: number;
   accessibility: string | null;
   created_at: number;
+  confirmed_at: number | null;
 };
 type RsvpSuccess = { ok: true; requestId: string; confirmationId: string };
 
@@ -871,6 +875,39 @@ function reserveInput(): RsvpInput {
 
 function sentTo(outbound: ReturnType<typeof mockProviders>, address: string) {
   return outbound.emails().filter((call) => (call.body as SentEmail).to[0] === address);
+}
+
+/** A promise the test settles. */
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The guest's "RSVP received" for `address`, held on its first send until the test answers it
+ * (`answer(200)` or `answer(500)`); later sends answer 200 at once. `asked` settles when the
+ * held send reaches Resend.
+ */
+function holdFirstGuestEmail(address: string) {
+  const asked = deferred();
+  const held = deferred<number>();
+  let sends = 0;
+  return {
+    asked: asked.promise,
+    answer: held.resolve,
+    emailStatus: (to: string) => {
+      if (to !== address) return 200;
+      sends += 1;
+      if (sends > 1) return 200;
+      asked.resolve();
+      return held.promise;
+    }
+  };
 }
 
 describe("POST /v1/rsvp", () => {
@@ -948,6 +985,141 @@ describe("POST /v1/rsvp", () => {
     await expect(again.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId: first.confirmationId });
     expect(await count("rsvps")).toBe(1);
     expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("a second request with the same requestId waits for the first one's outcome: booked, it answers the same confirmation", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus });
+    const first = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    // The first attempt holds the seats and is emailing the guest.
+    await guest.asked;
+    expect(await count("rsvps")).toBe(1);
+
+    let secondAnswered = false;
+    const second = fetchHandler(publicRequest("/v1/rsvp", payload), env).finally(() => {
+      secondAnswered = true;
+    });
+    await vi.waitFor(() => expect(outbound.turnstile()).toHaveLength(2));
+    await pause(300);
+    // No answer while the guest's email is still on its way.
+    expect(secondAnswered).toBe(false);
+
+    guest.answer(200);
+    const [a, b] = await Promise.all([first, second]);
+    expect([a.status, b.status]).toEqual([202, 202]);
+    const firstBody = await a.json<RsvpSuccess>();
+    await expect(b.json()).resolves.toEqual(firstBody);
+    expect(await count("rsvps")).toBe(1);
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    // The guest and the organizer heard once.
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, "team@example.test"]);
+  });
+
+  it("a second request with the same requestId waits for the first one's outcome: given back, it books the RSVP itself", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus });
+    const first = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    await guest.asked;
+    const second = fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    await vi.waitFor(() => expect(outbound.turnstile()).toHaveLength(2));
+    await pause(100);
+
+    // The first attempt's guest email fails: it gives its seats back and answers the retryable error.
+    guest.answer(500);
+    const a = await first;
+    expect(a.status).toBe(502);
+    expect((await errorBody(a)).error).toBe("UPSTREAM_FAILURE");
+    // The second never answered for a row that was being given back: it booked and emailed the guest itself.
+    const b = await second;
+    expect(b.status).toBe(202);
+    const { confirmationId } = await b.json<RsvpSuccess>();
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, guests: 3, confirmed_at: expect.any(Number) });
+    expect(await count("rsvps")).toBe(1);
+    expect(outbound.emails().map((call) => (call.body as SentEmail).to[0])).toEqual([payload.email, payload.email, "team@example.test"]);
+    expect(outbound.emails().map((call) => call.headers.get("idempotency-key")))
+      .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("two requests with the same requestId that reach the reservation together: one books, the other waits for its outcome", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    const guest = holdFirstGuestEmail(payload.email);
+    const feedGate = deferred();
+    const outbound = mockProviders("rsvp", { emailStatus: guest.emailStatus, feedGate: feedGate.promise });
+    // Both have found no RSVP for the requestId and are reading the feed.
+    let answered = 0;
+    const both = [fetchHandler(publicRequest("/v1/rsvp", payload), env), fetchHandler(publicRequest("/v1/rsvp", payload), env)]
+      .map((response) => response.finally(() => {
+        answered += 1;
+      }));
+    await vi.waitFor(() => expect(outbound.feed()).toHaveLength(2));
+    expect(await count("rsvps")).toBe(0);
+    feedGate.resolve();
+    // One holds the seats and emails the guest; the other's INSERT finds them taken and waits.
+    await guest.asked;
+    await pause(300);
+    expect(answered).toBe(0);
+    guest.answer(200);
+    const answers = await Promise.all(both);
+    expect(answers.map((response) => response.status)).toEqual([202, 202]);
+    const [one, two] = await Promise.all(answers.map((response) => response.json<RsvpSuccess>()));
+    expect(two).toEqual(one);
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
+  it("re-books an RSVP whose first attempt was cut off before it emailed the guest (5 minutes on), with the same emails' keys", async () => {
+    const payload = rsvpPayload({ eventId: EVENT_IDS.limited, guests: 3 });
+    mockProviders("rsvp");
+    const { confirmationId } = await (await fetchHandler(publicRequest("/v1/rsvp", payload), env)).json<RsvpSuccess>();
+    // As an attempt leaves its row when it stops between taking the seats and emailing the guest.
+    await env.DB.prepare("UPDATE rsvps SET confirmed_at = NULL, created_at = ? WHERE request_id = ?")
+      .bind(Date.now() - 6 * 60_000, payload.requestId).run();
+    vi.restoreAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const outbound = mockProviders("rsvp");
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    expect(await count("rsvps")).toBe(1);
+    expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
+    expect((await rsvpRow(payload.requestId))?.confirmed_at).toEqual(expect.any(Number));
+    // Resend's idempotency keys stop a second copy of an email the cut-off attempt had already sent.
+    expect(outbound.emails().map((call) => call.headers.get("idempotency-key")).sort())
+      .toEqual([`rsvp-guest/${payload.requestId}`, `rsvp-organizer/${payload.requestId}`]);
+  });
+
+  it("answers REQUEST_IN_PROGRESS when the first attempt is still emailing the guest after the wait", async () => {
+    const input = reserveInput();
+    const event = feedEvent();
+    // Taken, not yet confirmed (its attempt is still on the guest's email).
+    expect((await reserveRsvp(env, input, event, "hash")).created).toBe(true);
+    const started = Date.now();
+    await expect(confirmedRsvp(env, input.requestId, event.id, "hash", 300)).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    expect(Date.now() - started).toBeGreaterThanOrEqual(250);
+    await expect(reserveRsvp(env, input, event, "hash", 300)).rejects.toMatchObject({ code: "REQUEST_IN_PROGRESS" });
+    expect(await count("rsvps")).toBe(1);
+  });
+
+  it("gives back only an unconfirmed RSVP that the attempt itself holds", async () => {
+    const input = reserveInput();
+    const event = feedEvent();
+    const reservation = await reserveRsvp(env, input, event, "hash");
+    if (!reservation.created) throw new Error("not created");
+    // Another attempt's hold (a different time) is not this one's.
+    await cancelRsvp(env, reservation.id, reservation.heldSince - 1);
+    expect(await count("rsvps")).toBe(1);
+    // A confirmed RSVP is never given back.
+    await confirmRsvp(env, reservation.id);
+    await cancelRsvp(env, reservation.id, reservation.heldSince);
+    expect(await count("rsvps")).toBe(1);
+    await env.DB.prepare("UPDATE rsvps SET confirmed_at = NULL").run();
+    await cancelRsvp(env, reservation.id, reservation.heldSince);
+    expect(await count("rsvps")).toBe(0);
   });
 
   it("refuses a reused requestId for another event or email", async () => {

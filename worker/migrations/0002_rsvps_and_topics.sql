@@ -11,11 +11,16 @@
 -- then compares it with datetime('now') and deletes a row once its event is
 -- over (owner decision 2026-11-07). email_hash is the salted hash the rate
 -- limiter uses (a reused requestId must come from the same email).
+-- confirmed_at is NULL while the attempt that made the row is still emailing
+-- the guest (created_at is when that attempt took the seats), and set once the
+-- guest's "RSVP received" has gone out: only a confirmed RSVP is answered to a
+-- replay, and an attempt gives back only an unconfirmed row it holds.
 CREATE TABLE rsvps (
   id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, event_id TEXT NOT NULL, event_starts_at TEXT NOT NULL,
   event_ends_at TEXT NOT NULL,
   name TEXT NOT NULL, email TEXT NOT NULL, email_hash TEXT NOT NULL,
-  guests INTEGER NOT NULL CHECK (guests BETWEEN 1 AND 12), accessibility TEXT, created_at INTEGER NOT NULL);
+  guests INTEGER NOT NULL CHECK (guests BETWEEN 1 AND 12), accessibility TEXT, created_at INTEGER NOT NULL,
+  confirmed_at INTEGER);
 CREATE INDEX rsvps_event_id_idx ON rsvps(event_id);
 CREATE INDEX rsvps_event_ends_at_idx ON rsvps(event_ends_at);
 

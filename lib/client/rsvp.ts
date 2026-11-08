@@ -263,7 +263,9 @@ function openRsvp(card: HTMLElement, opener: HTMLButtonElement) {
         return;
       }
       const answer = (await response.json().catch(() => null)) as ApiErrorResponse | null;
-      if (response.status < 500) {
+      // REQUEST_IN_PROGRESS: an earlier attempt with this requestId is still on its way (its RSVP may yet be
+      // booked), so a retry stays the same submission, like one after a 5xx.
+      if (response.status < 500 && answer?.error !== "REQUEST_IN_PROGRESS") {
         requestId = crypto.randomUUID();
         turnstile.reset();
       }

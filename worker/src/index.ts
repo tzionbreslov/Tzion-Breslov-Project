@@ -19,13 +19,14 @@ import {
   cancelRsvp,
   claimRequest,
   cleanExpiredData,
+  confirmRsvp,
+  confirmedRsvp,
   createSubscriptionConfirmation,
   enforceRateLimit,
   findSubscriptionConfirmation,
   finishRequest,
   markSubscriptionConfirmationUsed,
   reserveRsvp,
-  rsvpForRequest,
   rsvpGuestTotals,
   storeWebhookEvent
 } from "./database";
@@ -353,23 +354,27 @@ function rsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId
 /**
  * The guest first, then the organizer: the organizer never hears of an RSVP
  * the guest wasn't told about.
- * - The guest's email fails (or can't be built): the seats are given back and
- *   the visitor gets the retryable error; a retry with the same requestId books
- *   and mails again (Resend's idempotency keys stop a second copy).
+ * - The guest's email fails (or can't be built): the seats this attempt holds
+ *   are given back and the visitor gets the retryable error; a retry with the
+ *   same requestId books and mails again (Resend's idempotency keys stop a
+ *   second copy).
+ * - Once the guest's email is sent, the RSVP is confirmed: from then on a
+ *   replay answers it, and no attempt gives it back.
  * - Only the organizer's fails: the guest already holds "RSVP received" and its
  *   confirmation id, so the booking stands. It is logged (a code and the
  *   requestId, no personal data; the row is found by request_id) and the RSVP
  *   succeeds, so a replay returns the same id and sends nothing new.
  */
-async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, confirmationId: string) {
+async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, reservation: { id: string; heldSince: number }) {
   let organizer: Email;
   try {
-    const emails = rsvpEmails(env, input, event, confirmationId);
+    const emails = rsvpEmails(env, input, event, reservation.id);
     organizer = emails.organizer;
     await sendEmail(env, emails.guest);
   } catch (error) {
-    await cancelRsvp(env, confirmationId).catch((cancelError: unknown) => {
-      // The seats stay taken and a replay would answer 202 without any email: say so in the logs.
+    await cancelRsvp(env, reservation.id, reservation.heldSince).catch((cancelError: unknown) => {
+      // The seats stay taken, unconfirmed: a retry with the same requestId books it again after 5 minutes
+      // (database.ts, PENDING_STALE_MS). Say so in the logs.
       console.error(JSON.stringify({
         code: "RSVP_CANCEL_FAILED",
         requestId: input.requestId,
@@ -378,6 +383,7 @@ async function sendRsvpEmails(env: Env, input: RsvpInput, event: FeedEvent, conf
     });
     throw error;
   }
+  await confirmRsvp(env, reservation.id);
   try {
     await sendEmail(env, organizer);
   } catch (error) {
@@ -400,14 +406,15 @@ async function handleRsvp(request: Request, env: Env, origin: string) {
   await validateTurnstile(env, input.turnstileToken, remoteIp(request), input.requestId, TURNSTILE_ACTIONS.rsvp);
   const emailHash = await rateLimitValue(env, "rsvp", "email", input.email, 6);
   // A replay of an RSVP already made answers as the first attempt did, before anything about the event is
-  // checked: it still holds once the event has started, and while the feed can't be read.
-  const replay = await rsvpForRequest(env, input.requestId, input.eventId, emailHash);
-  if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay.id } satisfies RsvpSuccessResponse, 202, origin);
+  // checked: it still holds once the event has started, and while the feed can't be read. If another attempt
+  // with this requestId is still emailing the guest, this waits for its outcome (confirmedRsvp).
+  const replay = await confirmedRsvp(env, input.requestId, input.eventId, emailHash);
+  if (replay) return json({ ok: true, requestId: input.requestId, confirmationId: replay } satisfies RsvpSuccessResponse, 202, origin);
   const event = findRsvpEvent(await loadEventFeed(env), input.eventId);
   if (!event) throw new PublicError("EVENT_NOT_FOUND");
   if (Date.now() >= Date.parse(event.startsAt)) throw new PublicError("EVENT_CLOSED");
   const reservation = await reserveRsvp(env, input, event, emailHash);
-  if (reservation.created) await sendRsvpEmails(env, input, event, reservation.id);
+  if (reservation.created) await sendRsvpEmails(env, input, event, reservation);
   return json({ ok: true, requestId: input.requestId, confirmationId: reservation.id } satisfies RsvpSuccessResponse, 202, origin);
 }
 

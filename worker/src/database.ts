@@ -131,14 +131,53 @@ export async function storeWebhookEvent(env: Env, provider: "resend", eventId: s
   return (result.meta.changes ?? 0) === 1;
 }
 
-type RsvpRequestRow = { id: string; event_id: string; email_hash: string };
+type RsvpRequestRow = { id: string; event_id: string; email_hash: string; created_at: number; confirmed_at: number | null };
 
-/** The RSVP already stored for this requestId, which must be the same visitor's RSVP to the same event. */
-export async function rsvpForRequest(env: Env, requestId: string, eventId: string, emailHash: string) {
-  const row = await env.DB.prepare("SELECT id, event_id, email_hash FROM rsvps WHERE request_id = ?")
-    .bind(requestId).first<RsvpRequestRow>();
+const RSVP_FOR_REQUEST = "SELECT id, event_id, email_hash, created_at, confirmed_at FROM rsvps WHERE request_id = ?";
+
+/**
+ * How long a request waits for another attempt with its requestId (a retry
+ * sent while the first is still on its way, say) to finish emailing the guest,
+ * and how often it looks.
+ */
+const PENDING_WAIT_MS = 5_000;
+const PENDING_POLL_MS = 200;
+/**
+ * An unconfirmed RSVP older than this was left by an attempt that stopped
+ * between taking the seats and either emailing the guest or giving the seats
+ * back (as request_log's 5-minute reclaim): the next attempt with its
+ * requestId books it again (reserveRsvp).
+ */
+const PENDING_STALE_MS = 5 * 60_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** The row stored for a requestId must be the same visitor's RSVP to the same event. */
+function sameRequest(row: RsvpRequestRow | null, eventId: string, emailHash: string) {
   if (row && (row.event_id !== eventId || row.email_hash !== emailHash)) throw new PublicError("REQUEST_ID_CONFLICT");
-  return row ? { id: row.id, created: false } : null;
+  return row;
+}
+
+/**
+ * The confirmation id of this requestId's RSVP once its guest has been
+ * emailed (a replay answers it and sends nothing new), or null when there is
+ * none to answer: never made, given back by its attempt, or left unconfirmed
+ * by an attempt that was cut off (PENDING_STALE_MS; reserveRsvp books it
+ * again). While another attempt is still emailing the guest, it waits up to
+ * `waitMs` for that attempt's outcome, then answers REQUEST_IN_PROGRESS (retry
+ * with the same requestId). A row for another event or email is
+ * REQUEST_ID_CONFLICT.
+ */
+export async function confirmedRsvp(env: Env, requestId: string, eventId: string, emailHash: string, waitMs = PENDING_WAIT_MS) {
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const row = sameRequest(await env.DB.prepare(RSVP_FOR_REQUEST).bind(requestId).first<RsvpRequestRow>(), eventId, emailHash);
+    if (!row) return null;
+    if (row.confirmed_at !== null) return row.id;
+    if (row.created_at < Date.now() - PENDING_STALE_MS) return null;
+    if (Date.now() >= deadline) throw new PublicError("REQUEST_IN_PROGRESS");
+    await sleep(PENDING_POLL_MS);
+  }
 }
 
 /**
@@ -160,54 +199,82 @@ export async function rsvpConfirmationId(env: Env, requestId: string) {
 const sqliteTime = (iso: string) => new Date(Date.parse(iso)).toISOString().slice(0, 19).replace("T", " ");
 
 /**
+ * A new RSVP (`created: true`) holds its seats unconfirmed since `heldSince`:
+ * its attempt emails the guest, then confirmRsvp, or cancelRsvp if that email
+ * fails. `created: false` is a confirmed RSVP answered again (nothing is sent).
+ */
+export type Reservation = { id: string; created: false } | { id: string; created: true; heldSince: number };
+
+/**
  * Stores the RSVP if the event's limit still has room for its guests. The
  * check and the insert are ONE statement, so simultaneous RSVPs can't both
- * take the last seats. A repeated requestId returns its stored RSVP
- * (`created: false`, nothing new is sent). The event's end is stored with it
- * (kept up to date from the feed by the daily cleanup, which deletes the RSVP
- * once that end has passed).
+ * take the last seats. A repeated requestId answers its confirmed RSVP, after
+ * waiting for an attempt still in progress (confirmedRsvp); if that attempt
+ * gives its seats back, this one books them. The event's end is stored with
+ * it (kept up to date from the feed by the daily cleanup, which deletes the
+ * RSVP once that end has passed).
  */
 export async function reserveRsvp(
   env: Env,
   input: Pick<RsvpInput, "requestId" | "name" | "email" | "guests" | "accessibility">,
   event: FeedEvent,
-  emailHash: string
-): Promise<{ id: string; created: boolean }> {
-  const existing = await rsvpForRequest(env, input.requestId, event.id, emailHash);
-  if (existing) return existing;
-
+  emailHash: string,
+  waitMs = PENDING_WAIT_MS
+): Promise<Reservation> {
   const id = await rsvpConfirmationId(env, input.requestId);
-  // ?12 (the limit) is NULL when the event has no limit.
-  const result = await env.DB.prepare(
-    `INSERT OR IGNORE INTO rsvps
-      (id, request_id, event_id, event_starts_at, event_ends_at, name, email, email_hash, guests, accessibility, created_at)
-     SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
-     WHERE ?12 IS NULL OR COALESCE((SELECT SUM(guests) FROM rsvps WHERE event_id = ?3), 0) + ?9 <= ?12`
-  ).bind(
-    id,
-    input.requestId,
-    event.id,
-    sqliteTime(event.startsAt),
-    sqliteTime(event.endsAt),
-    input.name,
-    input.email,
-    emailHash,
-    input.guests,
-    input.accessibility || null,
-    Date.now(),
-    event.limit
-  ).run();
-  if ((result.meta.changes ?? 0) === 1) return { id, created: true };
-
-  // Not inserted: the same requestId won a race just now, or the event is full.
-  const concurrent = await rsvpForRequest(env, input.requestId, event.id, emailHash);
-  if (concurrent) return concurrent;
-  throw new PublicError("EVENT_FULL");
+  // One round, unless another attempt with this requestId held the RSVP and then gave it back.
+  for (let round = 0; round < 3; round += 1) {
+    const confirmed = await confirmedRsvp(env, input.requestId, event.id, emailHash, waitMs);
+    if (confirmed) return { id: confirmed, created: false };
+    const now = Date.now();
+    const [, inserted, holder] = await env.DB.batch<Record<string, unknown>>([
+      // A row its attempt left unconfirmed for longer than PENDING_STALE_MS gives its seats back first, in the same
+      // transaction, and is booked again below (Resend's idempotency keys stop a second copy of an email it had sent).
+      env.DB.prepare("DELETE FROM rsvps WHERE request_id = ? AND confirmed_at IS NULL AND created_at < ?")
+        .bind(input.requestId, now - PENDING_STALE_MS),
+      // ?12 (the limit) is NULL when the event has no limit.
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO rsvps
+          (id, request_id, event_id, event_starts_at, event_ends_at, name, email, email_hash, guests, accessibility, created_at)
+         SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11
+         WHERE ?12 IS NULL OR COALESCE((SELECT SUM(guests) FROM rsvps WHERE event_id = ?3), 0) + ?9 <= ?12`
+      ).bind(
+        id,
+        input.requestId,
+        event.id,
+        sqliteTime(event.startsAt),
+        sqliteTime(event.endsAt),
+        input.name,
+        input.email,
+        emailHash,
+        input.guests,
+        input.accessibility || null,
+        now,
+        event.limit
+      ),
+      env.DB.prepare(RSVP_FOR_REQUEST).bind(input.requestId)
+    ]);
+    if ((inserted.meta.changes ?? 0) === 1) return { id, created: true, heldSince: now };
+    // Not inserted: another attempt with this requestId holds it (the next round waits for its outcome), or the
+    // event is full.
+    const held = sameRequest((holder.results[0] as RsvpRequestRow | undefined) ?? null, event.id, emailHash);
+    if (!held && event.limit !== null) throw new PublicError("EVENT_FULL");
+  }
+  throw new PublicError("REQUEST_IN_PROGRESS");
 }
 
-/** Gives a just-created RSVP's seats back (its emails could not be sent; the visitor retries). */
-export async function cancelRsvp(env: Env, id: string) {
-  await env.DB.prepare("DELETE FROM rsvps WHERE id = ?").bind(id).run();
+/** The guest has been emailed: the RSVP stands, a replay answers it, and no attempt gives it back. */
+export async function confirmRsvp(env: Env, id: string) {
+  await env.DB.prepare("UPDATE rsvps SET confirmed_at = ? WHERE id = ? AND confirmed_at IS NULL").bind(Date.now(), id).run();
+}
+
+/**
+ * Gives back the seats of the RSVP this attempt took at `heldSince`, when its
+ * guest email could not be sent (the visitor retries). Only that unconfirmed
+ * row: never one another attempt has since confirmed or booked again.
+ */
+export async function cancelRsvp(env: Env, id: string, heldSince: number) {
+  await env.DB.prepare("DELETE FROM rsvps WHERE id = ? AND confirmed_at IS NULL AND created_at = ?").bind(id, heldSince).run();
 }
 
 /** Guests booked so far per event, for the given events (counts only). */
