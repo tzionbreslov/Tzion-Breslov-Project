@@ -160,6 +160,26 @@ test("each event is a card with its id, start, RSVP setting and limit", () => {
   assert.equal(cards.eq(1).attr("data-limit"), "");
 });
 
+test("an event that had started when the list was built is marked, and keeps its button for no-JavaScript visitors", () => {
+  const events = [
+    record({ id: "started" }),
+    record({ id: "now", startsAt: "2026-11-08T18:00:00.000Z", endsAt: "2026-11-08T19:30:00.000Z" }),
+    record({ id: "later", startsAt: "2026-11-08T18:00:00.001Z", endsAt: "2026-11-08T19:30:00.000Z" }),
+    record({ id: "talk", rsvp: "off" })
+  ];
+  const $ = load(renderEventsList(events, copy.events, copy.rsvp, new Date("2026-11-08T18:00:00.000Z")));
+  const started = (id) => $(`article[data-event-id="${id}"]`).attr("data-started");
+  // Started at or before that time, as lib/client/rsvp.ts counts it.
+  assert.deepEqual(["started", "now", "later", "talk"].map(started), ["", "", undefined, ""]);
+  // app/events.css hides its RSVP slot from the start; without JavaScript, the line offering email shows as before.
+  const card = $('article[data-event-id="started"]');
+  assert.equal(card.find("button.tz-event__rsvp").length, 1);
+  assert.equal(card.find("noscript").length, 1);
+  assert.match($.html(), /<noscript><style>[^<]*\.tz-events \.tz-event\[data-started\] \.tz-event__actions\{display:block!important\}[^<]*<\/style><\/noscript>/);
+  // Without a time, nothing is marked.
+  assert.equal(load(renderEventsList(events, copy.events, copy.rsvp))("[data-started]").length, 0);
+});
+
 test("a card escapes the calendar's text", () => {
   const html = renderEventsList([record({
     title: '<script>alert("x")</script>',

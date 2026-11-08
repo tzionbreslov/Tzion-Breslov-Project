@@ -54,7 +54,8 @@ const events = [
   event({ id: FIXTURE_IDS.started, title: "Morning learning", startsAt: iso(now - HOUR), endsAt: iso(now + 2 * HOUR) }),
   event({ id: FIXTURE_IDS.open, title: "Weekly class", summary: "Open to everyone.", startsAt: iso(tomorrow), endsAt: iso(tomorrow + 90 * 60_000) }),
   event({ id: FIXTURE_IDS.noRsvp, title: "Talk at another venue", summary: PASTED_LINKS, location: "Jerusalem, see https://tzionbreslov.com/about/", rsvp: "off", startsAt: iso(tomorrow + 2 * HOUR), endsAt: iso(tomorrow + 3 * HOUR) }),
-  event({ id: FIXTURE_IDS.limited, title: "Shabbaton", summary: "Places are limited.", limit: 40, startsAt: iso(tomorrow + 24 * HOUR), endsAt: iso(tomorrow + 26 * HOUR) })
+  // A "<" or ">" that isn't part of a tag is text from the calendar (scripts/lib/google-calendar.mjs keeps it).
+  event({ id: FIXTURE_IDS.limited, title: "Shabbaton", summary: "Places are limited.\nFor kids <10, adults >18.", limit: 40, startsAt: iso(tomorrow + 24 * HOUR), endsAt: iso(tomorrow + 26 * HOUR) })
 ];
 
 if (/write-events-fixture\.mjs$/.test(process.argv[1] ?? "")) {

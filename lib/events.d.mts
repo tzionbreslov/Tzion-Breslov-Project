@@ -40,5 +40,5 @@ export type AnnouncementsCopy = {
 export function formatEventWhen(event: Pick<EventRecord, "startsAt" | "endsAt" | "timeZone" | "allDay">, options?: EventWhenOptions): string;
 export function upcomingEvents<T extends Pick<EventRecord, "endsAt">>(events: T[], now?: Date): T[];
 export function publishedEvents(events: EventRecord[], now?: Date): PublishedEvent[];
-export function renderEventsList(events: EventRecord[], text: EventsCopy, rsvp: RsvpButtonCopy): string;
+export function renderEventsList(events: EventRecord[], text: EventsCopy, rsvp: RsvpButtonCopy, now?: Date): string;
 export function renderAnnouncements(text: AnnouncementsCopy): string;

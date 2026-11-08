@@ -29,13 +29,16 @@ function readEvents(): EventRecord[] {
 
 export function eventsPage(path: string): PageContent {
   const text = copy.events;
+  // The build's time: events that ended by then are left out, and those that had started are marked
+  // (their RSVP slot never shows, so nothing moves when lib/client/rsvp.ts runs).
+  const now = new Date();
   return composePage({
     path,
     title: text.title,
     description: text.description,
     slug: "events",
     main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading }) +
-      renderEventsList(upcomingEvents(readEvents()), text, copy.rsvp) + renderAnnouncements(copy.announcements) + LARGE_SPACER),
+      renderEventsList(upcomingEvents(readEvents(), now), text, copy.rsvp, now) + renderAnnouncements(copy.announcements) + LARGE_SPACER),
     islands: ["signup", "events"],
     image: HERO_IMAGE
   });

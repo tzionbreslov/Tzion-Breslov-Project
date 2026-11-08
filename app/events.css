@@ -74,6 +74,10 @@
 
 /* RSVP (lib/client/rsvp.ts): the button, or "This event is full". */
 .tz-events .tz-event__actions { margin-top: 24px; }
+/* An event that had started when the page was built (lib/events.mjs marks it):
+ * RSVPs have closed, so its slot takes no room and nothing moves when the
+ * island runs. Without JavaScript, lib/events.mjs's noscript styles show it. */
+.tz-events .tz-event[data-started] .tz-event__actions { display: none; }
 
 /* Ruling R13: until its island is ready, an RSVP button does nothing and the
  * signup would post to the static host. Both keep their place (nothing moves

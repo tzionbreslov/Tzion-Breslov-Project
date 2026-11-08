@@ -412,17 +412,23 @@ test.describe("before the islands are ready, and without JavaScript", () => {
     if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
     const actions = card(page, FIXTURE_IDS.open).locator(".tz-event__actions");
     const form = signup(page).locator("form");
-    // The open event's card, its RSVP slot and the signup form, measured from that card's top. (The card above,
-    // an event that has started, loses its button once the island runs, by design, and moves everything below.)
-    const boxes = () => page.evaluate((id) => {
-      const event = `article.tz-event[data-event-id="${id}"]`;
-      const top = document.querySelector(event)!.getBoundingClientRect().y;
+    // The first card (an event that had started when the page was built), the open event's card, its RSVP slot
+    // and the signup form, measured from the list's top: the started card's RSVP slot never takes room, so
+    // nothing moves when the island runs.
+    const boxes = () => page.evaluate(({ started, open }) => {
+      const top = document.querySelector(".tz-events__list")!.getBoundingClientRect().y;
       const box = (selector: string) => {
         const rect = document.querySelector(selector)!.getBoundingClientRect();
         return { x: rect.x, y: rect.y - top, width: rect.width, height: rect.height };
       };
-      return { card: box(event), actions: box(`${event} .tz-event__actions`), form: box(".tz-announce__form").y };
-    }, FIXTURE_IDS.open);
+      const card = (id: string) => `article.tz-event[data-event-id="${id}"]`;
+      return {
+        started: box(card(started)),
+        card: box(card(open)),
+        actions: box(`${card(open)} .tz-event__actions`),
+        form: box(".tz-announce__form").y
+      };
+    }, { started: FIXTURE_IDS.started, open: FIXTURE_IDS.open });
 
     // Next's scripts never arrive (its stylesheet does): the page as it is before the islands start.
     await page.route("**/_next/static/chunks/*.js", (route) => route.abort());
@@ -471,5 +477,41 @@ test.describe("before the islands are ready, and without JavaScript", () => {
       await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", EMAIL_LINK);
       await expectClean(page, errors);
     });
+  });
+});
+
+test.describe("the cards, in either fixture build", () => {
+  test.skip(!process.env.TZ_E2E_EVENTS, "needs an events fixture build (TZ_E2E_EVENTS=1 or preview)");
+
+  // The build hides the RSVP slot of an event that had started by then (data-started, app/events.css);
+  // lib/client/rsvp.ts takes the button away from one that started after the build.
+  test("an event that started after the page was built loses its RSVP button when the page opens", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await page.goto("/events/");
+    await expect(card(page, FIXTURE_IDS.started)).toHaveAttribute("data-started", "");
+    await expect(card(page, FIXTURE_IDS.open)).not.toHaveAttribute("data-started");
+    const startsAt = await card(page, FIXTURE_IDS.open).getAttribute("data-starts-at");
+
+    // A minute after the open event's start.
+    await page.clock.setFixedTime(new Date(Date.parse(startsAt!) + 60_000));
+    await page.reload();
+    await page.waitForSelector("[data-tz-rsvp=ready]");
+    await expect(card(page, FIXTURE_IDS.open).locator(".tz-event__actions")).toBeHidden();
+    await expect(card(page, FIXTURE_IDS.open).getByRole("button")).toHaveCount(0);
+    // The next event, a day later, still takes RSVPs.
+    await expect(rsvpButton(page, FIXTURE_IDS.limited)).toBeVisible();
+    await expectClean(page, errors);
+  });
+
+  // The calendar's words are text: "kids <10, adults >18" is neither markup nor lost.
+  test("a description's \"<\" and \">\" show as text", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
+    await page.goto("/events/");
+    const summary = card(page, FIXTURE_IDS.limited).locator(".tz-event__summary");
+    await expect(summary).toContainText("kids <10, adults >18");
+    expect(await summary.innerHTML()).toBe("Places are limited.<br>For kids &lt;10, adults &gt;18.");
+    await expectClean(page, errors);
   });
 });
