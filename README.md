@@ -821,7 +821,7 @@ passes in (`lib/client/config.ts`).
    and its six sections, and the footer's Privacy link opens it.
 4. **CSP, live:** `node scripts/check-csp.mjs https://tzionbreslov.org` and
    `node scripts/check-csp.mjs https://www.tzionbreslov.org` must report zero violations.
-5. **Redirects:** the eleven addresses in step 6 answer 301 with their `location`, and the five pages it says no
+5. **Redirects:** the eleven addresses in step 6 answer 301 with their `location`, and the five addresses it says no
    rule catches answer without a 301.
 6. **Test sign-ups**, each with an address the owner reads:
    - **Event announcements:** on `/events/`, "Get event announcements" with **only** "Event announcements" ticked.
