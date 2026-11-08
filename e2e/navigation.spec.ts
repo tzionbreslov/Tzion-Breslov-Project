@@ -100,16 +100,21 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
-  test("a mouse press inside the panel doesn't pin it: after a right-click or an aborted press on Classes, leaving closes it", async ({ page }) => {
+  test("a mouse press inside the panel doesn't pin it: after a right-click, a ctrl-click or an aborted press on Classes, leaving closes it", async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto("/");
     await menusReady(page);
     const classes = panelLink(desktopPanel(page), "Classes");
-    for (const press of ["right-click", "aborted press"] as const) {
+    for (const press of ["right-click", "ctrl-click", "aborted press"] as const) {
       await desktopToggle(page).hover();
       await expect(desktopPanel(page)).toBeVisible();
       if (press === "right-click") await classes.click({ button: "right" });
-      else {
+      else if (press === "ctrl-click") {
+        // Ctrl (Cmd on macOS) is held from before the press: its keydown mustn't make the press keyboard focus.
+        // The click opens Classes in a new tab, if any; this page stays where it is.
+        await classes.click({ modifiers: ["ControlOrMeta"] });
+        for (const other of page.context().pages()) if (other !== page) await other.close();
+      } else {
         // Pressed on Classes, released outside the menu: no click.
         await classes.hover();
         await page.mouse.down();
