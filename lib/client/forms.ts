@@ -47,7 +47,7 @@ export const MESSAGES = {
   phone: "Please enter a valid phone number.",
   messageShort: `Please enter at least ${FIELD_LIMITS.message.min} characters.`,
   form: "There was a problem with your submission. Please review the fields below.",
-  unavailable: "This form is temporarily unavailable. Please email us at tzionbreslovproject@gmail.com.",
+  unavailable: `This form is temporarily unavailable. Please email us at ${publicConfig().contactEmail}.`,
   rateLimited: "Too many submissions. Please try again in a few minutes.",
   failed: "Something went wrong sending your message. Please try again."
 };
