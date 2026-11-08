@@ -180,7 +180,7 @@
   - Parked review items that are still open: `docs/superpowers/follow-ups.md`.
 - **Follow-ups (2026-11-08; the owner asked to "fix everything we can in advance").** Checkpoints:
   - checkpoint-017 (#27) — phase 1's parked review items recorded in `docs/superpowers/follow-ups.md`; a switch-day
-    prerequisite
+    prerequisite (step 3.1: don't restore a stale `.env.worker.bak`)
   - checkpoint-018 (#28) — switch-day runbook: a stale backup can't come back; redirects catch addresses without the
     slash (Group 1)
   - checkpoint-019 (#29) — static-export check: old-domain links in event cards, and the guard's other gaps (Group 2)
@@ -296,8 +296,8 @@
     - Switch day, step 4's deploy **starts** storing the Worker's own log lines (codes such as
       `RSVP_CONFIRM_FAILED`). `wrangler.jsonc` sets
       `"observability": { "enabled": true, "redact_query_string": true, "logs": { "invocation_logs": false } }`, so
-      no per-request invocation records are stored. Step 4's log-probe check confirms that a stored line carries no
-      request fields.
+      no per-request invocation records are stored. Step 4's log-probe check checks whether a stored line carries
+      request fields; if one does, step 4 turns Workers Logs off (`"enabled": false`).
     - The privacy notice already covers those lines: "error records from the forms service, designed to contain no
       personal details, for up to 7 days" (`content/copy/en.json` → privacy). So no new owner decision arises.
     - README → Switch day, step 1.3 still checks the dashboard on the day, since the setting can change before then.
