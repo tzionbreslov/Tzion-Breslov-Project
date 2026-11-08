@@ -44,8 +44,25 @@ function decodeEntities(text) {
   });
 }
 
-/** An HTML comment, up to its "-->". */
-const HTML_COMMENT = /<!--[\s\S]*?-->/g;
+/**
+ * The text without its HTML comments, each up to its "-->" (looked for after the "<!--").
+ * An unclosed "<!--" stays as text. A loop rather than /<!--[\s\S]*?-->/g, which is
+ * quadratic on text full of unclosed "<!--"; the result is the same.
+ */
+function removeComments(text) {
+  let kept = "";
+  let from = 0;
+  for (;;) {
+    const open = text.indexOf("<!--", from);
+    if (open === -1) break;
+    const close = text.indexOf("-->", open + 4);
+    // No "-->" after this "<!--", so none after any later one either.
+    if (close === -1) break;
+    kept += text.slice(from, open);
+    from = close + 3;
+  }
+  return kept + text.slice(from);
+}
 /**
  * A real tag: "<" then a tag name (or "/" and a name), up to its ">" (one in a
  * quoted attribute doesn't end it). Any other "<" or ">" is text ("kids <10, adults >18").
@@ -56,8 +73,7 @@ const HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9:-]*(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*'
 /** Plain text from a calendar field: line breaks kept (<br> and block ends become newlines), tags dropped, entities decoded. */
 function htmlToText(value) {
   if (typeof value !== "string") return "";
-  return decodeEntities(value
-    .replace(HTML_COMMENT, "")
+  return decodeEntities(removeComments(value)
     .replace(/<br\s*\/?>/gi, "\n")
     .replace(/<\/(?:p|div|li|h[1-6])\s*>/gi, "\n")
     .replace(HTML_TAG, ""));

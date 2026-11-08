@@ -194,6 +194,18 @@ test("a long description full of unclosed tags is read in linear time", () => {
   assert.ok(event.summary.startsWith('<a x="<b <a x="<b'));
 });
 
+test("comments are removed one after another, and an unclosed one is text, in linear time", () => {
+  const summary = (description) => one({ description }).event.summary;
+  assert.equal(summary("a<!--x-->b<!--y > z-->c<!--z"), "abc<!--z");
+  // Its "-->" is looked for after the "<!--": "<!-->" doesn't close itself.
+  assert.equal(summary("a<!-->b-->c"), "ac");
+  const description = "<!--".repeat(80_000);
+  const started = performance.now();
+  const { event } = one({ description });
+  assert.ok(performance.now() - started < 2_000, `${Math.round(performance.now() - started)} ms`);
+  assert.ok(event.summary.startsWith("<!--<!--"));
+});
+
 test("an untitled event gets the default title", () => {
   assert.equal(one({ summary: null }).event.title, "Tzion Breslov event");
   assert.equal(one({ summary: "  <br> " }).event.title, "Tzion Breslov event");
