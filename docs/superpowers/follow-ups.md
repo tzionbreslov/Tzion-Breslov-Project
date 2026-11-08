@@ -43,6 +43,9 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`compose.ts` hard-codes `SITE_NAME`** ("Tzion Breslov"). Checked. Left as it is (2026-11-08): no copy or site
   config holds the name. The only other copy is the Worker's `ORGANIZATION_NAME` in `wrangler.jsonc`, which the site
   build doesn't read.
+- **`scripts/lib/youtube-feed.mjs` (`extractText`) escapes the tag name for a RegExp inline**, a third copy of
+  `escapeRegExp` (found 2026-11-08, Group 4). Left as it is: it is a dependency-free parser for `sync:youtube`, and
+  sharing the helper would make it import `config/site-structure.mjs` (and `site-url.mjs`) for one line.
 
 ## Events and calendar
 
