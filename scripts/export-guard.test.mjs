@@ -119,6 +119,28 @@ test("calendar text that spells a single-quoted attribute doesn't fail the deplo
   for (const guard of [today, switched, preview]) assert.deepEqual(guard.pageProblems(eventsPage(typed)), []);
 });
 
+test("a removed page linked without its trailing slash fails", () => {
+  assert.deepEqual(today.pageProblems(page(`<a href="/about">x</a>`)), ["links to the removed page /about"]);
+  assert.deepEqual(today.pageProblems(page(`<a href="/resources?page=2">x</a>`)), ["links to the removed page /resources"]);
+  assert.deepEqual(today.pageProblems(page(`<a href="/video">x</a>`)), ["links to the removed page /video"]);
+  assert.deepEqual(today.pageProblems(page(`<a href="${COM}/about#team">x</a>`)), ["links to the removed page /about"]);
+  assert.deepEqual(preview.pageProblems(page(`<a href="${BASE}/resources/page/2">x</a>`)), ["links to the removed page /resources/page/2"]);
+  assert.deepEqual(switched.pageProblems(page(`<a href='${ORG}/category/uncategorized'>x</a>`)), ["links to the removed page /category/uncategorized"]);
+  // Under a removed section it already failed.
+  assert.deepEqual(today.pageProblems(page(`<a href="/video/video-3">x</a>`)), ["links to the removed page /video/video-3"]);
+  // In the text (JSON-LD, sitemaps) too.
+  assert.deepEqual(today.removedRefs(`<loc>${COM}/about</loc>`), ["/about"]);
+  assert.deepEqual(today.pageProblems(page("", `<script type="application/ld+json">{"url":"https:\\/\\/tzionbreslov.com\\/resources"}</script>`)),
+    ["links to the removed page /resources"]);
+});
+
+test("without the trailing slash, live pages and files still never match a removed page", () => {
+  for (const path of ["/about-us", "/about-us/", "/about/team", "/aboutus", "/about.html", "/resources.pdf", "/videos",
+    "/wp-content/uploads/about", `${BASE}`]) {
+    assert.deepEqual(today.pageProblems(page(`<a href="${path}">x</a><p>${COM}${path}</p>`)), [], path);
+  }
+});
+
 test("the importer's leftovers, a plain YouTube embed, a bare / under a base path and a foreign canonical fail", () => {
   assert.deepEqual(today.pageProblems(page(`<img src="http://localhost:8088/wp-content/a.png">`)), ["still references localhost:8088"]);
   assert.deepEqual(today.pageProblems(page(`<img src="https://estiwolo.com/wp-content/a.png">`)), ["still references the dead staging host"]);
