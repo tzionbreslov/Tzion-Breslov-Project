@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 import { load } from "cheerio";
+import { CONTACT_EMAIL } from "../config/contact.mjs";
 import copy from "../content/copy/en.json" with { type: "json" };
 import { formatEventWhen, publishedEvents, renderAnnouncements, renderEventsList, upcomingEvents } from "../lib/events.mjs";
 
@@ -69,6 +70,16 @@ test("an event that takes RSVPs has an RSVP button; a \"No RSVP\" event has none
   assert.equal(button.attr("type"), "button");
   assert.equal(button.text(), "RSVP");
   assert.equal(off.find("button").length, 0);
+});
+
+test("the no-JavaScript lines link to the one contact address (config/contact.mjs), which the copy's sentences spell", () => {
+  const link = `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`;
+  assert.equal(renderEventsList([record()], copy.events, copy.rsvp).split(link).length, 2);
+  assert.equal(renderAnnouncements(copy.announcements).split(link).length, 2);
+  // The sentences that name the address are wording, written out in content/copy/en.json: the same address.
+  const addresses = JSON.stringify(copy).match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g);
+  assert.ok(addresses.length >= 4);
+  assert.deepEqual([...new Set(addresses)], [CONTACT_EMAIL]);
 });
 
 test("the \"Get event announcements\" signup: email, the two lists (events ticked), consent and Sign up", () => {
