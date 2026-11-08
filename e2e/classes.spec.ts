@@ -271,18 +271,17 @@ test("a card plays its video in the dialog; Escape, the close button and the bac
   await expectClean(page, errors);
 });
 
-// The exit animation's length is written once, in app/dialog.css: lib/client/dialog.ts reads it and waits that long.
-test("closing plays the dialog's exit animation, then removes the player", async ({ page }) => {
-  const errors = trackPageErrors(page);
-  await stubPlayer(page);
-  await openClasses(page);
+type ExitTiming = { duration: string; removedAfter: number };
+
+/** Opens the first video's player, closes it with Escape, and times how long the dialog stays after it turns "closed". */
+async function timeClose(page: Page): Promise<ExitTiming> {
   await shown(page, "video").first().locator("a.tz-vl__trigger").click();
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.evaluate(() => {
     const dialog = document.querySelector<HTMLElement>(".tz-dialog")!;
     let closedAt = 0;
     let duration = "";
-    (window as unknown as { tzExit: Promise<{ duration: string; removedAfter: number }> }).tzExit = new Promise((resolve) => {
+    (window as unknown as { tzExit: Promise<ExitTiming> }).tzExit = new Promise((resolve) => {
       new MutationObserver((_, observer) => {
         if (!closedAt && dialog.dataset.state === "closed") {
           closedAt = performance.now();
@@ -296,11 +295,27 @@ test("closing plays the dialog's exit animation, then removes the player", async
     });
   });
   await page.keyboard.press("Escape");
-  const { duration, removedAfter } = await page.evaluate(() => (window as unknown as { tzExit: Promise<{ duration: string; removedAfter: number }> }).tzExit);
-  expect(duration).toBe("0.22s");
-  expect(removedAfter).toBeGreaterThanOrEqual(200);
-  expect(removedAfter).toBeLessThan(1500);
+  const timing = await page.evaluate(() => (window as unknown as { tzExit: Promise<ExitTiming> }).tzExit);
   expect(await page.locator(".tz-dialog, .tz-dialog-overlay").count()).toBe(0);
+  return timing;
+}
+
+// The exit animation's length is written once, in app/dialog.css: lib/client/dialog.ts reads it and waits that long.
+test("closing plays the dialog's exit animation, then removes the player", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await stubPlayer(page);
+  await openClasses(page);
+  const css = await timeClose(page);
+  expect(css.duration).toBe("0.22s");
+  expect(css.removedAfter).toBeGreaterThanOrEqual(200);
+  expect(css.removedAfter).toBeLessThan(1500);
+
+  // A longer exit in the stylesheet is followed too: the wait comes from the CSS, not a copy of it in the script.
+  await page.addStyleTag({ content: '.tz-dialog[data-state="closed"] { animation-duration: .6s; }' });
+  const longer = await timeClose(page);
+  expect(longer.duration).toBe("0.6s");
+  expect(longer.removedAfter).toBeGreaterThanOrEqual(580);
+  expect(longer.removedAfter).toBeLessThan(2000);
   await expectClean(page, errors);
 });
 
