@@ -331,6 +331,68 @@ test("with reduced motion the player closes at once", async ({ page }) => {
   await expectClean(page, errors);
 });
 
+// From 320 to 374px the channel header still fits: "Visit our YouTube channel" on one line, and the handle
+// beside the logo, unbroken, inside the header. From 375px nothing changes: the sizes it had before.
+test("the channel header fits from 320 to 374px, and keeps its sizes from 375px", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await page.goto("/classes/");
+  await page.evaluate(() => document.fonts.ready);
+  for (const width of [320, 330, 340, 351, 352, 360, 374, 375, 390, 480]) {
+    await page.setViewportSize({ width, height: 800 });
+    const header = await page.locator(".tz-vl__profile").evaluate((profile) => {
+      const box = (node: Element) => node.getBoundingClientRect();
+      const style = (selector: string) => getComputedStyle(profile.querySelector(selector)!);
+      const channel = profile.querySelector(".tz-vl__channel")!;
+      const label = document.createRange();
+      label.selectNodeContents(channel.firstChild!);
+      const meta = profile.querySelector<HTMLElement>(".tz-vl__meta")!;
+      const avatar = box(profile.querySelector(".tz-vl__avatar")!);
+      // The handle with its "·" (they never part: the "·" sits on the handle's line).
+      const handle = meta.querySelector("strong")!;
+      const dot = document.createRange();
+      dot.setStart(handle.nextSibling!, 1);
+      dot.setEnd(handle.nextSibling!, 2);
+      // For the failure message: each one's natural (unwrapped) width, and the room it has.
+      const natural = (node: Element, measure: (copy: Element) => number) => {
+        const copy = node.cloneNode(true) as HTMLElement;
+        copy.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;width:max-content;max-width:none";
+        node.parentElement!.append(copy);
+        const width = measure(copy);
+        copy.remove();
+        return width.toFixed(1);
+      };
+      const handleAndDot = natural(meta, (copy) => {
+        const range = document.createRange();
+        range.setStartBefore(copy.querySelector("strong")!);
+        range.setEnd(copy.querySelector("strong")!.nextSibling!, 2);
+        return range.getBoundingClientRect().width;
+      });
+      const measure = `handle and dot ${handleAndDot}px in ${meta.clientWidth}px, ` +
+        `button ${natural(channel, (copy) => copy.getBoundingClientRect().width)}px in ${box(profile).width.toFixed(1)}px`;
+      return {
+        measure,
+        fits: {
+          channelOneLine: new Set([...label.getClientRects()].map((rect) => Math.round(rect.top))).size === 1,
+          channelInside: box(channel).right <= box(profile).right + 0.5,
+          metaBesideLogo: box(meta).left >= avatar.right,
+          handleOneLine: handle.getClientRects().length === 1,
+          dotWithHandle: Math.abs(dot.getBoundingClientRect().top - handle.getClientRects()[0].top) < 2,
+          metaInside: meta.scrollWidth <= meta.clientWidth
+        },
+        sizes: {
+          avatar: avatar.width,
+          title: style(".tz-vl__title").fontSize,
+          meta: style(".tz-vl__meta").fontSize,
+          channel: `${style(".tz-vl__channel").fontSize} ${style(".tz-vl__channel").padding} ${style(".tz-vl__channel").letterSpacing}`
+        }
+      };
+    });
+    expect(header.fits, `${width}px (${header.measure})`).toEqual({ channelOneLine: true, channelInside: true, metaBesideLogo: true, handleOneLine: true, dotWithHandle: true, metaInside: true });
+    if (width >= 375) expect(header.sizes, `${width}px`).toEqual({ avatar: 84, title: "40px", meta: "14px", channel: "12px 10px 16px 0.4px" });
+  }
+  await expectClean(page, errors);
+});
+
 test("the channel link opens YouTube in a new tab", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openClasses(page);
