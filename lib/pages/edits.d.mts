@@ -9,3 +9,6 @@ export function swapHero(hero: string, options: HeroOptions): string;
 /** A head item as lib/content-files.ts types it (HeadItem): only what swapHead reads. */
 export type HeadTag = { t: string; attrs?: Record<string, string> };
 export function swapHead<T extends HeadTag>(head: T[], own: T[]): T[];
+/** The owner's edits of 2026-11-08 (components/site-document.tsx): every footer's credit line, the articles' author. */
+export function editFooterCredit(html: string): string;
+export function editArticleAuthor<T extends HeadTag>(head: T[]): T[];
