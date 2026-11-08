@@ -145,6 +145,7 @@ test("both map links lift on hover and focus as the theme's buttons do, and not 
 // rules are applied here as they are, unconditionally, and must lay everything out exactly as the gaps do.
 test("without flex gap the margins space the map card and its buttons exactly as the gaps do", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await stubMap(page);
   await openContact(page);

@@ -11,6 +11,7 @@ import { expectClean, expectGapFallbackLayout, trackPageErrors } from "./helpers
 // here unconditionally and must lay the notices out exactly as the gaps do (e2e/helpers.ts).
 test("without flex gap, margins space the notices exactly as the gaps do", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   const widths = [320, 390, 600, 601, 768, 1440];
 

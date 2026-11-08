@@ -183,6 +183,7 @@ test("keyboard: the arrow keys stay inside the frequency choice; Tab goes freque
 // the gaps do (e2e/helpers.ts).
 test("without flex gap, margins space the frequency choices and the other amount exactly as the gaps do", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await openDonate(page);
   // "Other amount" shows its field.

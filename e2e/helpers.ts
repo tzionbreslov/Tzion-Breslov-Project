@@ -86,8 +86,12 @@ export async function scrollIntoViewAndSettle(target: Locator): Promise<void> {
 /**
  * Safari before 14.1 has no flex `gap`, so app/*.css spaces the new pieces' flex items with margins there instead,
  * in `@supports not (inset: 0)` blocks: @supports can't ask for flex gap (that Safari knows `gap` from grid), but
- * those browsers also lack `inset`, which came with it. This browser has both: these are the blocks' rules (each
- * with its @media kept) as one stylesheet, to apply unconditionally. Null in a browser without inset or gap.
+ * those browsers also lack `inset`, which came with it. This browser has both: these are the blocks' rules as one
+ * stylesheet, to apply unconditionally. Null in a browser without inset or gap.
+ *
+ * Limit: an @media inside a block is kept, but one around a block is dropped (`@media (…) { @supports not (inset: 0)
+ * { … } }` comes back as the block's rules alone, at every width). No app/*.css nests a block that way today: write
+ * the block outside the @media, or teach this walker to keep the outer condition first.
  */
 export function gapFallbackRules(page: Page): Promise<string | null> {
   return page.evaluate(() => {
@@ -143,7 +147,15 @@ export function layoutOf(page: Page, { boxes = [], contents = [] }: LayoutTarget
  * fallback's rules (they take each container's gap away and put margins in its place), lays it out again, and
  * expects every target exactly where it was. Each of `containers` must be a flex container that has a gap before and
  * none after, so a container the fallback forgets fails instead of passing on its own gap; `prepare` runs after each
- * resize, before measuring. Desktop project only: it sets its own viewport sizes.
+ * resize, before measuring. Desktop project only: it sets its own viewport sizes. Each width is laid out twice, so a
+ * proof took up to 37 s under 10 local workers: every test that calls this marks itself `test.slow()`.
+ *
+ * Limit: the rules are appended after every stylesheet (as e2e/contact.spec.ts does too), so here they win every tie
+ * of equal specificity. In a real old Safari each block applies where it sits in app/*.css, and the theme's and
+ * WordPress's stylesheets and every app/*.css rule after the block come later: one of those with the same
+ * specificity that sets the same margin or gap would win there, and this proof can't see it. So each block's
+ * selectors must outrank such rules (its comment says so), and that is checked by hand: the Group 9 review found
+ * none on 2026-11-08.
  */
 export async function expectGapFallbackLayout(page: Page, { containers, targets, widths, height = 900, prepare }: {
   containers: string[];

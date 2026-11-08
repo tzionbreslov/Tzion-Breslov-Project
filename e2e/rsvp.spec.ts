@@ -603,6 +603,7 @@ test.describe("the cards, in either fixture build", () => {
   const GAP_WIDTHS = [320, 390, 600, 601, 768, 1024, 1440];
   test("without flex gap, margins space the cards' icons exactly as the gaps do", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
     const errors = trackPageErrors(page);
     if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
     await openEvents(page);
@@ -616,6 +617,7 @@ test.describe("the cards, in either fixture build", () => {
 
   test("without flex gap, a margin spaces the RSVP form's consent checkbox exactly as the gap does", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
     const errors = trackPageErrors(page);
     if (process.env.TZ_E2E_EVENTS === "1") await stubServices(page);
     await openEvents(page);

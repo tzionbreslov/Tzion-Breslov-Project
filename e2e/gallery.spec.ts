@@ -149,8 +149,8 @@ test("each hero's h1 looks exactly like the h2 it replaced (Gallery, Events, Pri
       return { heading: read(node), strong: read(node.querySelector("strong")!), x: box.x, width: box.width, height: Math.round(box.height * 100) / 100 };
     }, PROPS);
   };
-  for (const path of ["/gallery/", "/events/", "/privacy/"]) {
-    await page.goto(path);
+  for (const route of ["/gallery/", "/events/", "/privacy/"]) {
+    await page.goto(route);
     const h1 = await look("h1");
     await page.locator(".hero h1").evaluate((node) => {
       const h2 = document.createElement("h2");
@@ -158,7 +158,7 @@ test("each hero's h1 looks exactly like the h2 it replaced (Gallery, Events, Pri
       h2.innerHTML = node.innerHTML;
       node.replaceWith(h2);
     });
-    expect(await look("h2"), path).toEqual(h1);
+    expect(await look("h2"), route).toEqual(h1);
   }
   await expectClean(page, errors);
 });
@@ -199,6 +199,7 @@ test("between 599 and 600px wide, one photo across still takes the whole content
 // applied here unconditionally and must lay the caption bar out exactly as the gap does (e2e/helpers.ts).
 test("without flex gap, a margin spaces the viewer's caption and counter exactly as the gap does", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await openGallery(page);
   // The first photo starts below the fold: bring it up first, so the theme's header switch can't move it mid-click.

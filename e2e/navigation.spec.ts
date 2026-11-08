@@ -334,6 +334,7 @@ test.describe("mobile menu", () => {
 // width says where the caret ends.
 test("without flex gap, a margin spaces the Resources toggle's caret exactly as the gap does", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await page.goto("/");
   await menusReady(page);

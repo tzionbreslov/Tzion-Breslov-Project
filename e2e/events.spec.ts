@@ -109,6 +109,7 @@ test.describe("Get event announcements", () => {
   // exactly as the gaps do (e2e/helpers.ts).
   test("without flex gap, margins space the checkboxes and the lists exactly as the gaps do", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+    test.slow();
     const errors = trackPageErrors(page);
     await page.goto("/events/");
     await page.waitForSelector("[data-tz-announcements=ready]");

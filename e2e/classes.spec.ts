@@ -486,6 +486,7 @@ test("thumbnails are as wide as on the Resources Classes tab", async ({ page }, 
 const GAP_WIDTHS = [320, 360, 374, 375, 390, 480, 767, 768, 1024, 1440];
 test("without flex gap, margins space the channel button, tabs and sort pills exactly as the gaps do", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await openClasses(page);
   await expectGapFallbackLayout(page, {
@@ -499,6 +500,7 @@ test("without flex gap, margins space the channel button, tabs and sort pills ex
 
 test("without flex gap, margins space the open search box exactly as the gaps do", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  test.slow();
   const errors = trackPageErrors(page);
   await openClasses(page);
   // Below 768px the open box takes its own row under the tabs.
