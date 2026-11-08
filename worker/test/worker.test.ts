@@ -1080,6 +1080,46 @@ describe("POST /v1/rsvp", () => {
     }
   });
 
+  it("treats a feed body that breaks off while it is read as unavailable (read failed)", async () => {
+    // Valid JSON starts arriving, then the connection drops (or the 10 s timeout fires mid-body).
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"syncedAt":null,"events":['));
+        controller.error(new Error("connection reset"));
+      }
+    });
+    const outbound = mockProviders("rsvp", { feedResponse: () => new Response(body, { headers: { "Content-Type": "application/json" } }) });
+    await expect(loadEventFeed(env)).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE", message: "events feed: read failed" });
+    expect(outbound.feed()).toHaveLength(1);
+  });
+
+  it("stops reading a feed with no Content-Length once it passes 512 KB, and cancels the rest", async () => {
+    const CHUNK = 64 * 1024;
+    let pulled = 0;
+    let cancelled = false;
+    // Up to about 1 MB of a JSON string, in 64 KB chunks, with no declared length.
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (pulled >= 1024 * 1024) return controller.close();
+        const chunk = new TextEncoder().encode((pulled === 0 ? '{"syncedAt":"' : "") + " ".repeat(CHUNK)).slice(0, CHUNK);
+        pulled += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      }
+    }, { highWaterMark: 0 });
+    let response: Response | undefined;
+    mockProviders("rsvp", {
+      feedResponse: () => (response = new Response(body, { headers: { "Content-Type": "application/json" } }))
+    });
+    await expect(loadEventFeed(env)).rejects.toMatchObject({ code: "EVENTS_UNAVAILABLE", message: "events feed: too large" });
+    // The no-length path: nothing declared the size up front.
+    expect(response?.headers.get("content-length")).toBeNull();
+    await vi.waitFor(() => expect(cancelled).toBe(true), { timeout: 500 });
+    expect(pulled).toBeLessThanOrEqual(512 * 1024 + 2 * CHUNK);
+  });
+
   it("gives up on a feed that doesn't answer within 10 s: 503 EVENTS_UNAVAILABLE", async () => {
     const asked = shortenTimeouts();
     const outbound = mockProviders("rsvp", { feedHangs: true });
