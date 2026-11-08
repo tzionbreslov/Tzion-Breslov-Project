@@ -67,7 +67,7 @@ export function exportGuard({ production, base = "" }) {
   const removedPath = (ref) => {
     // A URL found in the text ends at a single quote too (a single-quoted attribute), and
     // at a backslash once JSON's "\/" is undone: the end of a JSON string (`\"` in the
-    // flight data) or another escape (`&`).
+    // flight data) or another JSON escape (Next writes & < > as \u escapes there).
     const urlPath = ref.replaceAll("\\/", "/").replace(/['?#\\].*$/s, "");
     // A page linked without its trailing slash ("/about", "/resources") is the same page;
     // a file ("/about.html") isn't, and a longer name ("/about-us") never matches.
