@@ -160,7 +160,7 @@ test("each event is a card with its id, start, RSVP setting and limit", () => {
   assert.equal(cards.eq(1).attr("data-limit"), "");
 });
 
-test("an event that had started when the list was built is marked, and keeps its button for no-JavaScript visitors", () => {
+test("an event that had started when the list was built is marked, and its RSVP slot stays hidden without JavaScript too", () => {
   const events = [
     record({ id: "started" }),
     record({ id: "now", startsAt: "2026-11-08T18:00:00.000Z", endsAt: "2026-11-08T19:30:00.000Z" }),
@@ -171,11 +171,15 @@ test("an event that had started when the list was built is marked, and keeps its
   const started = (id) => $(`article[data-event-id="${id}"]`).attr("data-started");
   // Started at or before that time, as lib/client/rsvp.ts counts it.
   assert.deepEqual(["started", "now", "later", "talk"].map(started), ["", "", undefined, ""]);
-  // app/events.css hides its RSVP slot from the start; without JavaScript, the line offering email shows as before.
+  // The markup is every RSVP card's (lib/client/rsvp.ts finds it there), but app/events.css hides its RSVP slot
+  // from the start: the no-JavaScript styles show the line offering email on the other cards, never on this one.
   const card = $('article[data-event-id="started"]');
   assert.equal(card.find("button.tz-event__rsvp").length, 1);
   assert.equal(card.find("noscript").length, 1);
-  assert.match($.html(), /<noscript><style>[^<]*\.tz-events \.tz-event\[data-started\] \.tz-event__actions\{display:block!important\}[^<]*<\/style><\/noscript>/);
+  const noScriptStyles = $("noscript").map((_, node) => $(node).html()).get().filter((html) => html.startsWith("<style>"));
+  assert.equal(noScriptStyles.length, 1);
+  assert.match(noScriptStyles[0], /\.tz-events \.tz-event__actions\{visibility:visible!important\}/);
+  assert.doesNotMatch(noScriptStyles[0], /data-started|display:block/);
   // Without a time, nothing is marked.
   assert.equal(load(renderEventsList(events, copy.events, copy.rsvp))("[data-started]").length, 0);
 });

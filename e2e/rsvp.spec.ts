@@ -538,7 +538,7 @@ test.describe("before the islands are ready, and without JavaScript", () => {
     test("each RSVP button and the signup form give way to a line offering email", async ({ page }) => {
       const errors = trackPageErrors(page);
       await page.goto("/events/");
-      for (const id of [FIXTURE_IDS.open, FIXTURE_IDS.limited, FIXTURE_IDS.started]) {
+      for (const id of [FIXTURE_IDS.open, FIXTURE_IDS.limited]) {
         const event = card(page, id);
         await expect(event.locator("button.tz-event__rsvp")).toHaveCount(1);
         await expect(event.locator("button.tz-event__rsvp")).toBeHidden();
@@ -547,6 +547,16 @@ test.describe("before the islands are ready, and without JavaScript", () => {
         await expect(note).toHaveText(TEXT.rsvpByEmail);
         await expect(note.getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true })).toHaveAttribute("href", EMAIL_LINK);
       }
+      // An event that had started when the page was built (data-started): RSVPs have closed, so neither the
+      // button nor the line shows, and its RSVP slot takes no room, as with JavaScript.
+      const started = card(page, FIXTURE_IDS.started);
+      await expect(started).toHaveAttribute("data-started", "");
+      await expect(started.locator(".tz-event__actions")).toHaveCount(1);
+      await expect(started.locator(".tz-event__actions")).toBeHidden();
+      await expect(started.locator(".tz-event__actions")).toHaveCSS("display", "none");
+      await expect(started.locator(".tz-event__noscript")).toHaveCount(1);
+      await expect(started.locator(".tz-event__noscript")).toBeHidden();
+      await expect(started.locator("button.tz-event__rsvp")).toBeHidden();
       // "No RSVP": nothing to offer.
       await expect(card(page, FIXTURE_IDS.noRsvp).locator(".tz-event__noscript, button")).toHaveCount(0);
 
