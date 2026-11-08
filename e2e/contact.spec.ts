@@ -94,6 +94,31 @@ test("the map is Google Maps pinned on Bet Shemesh, with links to directions and
   await expectClean(page, errors);
 });
 
+test("both map links lift on hover and focus as the theme's buttons do, and not with reduced motion", async ({ page, isMobile }) => {
+  test.skip(isMobile, "hovering needs a mouse");
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await openContact(page);
+  // The theme lifts its buttons by .3em (16px text: 4.8px) over its .25s transition.
+  const LIFTED = "matrix(1, 0, 0, 1, 0, -4.8)";
+  for (const motion of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion: motion });
+    for (const name of ["Get directions", "Open in Google Maps"]) {
+      const a = link(page, name);
+      await a.scrollIntoViewIfNeeded();
+      await a.hover();
+      await expect(a, `${name} hovered, ${motion}`).toHaveCSS("transform", motion === "reduce" ? "none" : LIFTED);
+      await page.mouse.move(5, 300);
+      await expect(a, `${name} at rest, ${motion}`).toHaveCSS("transform", "none");
+      await a.focus();
+      await expect(a, `${name} focused, ${motion}`).toHaveCSS("transform", motion === "reduce" ? "none" : LIFTED);
+      await a.blur();
+      await expect(a, `${name} at rest, ${motion}`).toHaveCSS("transform", "none");
+    }
+  }
+  await expectClean(page, errors);
+});
+
 test("the map card has the Contact cards' look, and the map keeps its full height before it loads", async ({ page }) => {
   const errors = trackPageErrors(page);
   // Hold Google's answer, so the frame is measured while it is still empty.
