@@ -50,8 +50,10 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 ## Events and calendar
 
 - **Floating times in a UTC calendar are read as Israel time.**
-- **Without JavaScript, a started event's card also says "To RSVP, email us…".** The static page can't know that the
-  event has started.
+- **Without JavaScript, a started event's card also says "To RSVP, email us…".** Since 2026-11-08 (Group 5) the build
+  marks the events that had started by then (`data-started`), so the line could be dropped from their cards without
+  new text. Left as it is: an accepted trade-off, outside Group 5's scope. An event that starts after the build still
+  can't be known without JavaScript.
 - **The RSVP button can still move the page on load, for an event that started after the page was built.** Since
   2026-11-08 (Group 5) the build marks the events that had started by then (`data-started`), and their RSVP slot never
   takes room. A card whose event starts between two builds still drops its button when JavaScript loads, which moves
