@@ -2,52 +2,74 @@
 // Owner rule: never change any wording that is on the site today. Every page in
 // the checkpoint-001 baseline must still say everything it said then, in the
 // same order (new text in between is fine); only removed pages may lose text.
+// The form fields' placeholder text ("Email address") is checked the same way,
+// against its own baseline.
 //
 //   npm run build && npm run check:wording
 //
-// The baseline (tests/wording/checkpoint-001.json) is generated once from the
-// checkpoint-001 build:
+// The baselines (tests/wording/checkpoint-001.json and checkpoint-001-placeholders.json)
+// were generated from the checkpoint-001 build and are never regenerated. To see what a
+// build gives, write them to a new directory (an existing baseline is never overwritten):
 //   npm run baseline -- checkpoint-001
-//   node scripts/check-wording.mjs --write-baseline .tmp/baseline/checkpoint-001/out
+//   node scripts/check-wording.mjs --write-baseline .tmp/baseline/checkpoint-001/out .tmp/wording
+// The pages are the baseline's own: `npm run baseline` writes the checkpoint's
+// content/routes.json beside its out/ (.tmp/baseline/checkpoint-001/routes.json).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRemovedPath } from "../config/site-structure.mjs";
-import { extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
+import { extractPlaceholders, extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BASELINE = path.join(root, "tests", "wording", "checkpoint-001.json");
 const NOT_FOUND = "/404/";
+const CHECKS = [
+  { name: "Wording", file: path.join(root, "tests", "wording", "checkpoint-001.json"), extract: extractWording, what: "wording", ok: "still say everything they said" },
+  { name: "Placeholders", file: path.join(root, "tests", "wording", "checkpoint-001-placeholders.json"), extract: extractPlaceholders, what: "placeholders", ok: "still have every placeholder they had" }
+];
 
 // "/" -> index.html, "/about-us/" -> about-us/index.html, "/404/" -> 404.html
 // (the file GitHub Pages serves for unknown URLs).
 const htmlFile = (outDir, route) =>
   route === NOT_FOUND ? path.join(outDir, "404.html") : path.join(outDir, route, "index.html");
-const readWording = (outDir, route) => extractWording(fs.readFileSync(htmlFile(outDir, route), "utf8"));
 const relative = (file) => path.relative(root, file).split(path.sep).join("/");
 
 const args = process.argv.slice(2);
 if (args[0] === "--write-baseline") {
-  if (!args[1]) {
-    console.error("Usage: node scripts/check-wording.mjs --write-baseline <outDir>");
+  if (!args[1] || !args[2]) {
+    console.error("Usage: node scripts/check-wording.mjs --write-baseline <outDir> <destDir>");
     process.exit(1);
   }
   const outDir = path.resolve(args[1]);
-  // The imported pages only (not siteRoutes): the baseline records what the
-  // checkpoint-001 site said, and its build has none of the composed pages.
-  const { routes } = JSON.parse(fs.readFileSync(path.join(root, "content", "routes.json"), "utf8"));
-  const baseline = {};
+  const targets = CHECKS.map((check) => path.join(path.resolve(args[2]), path.basename(check.file)));
+  // The committed baselines are never regenerated: this only ever writes new files.
+  const existing = targets.filter((target) => fs.existsSync(target));
+  if (existing.length) {
+    console.error(`Refusing to overwrite ${existing.join(", ")}: write the baselines to a directory that has none.`);
+    process.exit(1);
+  }
+  // The baseline's own imported pages (not siteRoutes): it records what the checkpoint-001
+  // site said, and its build has none of the composed pages.
+  const routesFile = path.join(outDir, "..", "routes.json");
+  if (!fs.existsSync(routesFile)) {
+    console.error(`Missing ${routesFile}, the baseline's routes: build it with \`npm run baseline -- <tag>\`, which writes them beside its out/.`);
+    process.exit(1);
+  }
+  const { routes } = JSON.parse(fs.readFileSync(routesFile, "utf8"));
+  const baselines = CHECKS.map(() => ({}));
   for (const route of [...routes.map((r) => r.path), NOT_FOUND]) {
     const file = htmlFile(outDir, route);
     if (!fs.existsSync(file)) {
       console.error(`Missing ${file} — is ${outDir} a complete build?`);
       process.exit(1);
     }
-    baseline[route] = readWording(outDir, route);
+    const html = fs.readFileSync(file, "utf8");
+    CHECKS.forEach((check, i) => { baselines[i][route] = check.extract(html); });
   }
-  fs.mkdirSync(path.dirname(BASELINE), { recursive: true });
-  fs.writeFileSync(BASELINE, `${JSON.stringify(baseline, null, 1)}\n`);
-  console.log(`Wrote ${relative(BASELINE)}: ${Object.keys(baseline).length} pages from ${outDir}`);
+  targets.forEach((target, i) => {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, `${JSON.stringify(baselines[i], null, 1)}\n`);
+    console.log(`Wrote ${relative(target)}: ${Object.keys(baselines[i]).length} pages from ${outDir}`);
+  });
   process.exit(0);
 }
 
@@ -56,26 +78,30 @@ if (!fs.existsSync(outDir)) {
   console.error("Missing out/. Run `npm run build` first.");
   process.exit(1);
 }
-const baseline = JSON.parse(fs.readFileSync(BASELINE, "utf8"));
-const failures = [];
-let checked = 0;
-for (const [route, expected] of Object.entries(baseline)) {
-  if (isRemovedPath(route)) continue;
-  checked++;
-  const file = htmlFile(outDir, route);
-  if (!fs.existsSync(file)) {
-    failures.push(`${route}\n    page missing: ${relative(file)}`);
-    continue;
+let failed = false;
+for (const check of CHECKS) {
+  const baseline = JSON.parse(fs.readFileSync(check.file, "utf8"));
+  const failures = [];
+  let checked = 0;
+  for (const [route, expected] of Object.entries(baseline)) {
+    if (isRemovedPath(route)) continue;
+    checked++;
+    const file = htmlFile(outDir, route);
+    if (!fs.existsSync(file)) {
+      failures.push(`${route}\n    page missing: ${relative(file)}`);
+      continue;
+    }
+    const result = isOrderedSubsequence(expected, check.extract(fs.readFileSync(file, "utf8")));
+    if (!result.ok) {
+      const context = result.context.length ? result.context.map((t) => `      ${JSON.stringify(t)}`).join("\n") : "      (end of page)";
+      failures.push(`${route}\n    expected: ${JSON.stringify(result.expected)} (baseline entry ${result.index + 1} of ${expected.length})\n    page has instead:\n${context}`);
+    }
   }
-  const result = isOrderedSubsequence(expected, readWording(outDir, route));
-  if (!result.ok) {
-    const context = result.context.length ? result.context.map((t) => `      ${JSON.stringify(t)}`).join("\n") : "      (end of page)";
-    failures.push(`${route}\n    expected: ${JSON.stringify(result.expected)} (baseline entry ${result.index + 1} of ${expected.length})\n    page has instead:\n${context}`);
+  if (failures.length) {
+    failed = true;
+    console.error(`${check.name} check failed: ${failures.length} page(s) changed ${check.what} from checkpoint-001.\n  ${failures.join("\n  ")}`);
+  } else {
+    console.log(`${check.name} OK: ${checked} pages ${check.ok} at checkpoint-001.`);
   }
 }
-
-if (failures.length) {
-  console.error(`Wording check failed: ${failures.length} page(s) changed wording from checkpoint-001.\n  ${failures.join("\n  ")}`);
-  process.exit(1);
-}
-console.log(`Wording OK: ${checked} pages still say everything they said at checkpoint-001.`);
+if (failed) process.exit(1);

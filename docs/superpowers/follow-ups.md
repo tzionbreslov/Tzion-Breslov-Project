@@ -28,34 +28,21 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
     the `'` and fails as `/video`: this fails safe, and the text scan needs that cut-off for single-quoted attributes;
   - after the switch, an old-domain link outside an Events card gives two messages (the text one and the link one):
     noise only, since the deploy fails either way.
-- **Flaky browser test** `e2e/classes.spec.ts:71` [desktop], "Oldest and Most popular reorder the videos".
-  - `aria-pressed` stayed "false" once in CI: PR #26, run 42426373302, attempt 1.
-  - It passed on re-run, in the push run and locally. Root cause not investigated.
-- **`cspViolations` (`e2e/helpers.ts`)** falls back to the console's capped history for a page that wasn't tracked.
-  It should throw "call trackPageErrors first". Checked.
-- **There is no committed test that proves the CSP-violation filter catches a violation.**
-- **`check-wording.mjs --write-baseline`** reads the current tree's `content/routes.json`, not the baseline's
-  (`:38`). Checked.
-- **The wording check ignores `placeholder` attributes:** the footer's "Email address" and the Contact form fields.
-  Checked.
 - **Per-text-node wording check.** It compares each text node separately, so splitting or merging an existing text
   node fails loudly. Never "fix" that by regenerating the baseline (`tests/wording/checkpoint-001.json` is never
   regenerated).
-- **The `--mask-nav` mask in `visual-diff.mjs` hides containers only.** A descendant with `visibility: visible` would
-  still paint.
 - **`playwright.config.ts:11`'s 60 s timeout** covers an unexplained local stall. CI is steady. Checked.
-- **The nav screenshot generator** (`e2e/navigation.spec.ts:346`) runs in every `npm run check`, which costs about
-  14 s. Checked.
-- **"Most popular" on /classes/ is untested in practice.** Its e2e is vacuous until the feed carries view counts.
+  Left as it is: a full local `npm run check` on 2026-11-08 (290 browser tests, 10 workers) didn't reproduce the
+  stall. The slowest test took 11.5 s, and none took more than 30 s, so there's no evidence to change the timeout.
 - **Further test gaps:**
-  - no committed test of `renderHero`'s image, heading and subheading swaps;
   - no test for the Worker's "read failed" feed-body path;
   - wrangler prints "Missing required secrets" noise in `npm run test:worker`.
 
 ## Code
 
 - **`esc()` is copied 7 times** (`lib/events.mjs`, `lib/instagram-feed.ts`, `lib/navigation.mjs`,
-  `lib/pages/{classes,gallery,parts}.ts`, `lib/youtube-feed.ts`). Consolidate in phase 2. Checked.
+  `lib/pages/{classes,gallery}.ts`, `lib/pages/edits.mjs` (re-exported by `parts.ts`), `lib/youtube-feed.ts`).
+  Consolidate in phase 2. Checked.
 - **The contact address is hard-coded twice:** `lib/events.mjs:92` (`CONTACT_EMAIL`) and `lib/client/config.ts:7`
   (`contactEmail`). Checked.
 - **An import cycle:** `lib/content.ts` → registry → pages → `parts`/`compose` → `lib/content.ts`. It is a TDZ risk
@@ -67,7 +54,7 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
   - the dialog's 220 ms close is in both `lib/client/dialog.ts` (`EXIT_MS`) and `app/dialog.css`.
 - **`compose.ts` and `parts.ts` edge cases:**
   - `compose.ts`'s head guard only fires when no Resources-own head tag exists;
-  - `parts.ts`'s `replaceOnce` drops the caller's regex flags.
+  - `replaceOnce` (moved unchanged from `parts.ts` to `lib/pages/edits.mjs`) drops the caller's regex flags.
 
 ## Events and calendar
 
@@ -108,6 +95,19 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Look and feel (owner-visible)
 
+- **The page jumps when the header turns fixed** (the original theme's behaviour, kept for fidelity). On desktop
+  (1280 px and up), when a scroll goes past 100 px the theme's `global.js` makes the header `position: fixed`, and
+  everything under it moves up by the header's height (about 90 px), one frame after the scroll. A click pressed
+  before that frame and released after it misses.
+  - A deterministic replay of this timing matches both desktop CI failures found on 2026-11-08,
+    `e2e/classes.spec.ts` (run 42426373302) and `e2e/rsvp.spec.ts` (run 42441324412). The bad timing was never seen
+    on its own (0 in 30 throttled local runs), so it isn't proven to be their cause. Both tests were hardened with
+    `scrollIntoViewAndSettle` (`e2e/helpers.ts`).
+  - Any other desktop first click whose own scroll takes the page past 100 px shares this race. For example, the
+    gallery's first photo (`e2e/gallery.spec.ts`, "the first photo opens in the viewer…") ends below the fold at
+    1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
+  - Fixing the page itself (keeping the header's place) would change how the theme behaves, so it needs the owner's
+    go-ahead.
 - **Classes:**
   - "Visit our YouTube channel" wraps to 2 lines at about 351 px or narrower;
   - at 374 px or narrower, the meta line stacks under the logo;

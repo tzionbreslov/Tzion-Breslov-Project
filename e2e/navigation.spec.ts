@@ -342,8 +342,13 @@ test("the old Resources and /about/ buttons keep their labels and go to Classes 
   await expectClean(page, errors);
 });
 
-// For the pull request: the header and footer at 1280, 1440 and 390, and the open panel on desktop and phone.
+// For a pull request that changes the menus: the header and footer at 1280, 1440 and 390, and the open
+// panel on desktop and phone, saved to test-results/nav/. It asserts little and takes ~14 s, so it only
+// runs when asked for (README → Commands):
+//   bash:       NAV_SCREENSHOTS=1 npx playwright test e2e/navigation.spec.ts -g "screenshots" --project=desktop
+//   PowerShell: $env:NAV_SCREENSHOTS = "1"; npx playwright test e2e/navigation.spec.ts -g "screenshots" --project=desktop; Remove-Item Env:NAV_SCREENSHOTS
 test("screenshots of the menus", async ({ page }, testInfo) => {
+  test.skip(!process.env.NAV_SCREENSHOTS, "opt-in: set NAV_SCREENSHOTS=1 to save the menu screenshots for a pull request");
   test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
   const errors = trackPageErrors(page);
   const dir = "test-results/nav";

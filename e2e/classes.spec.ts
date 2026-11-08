@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 type Clip = { id: string; title: string; published: string };
 const readContent = <T>(file: string): T => JSON.parse(fs.readFileSync(path.join(__dirname, "..", "content", file), "utf8")) as T;
@@ -30,6 +30,9 @@ async function openClasses(page: Page) {
   expect(response?.status()).toBe(200);
   // The buttons only work once the island is live.
   await expect(library(page)).toHaveAttribute("data-tz-video-library", "ready");
+  // On desktop the tabs, search and sort start below the fold: bring them up first, so the
+  // theme's header switch can't move them in the middle of a click (scrollIntoViewAndSettle).
+  await scrollIntoViewAndSettle(page.locator(".tz-vl__bar"));
 }
 
 // The player itself is YouTube's: answer its embed locally, so the tests never
@@ -92,6 +95,42 @@ test("Oldest and Most popular reorder the videos", async ({ page }) => {
 
   await button(page, "Latest").click();
   expect((await cards(page, "video")).map((video) => video.id)).toEqual(VIDEOS.map((video) => video.id));
+  await expectClean(page, errors);
+});
+
+// The feed carries no view counts yet (content/youtube.json), so on the real page "Most popular"
+// only shows the uncounted order. Here the page is served with known counts on three videos
+// instead (only the cards' data-views change), and the order they must take is spelled out.
+test("Most popular puts the counted videos first, most viewed first, then the rest newest first", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  expect(VIDEOS.length).toBeGreaterThanOrEqual(4);
+  const [newest, middle, oldest] = [VIDEOS[0], VIDEOS[Math.floor(VIDEOS.length / 2)], VIDEOS[VIDEOS.length - 1]];
+  const views = new Map([[newest.id, 20], [middle.id, 900], [oldest.id, 4500]]);
+  // How many card tags the served page had rewritten: checked once the page is open, so a markup
+  // change fails with a plain count, not as an error inside the route handler.
+  let tags = 0;
+  await page.route("**/classes/", async (route) => {
+    const response = await route.fetch();
+    tags = 0;
+    // Card opening tags only (the copies in the page's inline scripts are JSON-escaped, so they don't match).
+    const body = (await response.text()).replace(/<article class="tz-vl__card" data-id="([^"]+)"([^>]*)>/g, (_, id: string, rest: string) => {
+      tags++;
+      const count = views.get(id);
+      return `<article class="tz-vl__card" data-id="${id}"${rest.replace(/ data-views="\d+"/, "")}${count === undefined ? "" : ` data-views="${count}"`}>`;
+    });
+    await route.fulfill({ response, body });
+  });
+  await openClasses(page);
+  expect(tags).toBe(VIDEOS.length + SHORTS.length);
+  // The counts are on the cards the island read.
+  await expect(grid(page, "video").locator(".tz-vl__card[data-views]")).toHaveCount(3);
+
+  await button(page, "Most popular").click();
+  await expect(button(page, "Most popular")).toHaveAttribute("aria-pressed", "true");
+  const expected = [oldest, middle, newest, ...VIDEOS.filter((video) => !views.has(video.id))].map((video) => video.id);
+  expect(expected).not.toEqual(VIDEOS.map((video) => video.id));
+  expect((await cards(page, "video")).map((video) => video.id)).toEqual(expected);
+  expect((await cards(page, "video")).slice(0, 3).map((video) => video.views)).toEqual([4500, 900, 20]);
   await expectClean(page, errors);
 });
 

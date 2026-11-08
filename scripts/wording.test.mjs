@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
 import test from "node:test";
-import { extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
+import { extractPlaceholders, extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
 
 test("extractWording lists the title, every text node in order and image alt text, skipping scripts", () => {
   const html = `<!doctype html><html><head><title>About - Tzion Breslov</title></head>
@@ -21,6 +21,27 @@ test("extractWording collapses whitespace, decodes entities and keeps hidden tex
 
 test("extractWording omits an empty title", () => {
   assert.deepEqual(extractWording("<html><head><title> </title></head><body><p>Hi</p></body></html>"), ["Hi"]);
+});
+
+test("extractPlaceholders lists every placeholder in <body> in order, collapsed, which extractWording leaves out", () => {
+  const html = `<html><head><title>Contact</title></head><body>
+    <form><input type="text" name="name" placeholder="Name"><input type="email" placeholder="  Email
+      address "><textarea placeholder="Message"></textarea><input type="submit" value="Send"></form>
+    <footer><input type="email" placeholder="Email address"></footer>
+  </body></html>`;
+  assert.deepEqual(extractPlaceholders(html), ["Name", "Email address", "Message", "Email address"]);
+  assert.deepEqual(extractWording(html), ["title:Contact"]);
+});
+
+test("extractPlaceholders skips empty placeholders, the head and script/style/noscript/template", () => {
+  const html = `<html><head><title>T</title></head><body>
+    <input placeholder=""><input placeholder="   "><input>
+    <template><input placeholder="Later"></template><noscript><input placeholder="No JS"></noscript>
+    <script>document.write('<input placeholder="Scripted">')</script>
+    <p>Text, no placeholder</p><input placeholder="Kept">
+  </body></html>`;
+  assert.deepEqual(extractPlaceholders(html), ["Kept"]);
+  assert.deepEqual(extractPlaceholders("<html><body><p>None</p></body></html>"), []);
 });
 
 test("isOrderedSubsequence accepts new entries inserted around the baseline", () => {

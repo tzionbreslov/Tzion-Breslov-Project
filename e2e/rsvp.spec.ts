@@ -1,6 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { FIXTURE_IDS } from "../scripts/fixtures/write-events-fixture.mjs";
-import { expectClean, trackPageErrors } from "./helpers";
+import { expectClean, scrollIntoViewAndSettle, trackPageErrors } from "./helpers";
 
 // RSVPs on the Events page (lib/events.mjs, lib/client/rsvp.ts) against the
 // fixture build (scripts/fixtures/write-events-fixture.mjs: an event that
@@ -67,6 +67,9 @@ async function openEvents(page: Page) {
 }
 
 async function openRsvp(page: Page, id: string = FIXTURE_IDS.open) {
+  // On desktop the RSVP buttons start below the fold: bring the button up first, so the theme's
+  // header switch can't move it in the middle of the click (scrollIntoViewAndSettle).
+  await scrollIntoViewAndSettle(rsvpButton(page, id));
   await rsvpButton(page, id).click();
   await expect(dialog(page)).toBeVisible();
 }

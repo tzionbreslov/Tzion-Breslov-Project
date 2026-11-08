@@ -10,6 +10,9 @@
 // moved to .tmp/baseline/<tag>/out only after the build succeeds — so an
 // existing out/ is always complete. The worktree is then removed; a leftover one
 // from an interrupted run is cleaned up on the next run.
+//
+// The tag's content/routes.json is written beside its out/ (.tmp/baseline/<tag>/routes.json,
+// also when out/ is reused): check-wording.mjs --write-baseline reads the baseline's pages there.
 import { execFileSync, execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -45,7 +48,11 @@ try {
   process.exit(1);
 }
 
+// The routes the tag was built from, beside its out/ (written from git, so a reused out/ gets them too).
+const writeRoutes = () => fs.writeFileSync(path.join(base, "routes.json"), `${git("show", `${commit}:content/routes.json`)}\n`);
+
 if (fs.existsSync(out) && !fresh) {
+  writeRoutes();
   console.log(`Reusing ${path.relative(root, out)} (pass --fresh to rebuild).`);
   process.exit(0);
 }
@@ -59,6 +66,7 @@ try {
   execSync("npm ci --no-audit --no-fund", { cwd: src, stdio: "inherit" });
   execSync("npm run build", { cwd: src, stdio: "inherit" });
   fs.renameSync(path.join(src, "out"), out);
+  writeRoutes();
 } finally {
   try {
     removeWorktree();
