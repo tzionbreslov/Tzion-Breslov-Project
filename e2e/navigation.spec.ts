@@ -100,6 +100,32 @@ test.describe("desktop menu", () => {
     await expectClean(page, errors);
   });
 
+  test("a mouse press inside the panel doesn't pin it: after a right-click or an aborted press on Classes, leaving closes it", async ({ page }) => {
+    const errors = trackPageErrors(page);
+    await page.goto("/");
+    await menusReady(page);
+    const classes = panelLink(desktopPanel(page), "Classes");
+    for (const press of ["right-click", "aborted press"] as const) {
+      await desktopToggle(page).hover();
+      await expect(desktopPanel(page)).toBeVisible();
+      if (press === "right-click") await classes.click({ button: "right" });
+      else {
+        // Pressed on Classes, released outside the menu: no click.
+        await classes.hover();
+        await page.mouse.down();
+      }
+      // The press focused the link (Chromium focuses a link on mousedown), but not from the keyboard.
+      await expect(classes, press).toBeFocused();
+      expect(await classes.evaluate((node) => node.matches(":focus-visible")), press).toBe(false);
+      await page.mouse.move(700, 600);
+      if (press === "aborted press") await page.mouse.up();
+      await expect(desktopPanel(page), press).toBeHidden();
+      await expect(desktopToggle(page), press).toHaveAttribute("aria-expanded", "false");
+      expect(new URL(page.url()).pathname, press).toBe("/");
+    }
+    await expectClean(page, errors);
+  });
+
   test("Enter and Space toggle the panel even while the mouse rests on Resources", async ({ page }) => {
     const errors = trackPageErrors(page);
     await page.goto("/");
