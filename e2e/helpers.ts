@@ -43,33 +43,42 @@ export async function cspViolations(page: Page): Promise<string[]> {
   return [...violations];
 }
 
+// How long scrollIntoViewAndSettle waits for a still box: about 2 s at 60 frames a second.
+const SETTLE_MAX_FRAMES = 120;
+
 /**
  * Scrolls `target` into view and waits until it has stopped moving, so a click on it (or on
- * anything near it) doesn't scroll the page itself.
+ * anything near it) doesn't scroll the page itself. A target still moving after
+ * SETTLE_MAX_FRAMES frames (an animation, a carousel) fails with "target kept moving".
  *
  * On desktop (1280 px and up) the theme's header (global.js) turns `position: fixed` on the
  * first scroll event at 100 px or more, one frame after the scroll, and everything under it moves
  * up by the header's height (89 px). When a click's own scroll crosses 100 px, that jump can land
  * between its mousedown and its mouseup: the click then goes to a common ancestor, not the
- * target, and does nothing (e2e/classes.spec.ts and e2e/rsvp.spec.ts flaked this way in CI).
+ * target, and does nothing. A replay of that timing matches the e2e/classes.spec.ts and
+ * e2e/rsvp.spec.ts desktop failures in CI, though it was never seen to happen on its own.
  */
 export async function scrollIntoViewAndSettle(target: Locator): Promise<void> {
   await target.scrollIntoViewIfNeeded();
   // The same box in three animation frames in a row: the scroll event and the header's switch
   // run before the first of them.
-  await target.evaluate((node) => new Promise<void>((resolve) => {
+  await target.evaluate((node, maxFrames) => new Promise<void>((resolve, reject) => {
     let last = "";
     let same = 0;
+    let frames = 0;
     const tick = () => {
+      frames++;
       const { top, left, width, height } = node.getBoundingClientRect();
       const box = `${top},${left},${width},${height}`;
       same = box === last ? same + 1 : 0;
       last = box;
       if (same >= 2) resolve();
-      else requestAnimationFrame(tick);
+      else if (frames >= maxFrames) {
+        reject(new Error(`scrollIntoViewAndSettle: target kept moving (not still for 3 frames in a row within ${frames}; last box top,left,width,height = ${box})`));
+      } else requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }));
+  }), SETTLE_MAX_FRAMES);
 }
 
 /** No page errors and no CSP violations. Every spec calls this at the end. */
