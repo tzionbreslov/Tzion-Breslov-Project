@@ -138,6 +138,8 @@
 .tz-vl .tz-vl__grid[data-kind="short"] .tz-vl__details strong { -webkit-line-clamp: 3; }
 .tz-vl .tz-vl__details span { color: var(--tz-vl-muted); font-size: 13px; line-height: 1.4; }
 .tz-vl .tz-vl__empty { min-height: 200px; display: grid; place-items: center; margin: 0; color: var(--tz-vl-muted); font-size: 16px; text-align: center; }
+/* The live region stays on the page (lib/client/video-library.ts changes its text): empty, it takes no room. */
+.tz-vl .tz-vl__empty:empty { min-height: 0; }
 
 /* ---------------------------------------------------------------- Player */
 /* The dialog box clips and scrolls its content (dialog.css), so the rounding and the shadow are on the box itself. */

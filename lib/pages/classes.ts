@@ -64,7 +64,7 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
   const count = esc(text.videoCount.replace("{count}", String(videos.length + shorts.length)));
   const sort = (["latest", "popular", "oldest"] as const).map((order) =>
     `<button type="button" data-order="${order}" aria-pressed="${order === "latest"}">${esc(text[order])}</button>`).join("");
-  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
+  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" data-no-results="${esc(text.noResults)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
     `<div class="tz-vl__profile">` +
     `<span class="tz-vl__avatar"><img src="${LOGO}" alt="" width="215" height="216"></span>` +
     `<div class="tz-vl__intro">` +
@@ -89,7 +89,9 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
     `</div>` +
     grid(videos, "video", text.videosTab) +
     grid(shorts, "short", text.shortsTab) +
-    `<p class="tz-vl__empty" role="status" hidden>${esc(text.noResults)}</p>` +
+    // A live region on the page from the start, empty: lib/client/video-library.ts fills in
+    // "No videos match that search." (data-no-results), so screen readers announce it.
+    `<p class="tz-vl__empty" role="status"></p>` +
     `</section>`;
 }
 

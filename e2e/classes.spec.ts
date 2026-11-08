@@ -160,6 +160,14 @@ test("Shorts lists the 26 bite-size clips, newest first, without the sort button
 test("search filters the clips, says when nothing matches, and Escape clears it", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openClasses(page);
+  // The "nothing matches" message is a live region that is on the page from the start, empty: only its
+  // text changes (one that appears from `hidden` may not be announced). Empty, it takes no room.
+  const empty = page.locator(".tz-vl__empty");
+  await expect(library(page).getByRole("status")).toHaveCount(1);
+  await expect(empty).toHaveAttribute("role", "status");
+  await expect(empty).toHaveText("");
+  await expect(empty).not.toHaveAttribute("hidden");
+  await expect(empty).toBeHidden();
   await button(page, "Shorts").click();
   const toggle = button(page, "Search videos");
   await toggle.click();
@@ -170,17 +178,22 @@ test("search filters the clips, says when nothing matches, and Escape clears it"
   await expect(shown(page, "short")).toHaveCount(1);
   expect((await cards(page, "short"))[0].title).toBe("Rabbi Kalmus Daily Ray of Wisdom: What is Bitul?");
 
-  const empty = page.locator(".tz-vl__empty");
   await expect(empty).toBeHidden();
+  await expect(empty).toHaveText("");
   await input.fill("qqzzxx no such class");
   await expect(shown(page, "short")).toHaveCount(0);
   await expect(empty).toBeVisible();
   await expect(empty).toHaveText("No videos match that search.");
+  await expect(empty).not.toHaveAttribute("hidden");
+  // As it looked when it appeared from `hidden`: 200px tall, the text centred.
+  expect(await empty.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBe(200);
 
   await input.press("Escape");
   await expect(input).toBeHidden();
   await expect(toggle).toBeFocused();
   await expect(empty).toBeHidden();
+  await expect(empty).toHaveText("");
+  await expect(library(page).getByRole("status")).toHaveCount(1);
   await expect(shown(page, "short")).toHaveCount(26);
 
   // The clear button does the same; switching tabs starts a fresh search.
