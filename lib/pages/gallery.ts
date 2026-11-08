@@ -1,7 +1,7 @@
 import copy from "@/content/copy/en.json";
 import { readShared, type PageContent } from "@/lib/content";
 import { composePage } from "@/lib/pages/compose";
-import { LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";
+import { esc, LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 /**
  * The Gallery page: the Resources header with its own image and heading, then
@@ -18,8 +18,6 @@ type GalleryImage = { src: string; width: number; height: number; alt: string };
 
 const HERO_IMAGE = "/wp-content/uploads/2023/06/hero2.png";
 const GENERATED = "gallery.generated.json";
-
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 function readImages(): GalleryImage[] {
   let json: string;

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { withBase } from "./base-path";
+import { esc } from "./html.mjs";
 
 /**
  * Resources page "Instagram" tab (an addition the owner asked for; the WordPress
@@ -32,7 +33,6 @@ export type InstagramFeed = {
 export type InstagramClientPost = Omit<InstagramPost, "media"> & { date: string; media: InstagramMedia[] };
 export type InstagramClientData = { name: string; avatar: string; profileUrl: string; posts: InstagramClientPost[] };
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 // Keep "</script>" (and friends) out of the inline JSON.
 const safeJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/&/g, "\\u0026");
 
