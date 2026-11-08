@@ -1,5 +1,5 @@
 import { NEW_ROUTES } from "@/config/site-structure.mjs";
-import type { PageContent } from "@/lib/content";
+import type { PageContent } from "@/lib/content-files";
 import { articlesPage } from "@/lib/pages/articles";
 import { classesPage } from "@/lib/pages/classes";
 import { eventsPage } from "@/lib/pages/events";

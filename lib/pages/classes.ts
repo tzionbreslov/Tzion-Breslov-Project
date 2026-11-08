@@ -1,7 +1,7 @@
 import copy from "@/content/copy/en.json";
-import { readShared, type PageContent } from "@/lib/content";
+import { readShared, type PageContent } from "@/lib/content-files";
 import { composePage } from "@/lib/pages/compose";
-import { closingSections, resourcesHero, wrapEntry } from "@/lib/pages/parts";
+import { closingSections, esc, resourcesHero, wrapEntry } from "@/lib/pages/parts";
 import { formatMonthYear, sortVideos, type LibraryVideo } from "@/lib/video-library.mjs";
 
 /**
@@ -16,7 +16,6 @@ import { formatMonthYear, sortVideos, type LibraryVideo } from "@/lib/video-libr
 const CHANNEL_URL = "https://youtube.com/@tzionbreslovproject";
 const LOGO = "/wp-content/uploads/2023/06/footer-logo.png";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const views = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
 // Icons (decorative; the controls carry their own labels).

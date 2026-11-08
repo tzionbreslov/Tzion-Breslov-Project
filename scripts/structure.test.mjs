@@ -42,18 +42,37 @@ test("siteRoutes serves the imported pages that are kept, then the new pages", (
   assert.deepEqual(index.redirects, {});
 });
 
-test("siteRoutes never duplicates a path; the routes.json entry wins", () => {
+test("siteRoutes throws for a new page on a path routes.json already serves, as a page or a redirect", () => {
   const raw = routesJson();
-  const newRoutes = [
-    { path: "/contact/", key: "tz:contact" },
-    { path: "/articles/", key: "tz:articles" },
-    { path: "/articles/", key: "tz:articles-again" }
-  ];
-  const index = siteRoutes(raw, { ...none, newRoutes });
+  const contact = { path: "/contact/", key: "tz:contact" };
+  assert.throws(() => siteRoutes(raw, { ...none, newRoutes: [contact] }),
+    { message: "structure: NEW_ROUTES path /contact/ (tz:contact) is already a page in content/routes.json (key contact)" });
+  // /about/ is a redirect page in routes.json (removed by default; kept here).
+  assert.throws(() => siteRoutes(raw, { ...none, newRoutes: [{ path: "/about/", key: "tz:about" }] }),
+    { message: "structure: NEW_ROUTES path /about/ (tz:about) is already a redirect in content/routes.json (to /about-us/)" });
+});
+
+test("siteRoutes throws for a new page on a removed path, listed or under a removed section", () => {
+  const raw = routesJson();
+  assert.throws(() => siteRoutes(raw, { ...none, removed: ["/about/"], newRoutes: [{ path: "/about/", key: "tz:about" }] }),
+    { message: "structure: NEW_ROUTES path /about/ (tz:about) is a removed path (REMOVED_PATHS)" });
+  assert.throws(() => siteRoutes(raw, { ...none, sections: ["/resources/"], newRoutes: [{ path: "/resources/page/9/", key: "tz:resources" }] }),
+    { message: "structure: NEW_ROUTES path /resources/page/9/ (tz:resources) is under the removed section /resources/ (REMOVED_SECTIONS)" });
+});
+
+test("siteRoutes throws for a path listed twice in NEW_ROUTES", () => {
+  const newRoutes = [{ path: "/articles/", key: "tz:articles" }, { path: "/articles/", key: "tz:articles-again" }];
+  assert.throws(() => siteRoutes(routesJson(), { ...none, newRoutes }),
+    { message: "structure: NEW_ROUTES path /articles/ (tz:articles-again) is listed twice in NEW_ROUTES (key tz:articles)" });
+});
+
+test("siteRoutes keeps the first of a path routes.json lists twice, and never duplicates a path", () => {
+  const raw = routesJson();
+  const twice = { ...raw, routes: [...raw.routes, { path: "/contact/", key: "contact-copy" }] };
+  const index = siteRoutes(twice, { ...none, newRoutes: [{ path: "/articles/", key: "tz:articles" }] });
   const all = paths(index);
   assert.equal(new Set(all).size, all.length);
   assert.equal(index.routes.find((route) => route.path === "/contact/").key, "contact");
-  assert.equal(index.routes.find((route) => route.path === "/articles/").key, "tz:articles");
   assert.equal(all.length, raw.routes.length + 1);
 });
 

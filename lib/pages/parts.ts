@@ -1,4 +1,4 @@
-import { loadPage } from "@/lib/content";
+import { loadImportedPage } from "@/lib/content-files";
 import { esc, markerMissing, markerRepeated, swapHero, type HeroOptions } from "@/lib/pages/edits.mjs";
 
 export { esc, markerMissing };
@@ -50,7 +50,7 @@ export function divAt(html: string, start: number, name: string) {
   throw markerMissing(`${name} end`);
 }
 
-const resourcesMain = (page: 1 | 2 = 1) => loadPage(page === 1 ? "resources" : "resources__page__2").main;
+const resourcesMain = (page: 1 | 2 = 1) => loadImportedPage(page === 1 ? "resources" : "resources__page__2").main;
 
 /** Where `.entry-content` closes (followed by the article, main and wrapper closes). */
 const entryEnd = (main: string) => findOnce(main, ENTRY_CLOSE, "entry-content end");
