@@ -50,8 +50,9 @@ const SLASHES = ["/", "\\/"];
  * config/site-url.mjs) under the base path `base` ("" or "/Name").
  */
 export function exportGuard({ production, base = "" }) {
-  const switched = production !== IMPORTED_ORIGIN;
   const siteForms = hostForms(production);
+  // A switch means another host: www.tzionbreslov.com is still the imported domain.
+  const switched = siteForms[0] !== hostForms(IMPORTED_ORIGIN)[0];
   // After a site-URL switch nothing may still point at the imported domain, over
   // http or https, bare or www, plain or JSON-escaped — canonicals, social tags,
   // JSON-LD, sitemaps, robots, links. (An email address on it is fine: no "//".)

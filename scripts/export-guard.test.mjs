@@ -161,6 +161,16 @@ test("after the switch, tzionbreslov.com with www fails too", () => {
   assert.deepEqual(switched.pageProblems(page(linked)), ["links to http://www.tzionbreslov.com/donate/ after the site-URL switch"]);
 });
 
+test("a www site URL on the imported domain is no site-URL switch; a www one on another domain is", () => {
+  const www = exportGuard({ production: "https://www.tzionbreslov.com" });
+  assert.equal(www.switched, false);
+  assert.deepEqual(www.pageProblems(page(`<a href="https://www.tzionbreslov.com/about-us/">x</a>`,
+    `<link rel="canonical" href="https://www.tzionbreslov.com/about-us/">`)), []);
+  assert.equal(www.mentionsOldDomain(`<loc>https://www.tzionbreslov.com/about-us/</loc>`), false);
+  assert.deepEqual(www.pageProblems(page(`<a href="https://www.tzionbreslov.com/about/">x</a>`)), ["links to the removed page /about/"]);
+  assert.equal(exportGuard({ production: "https://www.tzionbreslov.org" }).switched, true);
+});
+
 test("other hosts are never the site's origin: localhost:8088, subdomains, look-alikes", () => {
   assert.deepEqual(today.pageProblems(page(`<a href="http://localhost:8088/about/">x</a>`)), ["still references localhost:8088"]);
   for (const url of ["https://api.tzionbreslov.org/resources/", "https://tzionbreslov.org.example.com/about/", "https://nottzionbreslov.org/about/",
