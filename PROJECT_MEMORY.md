@@ -118,6 +118,10 @@
   - checkpoint-012 (#22) — the privacy notice `/privacy/` (Task 9)
   - checkpoint-013 (#23) — Donate: "Manage your monthly donation" (Task 10)
   - checkpoint-014 (#24) — RSVPs deleted once the event is over, not deployed (Task 10b)
+  - checkpoint-015 (#25) — the switch-day runbook, every step with its undo; phase 1 verified (Task 11)
+  - checkpoint-016 (#26) — final-review fixes: calendar text can't fail the deploy, no-JS Events controls, the
+    "places left" message, og:image on the new pages, runbook corrections
+  - Parked review items that are still open: `docs/superpowers/follow-ups.md`.
 - **Final verification** (2026-11-07, Task 11, on main at 38f5132 = checkpoint-014):
   - `npm run check` is green:
     - typecheck, Worker typecheck and lint are clean;
@@ -173,7 +177,13 @@
 
 ## Owner decisions still open
 
-1. **Privacy text:** read and approve `/privacy/` before launch, i.e. before switch day, step 10.
+1. **Privacy text:** read and approve `/privacy/` before launch, i.e. before switch day, step 10. Approve with it the
+   four new sentences on Events (`content/copy/en.json`):
+   - "To RSVP, email us at tzionbreslovproject@gmail.com." (no JavaScript)
+   - "To get event announcements, email us at tzionbreslovproject@gmail.com." (no JavaScript)
+   - "Sorry — only {remaining} places are left. Lower the number of guests, or email us at
+     tzionbreslovproject@gmail.com."
+   - "Sorry — only 1 place is left. Lower the number of guests, or email us at tzionbreslovproject@gmail.com."
 2. **PayPal autopay URL:** confirm that `https://www.paypal.com/myaccount/autopay/` (`PAYPAL_AUTOPAY_URL`) is where
    monthly donors manage their gift.
 3. **Turquoise contrast:** white text on turquoise pills and turquoise hover text fail WCAG AA. Keep the look, or
@@ -201,6 +211,13 @@
 14. **Rate limit on RSVP availability (after go-live):** the final review recommends a Cloudflare rate-limiting rule
     on `api.tzionbreslov.org/v1/rsvp/availability`, which anyone can call and which reads D1 on every request.
     Nothing is set up; the owner decides after go-live.
+
+## Before switch day (not owner decisions)
+
+- Fix the stale-backup gap in README → Switch day, step 3.1. When `.env.worker.bak` already exists, the
+  `webhook created` / `send-only key created` branch restores it with no condition, and could bring back a rotated
+  key. Details and the fix: `docs/superpowers/follow-ups.md` → "Before switch day". Use its own pull request with a
+  review.
 
 ## Local reference setup notes
 
