@@ -36,14 +36,11 @@ export function trackPageErrors(page: Page): () => Error[] {
 /** Every violation of the site's CSP that Chromium reported on this page so far (all navigations). */
 export async function cspViolations(page: Page): Promise<string[]> {
   const violations = recorded.get(page);
-  if (violations) {
-    // A round trip to the page first, so messages it logged before now have arrived.
-    await page.evaluate(() => 0).catch(() => undefined);
-    return [...violations];
-  }
-  // Untracked page: fall back to the console's (capped) history.
-  const messages = await page.consoleMessages({ filter: "all" });
-  return messages.map((message) => message.text()).filter((text) => violatesOurPolicy(text));
+  // The console's own history is capped, so an untracked page's violations can't be trusted.
+  if (!violations) throw new Error("cspViolations: call trackPageErrors first");
+  // A round trip to the page first, so messages it logged before now have arrived.
+  await page.evaluate(() => 0).catch(() => undefined);
+  return [...violations];
 }
 
 /** No page errors and no CSP violations. Every spec calls this at the end. */
