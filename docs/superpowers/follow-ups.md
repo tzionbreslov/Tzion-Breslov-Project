@@ -1,10 +1,12 @@
 # Phase 1 follow-ups (parked during the site-structure work)
 
 Phase 1 of the site structure (plan `docs/superpowers/plans/2026-11-06-site-structure.md`) ended at checkpoint-016.
-Each task's review and the final whole-branch review found small issues that were parked, not fixed. This file
-keeps the ones still open, so they outlive the review notes. None blocks the preview site.
+Each task's review and the final whole-branch review found small issues that were parked, not fixed. The follow-up
+groups (2026-11-08, checkpoints 017 to 027; `PROJECT_MEMORY.md` → Status lists them) fixed the rest. This file keeps
+the ones still open, so they outlive the review notes. None blocks the preview site.
 
-- **"Checked"** means the item was confirmed still present on main at cd94b1f (checkpoint-016).
+- **"Checked"** means the item was confirmed still present on main at cd94b1f (checkpoint-016), unless the item
+  names a later check.
 - Every other item is as the review described it. Re-check the code before acting on it.
 
 Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisions still open".
@@ -139,8 +141,22 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
   that get the flex-gap margins (`@supports not (inset: 0)` in `app/*.css`) also ignore `inset: 0`. Two live pieces
   are placed with it alone: the dialogs' backdrop (`.tz-dialog-overlay` in `app/dialog.css`: the Classes player, the
   Gallery viewer, the RSVP form) and the Classes cards' play overlay (`.tz-vl__play`). There neither would stretch
-  over what it should cover (the page, the thumbnail). Left as it is: outside Group 9's brief.
-  `top: 0; right: 0; bottom: 0; left: 0` in the same rules would cover it.
+  over what it should cover (the page, the thumbnail).
+  - Writing `top: 0; right: 0; bottom: 0; left: 0` in the same rules doesn't fix it under this build (Group 9b,
+    2026-11-08, which therefore opened no pull request):
+    - Next 16's Turbopack compiles all CSS with Lightning CSS against Next's default targets: chrome, edge and
+      firefox 111, safari 16.4 (`node_modules/next/dist/shared/lib/modern-browserslist-target.js`; the repo sets no
+      `browserslist`);
+    - Lightning CSS folds the four longhands back into `inset:0`, so the built CSS is byte-identical (Group 9b built
+      it with and without them: same CSS file, same sha256).
+  - A fix needs either:
+    - a `browserslist` that includes Safari 14.0: a site-wide build change (about 43 CSS rules, and the JavaScript
+      transpiled for Safari 14 too), so a full visual gate; or
+    - a form the compiler can't fold, with a test on the built CSS (`out/_next/static/chunks/*.css`) that guards it.
+  - Next's own JavaScript targets Safari 16.4+ too, so Safari before 14.1 is outside the build's targets anyway.
+  - The old-Safari flex-gap fallbacks from Groups 7 and 9 do survive the build: the built CSS on c28451a
+    (checkpoint-027) has the 6 `@supports not (inset:0)` blocks (controller check, 2026-11-08). Don't re-open them.
+  - Left as it is. It needs no owner decision unless someone wants Safari 14.0 supported.
 - **No-JS footer: "a lighter blue" is the theme's own fade-in, not a defect.** Investigated by Group 7 (2026-11-08):
   the theme fades the whole page in over 1 s (`.site-container { animation: fadein 1s }` in its `style.css`), with or
   without JavaScript, and on the checkpoint-001 build too. During that second the footer's `#003a71` shows lighter
