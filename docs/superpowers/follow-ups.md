@@ -40,21 +40,9 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 
 ## Code
 
-- **`esc()` is copied 7 times** (`lib/events.mjs`, `lib/instagram-feed.ts`, `lib/navigation.mjs`,
-  `lib/pages/{classes,gallery}.ts`, `lib/pages/edits.mjs` (re-exported by `parts.ts`), `lib/youtube-feed.ts`).
-  Consolidate in phase 2. Checked.
-- **The contact address is hard-coded twice:** `lib/events.mjs:92` (`CONTACT_EMAIL`) and `lib/client/config.ts:7`
-  (`contactEmail`). Checked.
-- **An import cycle:** `lib/content.ts` → registry → pages → `parts`/`compose` → `lib/content.ts`. It is a TDZ risk
-  if a page module ever adds top-level calls.
-- **`siteRoutes`** silently ignores a `NEW_ROUTES` path that collides with `routes.json`. None collide today.
-- **Hard-coded values:**
-  - `compose.ts` hard-codes `SITE_NAME` (checked);
-  - `structure.test.mjs` pins the exact `NEW_ROUTES` and `REMOVED_PATHS`;
-  - the dialog's 220 ms close is in both `lib/client/dialog.ts` (`EXIT_MS`) and `app/dialog.css`.
-- **`compose.ts` and `parts.ts` edge cases:**
-  - `compose.ts`'s head guard only fires when no Resources-own head tag exists;
-  - `replaceOnce` (moved unchanged from `parts.ts` to `lib/pages/edits.mjs`) drops the caller's regex flags.
+- **`compose.ts` hard-codes `SITE_NAME`** ("Tzion Breslov"). Checked. Left as it is (2026-11-08): no copy or site
+  config holds the name. The only other copy is the Worker's `ORGANIZATION_NAME` in `wrangler.jsonc`, which the site
+  build doesn't read.
 
 ## Events and calendar
 

@@ -41,7 +41,10 @@ WordPress backup (.wpress, private, not in git)
 - `lib/pages/` — the composed pages (today `/articles/`, `/articles/page/2/`, `/classes/`, `/gallery/`, `/events/`
   and `/privacy/`), built from Tzion's own markup: `parts.ts` cuts the hero, the Articles grid and the closing sections verbatim out of `content/pages/resources*.json`,
   `compose.ts` wraps them in the Resources page's stylesheets, scripts, header and footer with their own title,
-  description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. `contact-map.ts` adds the map
+  description and canonical URL, and `registry.ts` maps each `tz:` key to its builder. The pages read `content/`
+  through `lib/content-files.ts`, never `lib/content.ts` (which imports them: `scripts/imports.test.mjs`); their string
+  edits are in `edits.mjs` (unit-tested). All markup built as strings (these pages, the menus, the feeds, the Events
+  list) escapes text with the one `esc()` in `lib/html.mjs`. `contact-map.ts` adds the map
   (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards.
   Their new English text lives only in `content/copy/en.json`.
 - `/privacy/` (`lib/pages/privacy.ts`) — the privacy notice, linked from the footer Quick Links and from the
