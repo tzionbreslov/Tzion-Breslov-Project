@@ -3,7 +3,7 @@
 // plain YouTube embeds, the importer's leftovers and the canonical link. They
 // never read process.env or out/, so scripts/export-guard.test.mjs can prove
 // each one on a few lines of HTML.
-import { isRemovedPath, originUrlRegExp } from "../../config/site-structure.mjs";
+import { escapeRegExp, isRemovedPath, originUrlRegExp } from "../../config/site-structure.mjs";
 import { IMPORTED_ORIGIN } from "../../config/site-url.mjs";
 
 // The Events page's cards hold calendar text (titles, places, descriptions) that
@@ -35,20 +35,33 @@ export function attributeValues(html, text = html) {
   ];
 }
 
+/** How a link may spell `origin`'s host: over any scheme or none (`//host`), bare or with www. */
+export function hostForms(origin) {
+  const host = new URL(origin).host.replace(/^www\./, "");
+  return [`//${host}`, `//www.${host}`];
+}
+
+/** Plain, or with JSON's escaped slashes (`https:\/\/…`, as in JSON-LD). */
+const SLASHES = ["/", "\\/"];
+
 /**
  * The checks for an export built for `production` (the resolved site URL,
  * config/site-url.mjs) under the base path `base` ("" or "/Name").
  */
 export function exportGuard({ production, base = "" }) {
   const switched = production !== IMPORTED_ORIGIN;
-  // After a site-URL switch nothing may still point at the imported domain
-  // (plain or JSON-escaped) — canonicals, social tags, JSON-LD, sitemaps, robots.
-  const OLD_DOMAIN = /\/\/tzionbreslov\.com|\\\/\\\/tzionbreslov\.com/;
+  const siteForms = hostForms(production);
+  // After a site-URL switch nothing may still point at the imported domain, over
+  // http or https, bare or www, plain or JSON-escaped — canonicals, social tags,
+  // JSON-LD, sitemaps, robots, links. (An email address on it is fine: no "//".)
+  const oldForms = hostForms(IMPORTED_ORIGIN).flatMap((form) => SLASHES.map((slash) => form.replaceAll("/", slash)));
+  const OLD_DOMAIN = new RegExp(oldForms.map(escapeRegExp).join("|"));
 
   // Nothing may point at a removed page (config/site-structure.mjs): no root-relative
   // or site-origin href/src, no sitemap <loc> and no absolute URL on the site's
   // origin anywhere in the text, plain or JSON-escaped (JSON-LD included).
-  const ORIGIN_URL = originUrlRegExp([production], ["/", "\\/"]);
+  const ORIGIN_URL = originUrlRegExp(siteForms, SLASHES);
+  const SITE_ORIGIN = new RegExp(`^(?:https?:)?(?:${siteForms.map(escapeRegExp).join("|")})(?=[/?#]|$)`);
   /** `ref` (a path as written) when it names a removed page, else null. */
   const removedPath = (ref) => {
     // A URL found in the text ends at a single quote too (a single-quoted attribute).
@@ -60,8 +73,9 @@ export function exportGuard({ production, base = "" }) {
   };
   /** An href/src value's path on this site: root-relative (base path taken off) or absolute on the site's origin. */
   const attributePath = (value) => {
-    if (value.startsWith("/")) return base && value.startsWith(`${base}/`) ? value.slice(base.length) : value;
-    return value.startsWith(`${production}/`) ? value.slice(production.length) : null;
+    if (value.startsWith("/") && !value.startsWith("//")) return base && value.startsWith(`${base}/`) ? value.slice(base.length) : value;
+    const origin = value.match(SITE_ORIGIN)?.[0];
+    return origin ? value.slice(origin.length) || "/" : null;
   };
 
   /** Removed pages named by `html`'s href/src attributes, or by a site-origin URL anywhere in `text`. */

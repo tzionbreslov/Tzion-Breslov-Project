@@ -141,6 +141,34 @@ test("without the trailing slash, live pages and files still never match a remov
   }
 });
 
+test("the site's origin is matched over http and https, with or without www (and protocol-relative)", () => {
+  assert.deepEqual(today.pageProblems(page(`<a href="http://tzionbreslov.com/about/">x</a>`)), ["links to the removed page /about/"]);
+  assert.deepEqual(today.pageProblems(page(`<a href="https://www.tzionbreslov.com/resources/">x</a>`)), ["links to the removed page /resources/"]);
+  assert.deepEqual(today.pageProblems(page(`<a href='http://www.tzionbreslov.com/video/video-1'>x</a>`)), ["links to the removed page /video/video-1"]);
+  assert.deepEqual(today.pageProblems(page(`<img src="//tzionbreslov.com/author/esti-wolo/a.png">`)), ["links to the removed page /author/esti-wolo/a.png"]);
+  assert.deepEqual(switched.pageProblems(page(`<a href="http://www.tzionbreslov.org/about">x</a>`)), ["links to the removed page /about"]);
+  assert.deepEqual(switched.pageProblems(page(`<p>See http://tzionbreslov.org/category/uncategorized/ for more.</p>`)),
+    ["links to the removed page /category/uncategorized/"]);
+  assert.deepEqual(switched.pageProblems(page("", `<script type="application/ld+json">{"url":"https:\\/\\/www.tzionbreslov.org\\/resources\\/"}</script>`)),
+    ["links to the removed page /resources/"]);
+});
+
+test("after the switch, tzionbreslov.com with www fails too", () => {
+  assert.deepEqual(switched.pageProblems(page(`<meta property="og:url" content="https://www.tzionbreslov.com/">`)),
+    ["still references tzionbreslov.com after the site-URL switch"]);
+  assert.equal(switched.mentionsOldDomain(String.raw`{"url":"http:\/\/www.tzionbreslov.com\/"}`), true);
+  const linked = cards({}).replace("</h2>", `</h2><a href="http://www.tzionbreslov.com/donate/">give</a>`);
+  assert.deepEqual(switched.pageProblems(page(linked)), ["links to http://www.tzionbreslov.com/donate/ after the site-URL switch"]);
+});
+
+test("other hosts are never the site's origin: localhost:8088, subdomains, look-alikes", () => {
+  assert.deepEqual(today.pageProblems(page(`<a href="http://localhost:8088/about/">x</a>`)), ["still references localhost:8088"]);
+  for (const url of ["https://api.tzionbreslov.org/resources/", "https://tzionbreslov.org.example.com/about/", "https://nottzionbreslov.org/about/",
+    "https://tzionbreslov.org:8443/about/", "https://example.org/?u=tzionbreslov.org/about/"]) {
+    assert.deepEqual(switched.pageProblems(page(`<a href="${url}">x</a><p>${url}</p>`)), [], url);
+  }
+});
+
 test("the importer's leftovers, a plain YouTube embed, a bare / under a base path and a foreign canonical fail", () => {
   assert.deepEqual(today.pageProblems(page(`<img src="http://localhost:8088/wp-content/a.png">`)), ["still references localhost:8088"]);
   assert.deepEqual(today.pageProblems(page(`<img src="https://estiwolo.com/wp-content/a.png">`)), ["still references the dead staging host"]);
