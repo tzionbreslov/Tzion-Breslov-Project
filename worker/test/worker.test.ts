@@ -1177,13 +1177,16 @@ describe("POST /v1/rsvp", () => {
   it("a retry that finds a cut-off attempt's row still under 30 s old waits for it to turn stale, then re-books it in the same call", async () => {
     const { payload, confirmationId, heldSince } = await cutOffRsvp(29_400);
     const outbound = mockProviders("rsvp");
+    // Still fresh when the retry is sent (a slow setup would otherwise let it book without waiting).
+    expect(Date.now()).toBeLessThan(heldSince + 30_000);
     const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
     // Not REQUEST_IN_PROGRESS, which would cost the visitor another try (and one of the email's 6 per 10 minutes).
     expect(retried.status).toBe(202);
     await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
     expect(await count("rsvps")).toBe(1);
     expect(await guestsFor(EVENT_IDS.limited)).toBe(3);
-    // Booked again once the row was stale (30 s after it was taken), not before: it waited, however long the setup took.
+    // Booked again once the row was stale (30 s after it was taken), not before: as it was fresh when the retry was
+    // sent, this one call waited for it.
     const row = await rsvpRow(payload.requestId);
     expect(row?.confirmed_at).toEqual(expect.any(Number));
     expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
@@ -1215,6 +1218,24 @@ describe("POST /v1/rsvp", () => {
     expect(await count("rsvps")).toBe(1);
   });
 
+  it("a retry that finds a cut-off attempt's row 20 s old books it the moment it turns stale, not at its next 4 s read", async () => {
+    const { payload, confirmationId, heldSince } = await cutOffRsvp(20_000);
+    const outbound = mockProviders("rsvp");
+    const waits = fastForwardWaits();
+    const retried = await fetchHandler(publicRequest("/v1/rsvp", payload), env);
+    expect(retried.status).toBe(202);
+    await expect(retried.json()).resolves.toEqual({ ok: true, requestId: payload.requestId, confirmationId });
+    // The row turns stale about 10 s into the wait, far from the deadline: after the reads at 0, 0.2, 0.6, 1.4, 3 and
+    // 6.2 s, the next 4 s wait is cut to that moment (uncut, it would read again at 10.2 s).
+    expect(waits.slice(0, -1)).toEqual([200, 400, 800, 1_600, 3_200]);
+    expect(waits.at(-1)).toBeLessThan(4_000);
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(10_001);
+    const row = await rsvpRow(payload.requestId);
+    expect(row).toMatchObject({ id: confirmationId, confirmed_at: expect.any(Number) });
+    expect(row!.created_at).toBeGreaterThan(heldSince + 30_000);
+    expect(outbound.emails()).toHaveLength(2);
+  });
+
   it("one RSVP request waits 30 s at most in all and makes at most 22 D1 queries, however other attempts with its requestId race it", async () => {
     // The first attempt's row, taken just now: it gives the seats back 10 s later (its guest email timed out).
     const { payload, confirmationId, heldSince } = await cutOffRsvp(0);
@@ -1244,9 +1265,9 @@ describe("POST /v1/rsvp", () => {
     const response = await fetchHandler(publicRequest("/v1/rsvp", payload), { ...env, DB: db });
     // 2 rate limits, the waits' reads (each round goes on from the time and backoff the last one left), 2 batches.
     expect(queries.length).toBeLessThanOrEqual(22);
-    // One 30 s deadline for the whole request. The last attempt took its row 22 s into it, so that row only turns
-    // stale after the deadline: this request answers REQUEST_IN_PROGRESS.
-    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(30_000);
+    // One 30 s deadline for the whole request (30 001 ms: rsvpWait). The last attempt took its row 22 s into it, so
+    // that row only turns stale after the deadline: this request answers REQUEST_IN_PROGRESS.
+    expect(waits.reduce((sum, wait) => sum + wait, 0)).toBeLessThanOrEqual(30_001);
     expect(response.status).toBe(409);
     expect((await errorBody(response)).error).toBe("REQUEST_IN_PROGRESS");
     expect((await rsvpRow(payload.requestId))?.confirmed_at).toBeNull();
