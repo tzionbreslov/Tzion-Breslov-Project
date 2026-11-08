@@ -94,6 +94,106 @@ test("the map is Google Maps pinned on Bet Shemesh, with links to directions and
   await expectClean(page, errors);
 });
 
+test("both map links carry the external-link icon the Classes channel link has", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await page.goto("/classes/");
+  const channelIcon = await page.locator("a.tz-vl__channel > svg").evaluate((svg) => svg.outerHTML);
+  expect(channelIcon).toContain('aria-hidden="true"');
+  await openContact(page);
+  for (const name of ["Get directions", "Open in Google Maps"]) {
+    const icons = link(page, name).locator("svg");
+    await expect(icons, name).toHaveCount(1);
+    expect(await icons.evaluate((svg) => svg.outerHTML), name).toBe(channelIcon);
+    // Drawn as on Classes: a 16px outline in the link's own colour, after the label.
+    expect(await icons.evaluate((svg) => {
+      const style = getComputedStyle(svg);
+      const box = svg.getBoundingClientRect();
+      return { size: `${box.width}x${box.height}`, fill: style.fill, stroke: style.stroke === getComputedStyle(svg.parentElement!).color, width: style.strokeWidth, last: svg === svg.parentElement!.lastChild };
+    }), name).toEqual({ size: "16x16", fill: "none", stroke: true, width: "2px", last: true });
+  }
+  await expectClean(page, errors);
+});
+
+test("both map links lift on hover and focus as the theme's buttons do, and not with reduced motion", async ({ page, isMobile }) => {
+  test.skip(isMobile, "hovering needs a mouse");
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await openContact(page);
+  // The theme lifts its buttons by .3em (16px text: 4.8px) over its .25s transition.
+  const LIFTED = "matrix(1, 0, 0, 1, 0, -4.8)";
+  for (const motion of ["no-preference", "reduce"] as const) {
+    await page.emulateMedia({ reducedMotion: motion });
+    for (const name of ["Get directions", "Open in Google Maps"]) {
+      const a = link(page, name);
+      await a.scrollIntoViewIfNeeded();
+      await a.hover();
+      await expect(a, `${name} hovered, ${motion}`).toHaveCSS("transform", motion === "reduce" ? "none" : LIFTED);
+      await page.mouse.move(5, 300);
+      await expect(a, `${name} at rest, ${motion}`).toHaveCSS("transform", "none");
+      await a.focus();
+      await expect(a, `${name} focused, ${motion}`).toHaveCSS("transform", motion === "reduce" ? "none" : LIFTED);
+      await a.blur();
+      await expect(a, `${name} at rest, ${motion}`).toHaveCSS("transform", "none");
+    }
+  }
+  await expectClean(page, errors);
+});
+
+// Safari before 14.1 has no flex `gap`: app/pages.css then spaces the map card's parts and its buttons with
+// margins (@supports not (inset: 0), which those browsers also lack). This browser has both, so the fallback's
+// rules are applied here as they are, unconditionally, and must lay everything out exactly as the gaps do.
+test("without flex gap the margins space the map card and its buttons exactly as the gaps do", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own viewport sizes");
+  const errors = trackPageErrors(page);
+  await stubMap(page);
+  await openContact(page);
+  const fallback = await page.evaluate(() => {
+    if (!CSS.supports("inset: 0") || !CSS.supports("gap: 1px")) return null;
+    const rules: string[] = [];
+    const walk = (list: CSSRuleList, inside: boolean) => {
+      for (const rule of list) {
+        if (rule instanceof CSSSupportsRule) walk(rule.cssRules, rule.conditionText.replace(/\s+/g, "") === "not(inset:0)");
+        else if (rule instanceof CSSMediaRule) {
+          const inner: string[] = [];
+          for (const child of rule.cssRules) if (inside) inner.push(child.cssText);
+          if (inner.length) rules.push(`@media ${rule.conditionText} { ${inner.join(" ")} }`);
+          else walk(rule.cssRules, inside);
+        } else if (inside) rules.push(rule.cssText);
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try { walk(sheet.cssRules, false); } catch { /* another origin's sheet */ }
+    }
+    return rules.join("\n");
+  });
+  expect(fallback, "the fallback's rules (and a browser with inset and gap)").toBeTruthy();
+  expect(fallback).toContain(".tz-map");
+
+  const boxes = () => section(page).evaluate(async (map) => {
+    map.getBoundingClientRect();
+    await Promise.all(map.getAnimations({ subtree: true }).map((animation) => animation.finished));
+    // The card, its heading and map, each button and its icon (the buttons' row box itself is where the margins go).
+    return [".tz-map__card", ".tz-map__title", ".tz-map__frame", ".wp-block-button:first-child a", ".wp-block-button:last-child a",
+      ".wp-block-button:first-child svg", ".wp-block-button:last-child svg"].map((selector) => {
+      const { x, y, width, height } = map.querySelector(selector)!.getBoundingClientRect();
+      return [x, y, width, height].map((n) => Math.round(n * 100) / 100);
+    });
+  });
+  const widths = [320, 390, 600, 601, 640, 668, 722, 768, 1440];
+  const withGap = [];
+  for (const width of widths) {
+    await page.setViewportSize({ width, height: 800 });
+    withGap.push(await boxes());
+  }
+  await page.addStyleTag({ content: fallback! });
+  for (const [i, width] of widths.entries()) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(await boxes(), `${width}px`).toEqual(withGap[i]);
+  }
+  await expectClean(page, errors);
+});
+
 test("the map card has the Contact cards' look, and the map keeps its full height before it loads", async ({ page }) => {
   const errors = trackPageErrors(page);
   // Hold Google's answer, so the frame is measured while it is still empty.
@@ -173,8 +273,9 @@ test("both map links show a keyboard focus ring", async ({ page }) => {
 });
 
 // Phones, both sides of the theme's 600px breakpoint, landscape phones (640, 667), around the width where both
-// buttons first fit on one row (668 ± 1, measured), a tablet and desktop.
-const WIDTHS = [320, 360, 390, 412, 414, 600, 601, 640, 667, 668, 669, 768, 1024, 1440];
+// buttons first fit on one row (722 ± 1, measured with their icons), a tablet and desktop; and either side of 390px,
+// where the icons start.
+const WIDTHS = [320, 360, 389, 390, 412, 414, 600, 601, 640, 667, 668, 721, 722, 723, 768, 1024, 1440];
 
 test("at every width the buttons are spaced and centred in the card, nothing scrolls sideways, and \"Bet Shemesh\" stays on one line", async ({ page }) => {
   const errors = trackPageErrors(page);
@@ -201,6 +302,27 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
         range.setEnd(title, at + word.length);
         return Math.round(range.getClientRects()[0].top);
       };
+      // Each button's label and the icon after it: the label's lines, and the icon beside its end, centred on it.
+      const labels = [...map.querySelectorAll(".tz-map__links a")].map((a) => {
+        const range = document.createRange();
+        range.selectNodeContents(a.firstChild!);
+        const rects = [...range.getClientRects()];
+        const svg = a.querySelector("svg")!;
+        const icon = svg.getBoundingClientRect();
+        const text = range.getBoundingClientRect();
+        const style = getComputedStyle(a);
+        const room = a.getBoundingClientRect().width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) -
+          parseFloat(style.borderLeftWidth) - parseFloat(style.borderRightWidth);
+        return {
+          lines: new Set(rects.map((rect) => Math.round(rect.top))).size,
+          // For the failure message: the label's own width, and the room in the pill.
+          measure: `label ${text.width.toFixed(1)}px in ${room.toFixed(1)}px`,
+          iconShown: getComputedStyle(svg).display !== "none",
+          iconAfter: icon.left >= Math.max(...rects.map((rect) => rect.right)) - 0.5,
+          iconCentred: Math.abs(icon.top + icon.height / 2 - (text.top + text.height / 2)) <= 1.5,
+          iconInside: icon.right <= a.getBoundingClientRect().right
+        };
+      });
       return {
         layout: {
           scroll: document.documentElement.scrollWidth <= document.documentElement.clientWidth,
@@ -208,6 +330,7 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
           cardInView: card.left >= 0 && card.right <= document.documentElement.clientWidth,
           betShemeshTogether: lineOf("Bet") === lineOf("Shemesh")
         },
+        labels,
         oneRow,
         // Side by side: the space between them; stacked: the space between the rows.
         gap: oneRow ? second.left - first.right : second.top - first.bottom,
@@ -218,6 +341,13 @@ test("at every width the buttons are spaced and centred in the card, nothing scr
       };
     });
     expect(fit.layout, `${width}px`).toEqual({ scroll: true, inside: true, cardInView: true, betShemeshTogether: true });
+    // From 390px the external-link icon follows each label, both on one line (below that a phone's pill has no
+    // room for both, and the icon is left out: those pills are as they were).
+    for (const [i, { lines, measure, iconShown, ...icon }] of fit.labels.entries()) {
+      if (width >= 390) expect(lines, `${width}px: button ${i + 1}'s label lines (${measure})`).toBe(1);
+      expect(iconShown, `${width}px: button ${i + 1}'s icon shown`).toBe(width >= 390);
+      if (iconShown) expect(icon, `${width}px: button ${i + 1}'s icon`).toEqual({ iconAfter: true, iconCentred: true, iconInside: true });
+    }
     // Never touching (the theme's .5em = 9px), and centred to the pixel.
     expect(fit.gap, `${width}px: gap between the buttons`).toBeGreaterThanOrEqual(8);
     expect(fit.offCentre, `${width}px: buttons off-centre by`).toBeLessThanOrEqual(1);

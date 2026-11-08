@@ -37,6 +37,17 @@ test("without a subheading, the spacer and the subheading line are left out", ()
   assert.equal(html, swapHero(HERO, { image: "/media/gallery-hero.webp", heading: "Gallery", subheading: "x" }).replace(/\s*<div aria-hidden="true" class="wp-block-spacer[^]*?<\/p>/, ""));
 });
 
+test("swapHero can make the heading the page's h1, and changes nothing else", () => {
+  const options = { image: "/media/gallery-hero.webp", heading: "Gallery" };
+  const h2 = swapHero(HERO, options);
+  const h1 = swapHero(HERO, { ...options, headingTag: "h1" });
+  assert.equal(h1, h2.replace(/<h2 (class="wp-block-heading[^"]*"><strong>Gallery<\/strong>)<\/h2>/, "<h1 $1</h1>"));
+  assert.equal(h1.match(/<h1\b/g)?.length, 1);
+  assert.doesNotMatch(h1, /<\/?h2\b/);
+  // h2 stays the default.
+  assert.equal(swapHero(HERO, { ...options, headingTag: "h2" }), h2);
+});
+
 test("swapHero escapes the image path, the heading and the subheading", () => {
   const html = swapHero(HERO, { image: '/media/a"b&c.webp', heading: "Q & A <live>", subheading: '"Quoted" & <b>' });
   assert.ok(html.includes(' src="/media/a&quot;b&amp;c.webp"'));

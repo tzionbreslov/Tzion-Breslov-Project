@@ -4,7 +4,7 @@ import { composePage } from "@/lib/pages/compose";
 import { esc, LARGE_SPACER, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 /**
- * The Gallery page: the Resources header with its own image and heading, then
+ * The Gallery page: the Resources header with its own image and heading (the page's h1), then
  * every photo in public/media/gallery, shown whole at its own ratio. The photo
  * list (order, size, alt text) is content/gallery.generated.json, written from
  * the folder before every build (scripts/write-site-files.mjs →
@@ -48,7 +48,7 @@ export function galleryPage(path: string): PageContent {
     title: text.title,
     description: text.description,
     slug: "gallery",
-    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading }) + grid(readImages()) + LARGE_SPACER),
+    main: wrapEntry(text.title, renderHero({ image: HERO_IMAGE, heading: text.heading, headingTag: "h1" }) + grid(readImages()) + LARGE_SPACER),
     islands: ["signup", "gallery"],
     image: HERO_IMAGE
   });

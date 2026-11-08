@@ -64,7 +64,7 @@ export function resourcesHero(): string {
   return main.slice(start, spacer + SMALL_SPACER.length);
 }
 
-/** The Resources hero with another image (no srcset), heading and optional subheading (left out when not given): lib/pages/edits.mjs. */
+/** The Resources hero with another image (no srcset), heading (optionally the page's h1) and optional subheading (left out when not given): lib/pages/edits.mjs. */
 export function renderHero(options: HeroOptions): string {
   return swapHero(resourcesHero(), options);
 }

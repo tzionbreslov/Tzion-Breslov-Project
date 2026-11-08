@@ -1,4 +1,5 @@
-export type HeroOptions = { image: string; heading: string; subheading?: string };
+/** headingTag: "h1" makes the hero's heading the page's main heading (default "h2", as the Resources hero has it). */
+export type HeroOptions = { image: string; heading: string; subheading?: string; headingTag?: "h1" | "h2" };
 
 export function esc(s: string): string;
 export function markerMissing(name: string): Error;

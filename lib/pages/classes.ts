@@ -1,5 +1,6 @@
 import copy from "@/content/copy/en.json";
 import { readShared, type PageContent } from "@/lib/content-files";
+import { EXTERNAL_LINK_ICON } from "@/lib/icons";
 import { composePage } from "@/lib/pages/compose";
 import { closingSections, esc, resourcesHero, wrapEntry } from "@/lib/pages/parts";
 import { formatMonthYear, sortVideos, type LibraryVideo } from "@/lib/video-library.mjs";
@@ -23,7 +24,6 @@ const svg = (body: string, className = "") =>
   `<svg${className ? ` class="${className}"` : ""} viewBox="0 0 24 24" aria-hidden="true" focusable="false">${body}</svg>`;
 const SEARCH = svg('<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>');
 const CLEAR = svg('<path d="M6 6l12 12M18 6 6 18"/>');
-const EXTERNAL = svg('<path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>');
 const PLAY = svg('<path d="M8 5.5v13l10.5-6.5z"/>');
 
 type Kind = "video" | "short";
@@ -64,14 +64,14 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
   const count = esc(text.videoCount.replace("{count}", String(videos.length + shorts.length)));
   const sort = (["latest", "popular", "oldest"] as const).map((order) =>
     `<button type="button" data-order="${order}" aria-pressed="${order === "latest"}">${esc(text[order])}</button>`).join("");
-  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
+  return `<section class="tz-vl" data-tz-video-library data-close-label="${esc(text.closePlayer)}" data-no-results="${esc(text.noResults)}" aria-labelledby="tz-vl-title">${NO_SCRIPT}` +
     `<div class="tz-vl__profile">` +
     `<span class="tz-vl__avatar"><img src="${LOGO}" alt="" width="215" height="216"></span>` +
     `<div class="tz-vl__intro">` +
     `<h1 id="tz-vl-title" class="tz-vl__title">${esc(text.heading)}</h1>` +
     // The "·" stays with the handle (no-break space), so a wrapped line starts with the count.
     `<p class="tz-vl__meta"><strong>${esc(text.handle)}</strong>&nbsp;· <span class="tz-vl__count">${count}</span></p>` +
-    `<a class="tz-vl__channel" href="${CHANNEL_URL}" target="_blank" rel="noopener noreferrer">${esc(text.channel)}${EXTERNAL}</a>` +
+    `<a class="tz-vl__channel" href="${CHANNEL_URL}" target="_blank" rel="noopener noreferrer">${esc(text.channel)}${EXTERNAL_LINK_ICON}</a>` +
     `</div></div>` +
     `<div class="tz-vl__bar">` +
     `<div class="tz-vl__tabs" role="group" aria-label="${esc(text.kindLabel)}">` +
@@ -89,7 +89,9 @@ function library(videos: LibraryVideo[], shorts: LibraryVideo[]) {
     `</div>` +
     grid(videos, "video", text.videosTab) +
     grid(shorts, "short", text.shortsTab) +
-    `<p class="tz-vl__empty" role="status" hidden>${esc(text.noResults)}</p>` +
+    // A live region on the page from the start, empty: lib/client/video-library.ts fills in
+    // "No videos match that search." (data-no-results), so screen readers announce it.
+    `<p class="tz-vl__empty" role="status"></p>` +
     `</section>`;
 }
 

@@ -3,7 +3,8 @@
  * button.tz-submenu-toggle + ul.tz-sub-menu), in the desktop and the mobile
  * menu. The button opens and closes its panel by mouse, touch and keyboard; in
  * the desktop menu a mouse also opens it by hovering, and leaving closes it
- * unless the panel was pinned by a mouse click or by focus moving into it.
+ * unless the panel was pinned by a mouse click on the button or by keyboard
+ * focus moving into it (a mouse press inside it, which focuses a link too, doesn't pin it).
  * Escape, a click or tap outside, or focus moving out closes it. Once this runs
  * it owns the open state (aria-expanded), taking over whatever was showing;
  * before that, or without JS, app/navigation.css opens the desktop panel on
@@ -13,6 +14,15 @@
 const PARENT = ".tz-menu-parent";
 const TOGGLE = ":scope > .tz-submenu-toggle";
 const DESKTOP_MENU = ".nav-primary";
+
+/** Focus the browser would show a ring for: from the keyboard, not a mouse press (a browser without :focus-visible says yes). */
+function isKeyboardFocus(node: Element) {
+  try {
+    return node.matches(":focus-visible");
+  } catch {
+    return true;
+  }
+}
 
 export function enhanceMenus(root: Document = document): () => void {
   const parents = [...root.querySelectorAll<HTMLElement>(PARENT)].filter((parent) => parent.querySelector(TOGGLE));
@@ -38,8 +48,10 @@ export function enhanceMenus(root: Document = document): () => void {
       else setOpen(parent, !isOpen(parent));
     });
     listen<FocusEvent>(parent, "focusin", (event) => {
-      // Focus inside the panel pins it, so the mouse leaving never hides the focused link.
-      if (event.target !== toggleOf(parent)) hovered.delete(parent);
+      // Keyboard focus inside the panel pins it, so the mouse leaving never hides the focused link. A mouse
+      // press on a link (a right-click, a ctrl-click, a press released elsewhere) focuses it too, but doesn't pin.
+      const target = event.target as Element;
+      if (target !== toggleOf(parent) && isKeyboardFocus(target)) hovered.delete(parent);
     });
     listen<FocusEvent>(parent, "focusout", (event) => {
       if (event.relatedTarget instanceof Node && !parent.contains(event.relatedTarget)) setOpen(parent, false);

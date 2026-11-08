@@ -68,6 +68,7 @@ function enhance(root: HTMLElement) {
   const input = root.querySelector<HTMLInputElement>(".tz-vl__input");
   const empty = root.querySelector<HTMLElement>(".tz-vl__empty");
   const closeLabel = root.dataset.closeLabel ?? "";
+  const noResults = root.dataset.noResults ?? "";
   if (!sortGroup || !searchOpen || !searchField || !input || !empty) return () => undefined;
 
   let kind: Kind = "video";
@@ -86,7 +87,10 @@ function enhance(root: HTMLElement) {
       node.hidden = !matching.has(video.id);
       grid.append(node);
     }
-    empty.hidden = matching.size > 0;
+    // The empty-search message is a live region that stays on the page: only its text changes, and only
+    // when it differs, so a screen reader announces it once (not on every key typed while nothing matches).
+    const message = matching.size > 0 ? "" : noResults;
+    if (empty.textContent !== message) empty.textContent = message;
   };
 
   const setSearch = (open: boolean) => {

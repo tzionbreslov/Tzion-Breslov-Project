@@ -7,17 +7,16 @@
  */
 
 /* ---------------------------------------------------------------- Grid */
-.tz-gallery { padding: 0 16px; }
+/* One photo across (below 600px): it takes the theme's whole content width (its own side padding is enough). */
 .tz-gallery .tz-gallery__grid {
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start;
   margin: 0; padding: 0; list-style: none;
 }
 .tz-gallery .tz-gallery__cell { margin: 0; padding: 0; list-style: none; }
-/* One photo across: it takes the theme's whole content width (its own side padding is enough). */
-@media (max-width: 599px) {
-  .tz-gallery { padding: 0; }
-}
+/* Two across and more: 16px in from the content box. One query decides both, so a fractional width
+ * (a zoomed page at 599.5px) can't fall between a max-width: 599px and a min-width: 600px. */
 @media (min-width: 600px) {
+  .tz-gallery { padding: 0 16px; }
   .tz-gallery .tz-gallery__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 1024px) {

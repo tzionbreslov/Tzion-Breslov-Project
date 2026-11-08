@@ -160,6 +160,14 @@ test("Shorts lists the 26 bite-size clips, newest first, without the sort button
 test("search filters the clips, says when nothing matches, and Escape clears it", async ({ page }) => {
   const errors = trackPageErrors(page);
   await openClasses(page);
+  // The "nothing matches" message is a live region that is on the page from the start, empty: only its
+  // text changes (one that appears from `hidden` may not be announced). Empty, it takes no room.
+  const empty = page.locator(".tz-vl__empty");
+  await expect(library(page).getByRole("status")).toHaveCount(1);
+  await expect(empty).toHaveAttribute("role", "status");
+  await expect(empty).toHaveText("");
+  await expect(empty).not.toHaveAttribute("hidden");
+  await expect(empty).toBeHidden();
   await button(page, "Shorts").click();
   const toggle = button(page, "Search videos");
   await toggle.click();
@@ -170,17 +178,22 @@ test("search filters the clips, says when nothing matches, and Escape clears it"
   await expect(shown(page, "short")).toHaveCount(1);
   expect((await cards(page, "short"))[0].title).toBe("Rabbi Kalmus Daily Ray of Wisdom: What is Bitul?");
 
-  const empty = page.locator(".tz-vl__empty");
   await expect(empty).toBeHidden();
+  await expect(empty).toHaveText("");
   await input.fill("qqzzxx no such class");
   await expect(shown(page, "short")).toHaveCount(0);
   await expect(empty).toBeVisible();
   await expect(empty).toHaveText("No videos match that search.");
+  await expect(empty).not.toHaveAttribute("hidden");
+  // As it looked when it appeared from `hidden`: 200px tall, the text centred.
+  expect(await empty.evaluate((node) => Math.round(node.getBoundingClientRect().height))).toBe(200);
 
   await input.press("Escape");
   await expect(input).toBeHidden();
   await expect(toggle).toBeFocused();
   await expect(empty).toBeHidden();
+  await expect(empty).toHaveText("");
+  await expect(library(page).getByRole("status")).toHaveCount(1);
   await expect(shown(page, "short")).toHaveCount(26);
 
   // The clear button does the same; switching tabs starts a fresh search.
@@ -328,6 +341,105 @@ test("with reduced motion the player closes at once", async ({ page }) => {
   await expect(page.getByRole("dialog")).toBeVisible();
   await page.keyboard.press("Escape");
   expect(await page.locator(".tz-dialog, .tz-dialog-overlay").count()).toBe(0);
+  await expectClean(page, errors);
+});
+
+// From 320 to 374px the channel header still fits: "Visit our YouTube channel" on one line, and the handle
+// beside the logo, unbroken, inside the header. From 375px nothing changes: the sizes it had before.
+test("the channel header fits from 320 to 374px, and keeps its sizes from 375px", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await page.goto("/classes/");
+  await page.evaluate(() => document.fonts.ready);
+  for (const width of [320, 330, 340, 351, 352, 360, 374, 375, 390, 480]) {
+    await page.setViewportSize({ width, height: 800 });
+    const header = await page.locator(".tz-vl__profile").evaluate((profile) => {
+      const box = (node: Element) => node.getBoundingClientRect();
+      const style = (selector: string) => getComputedStyle(profile.querySelector(selector)!);
+      const channel = profile.querySelector(".tz-vl__channel")!;
+      const label = document.createRange();
+      label.selectNodeContents(channel.firstChild!);
+      const meta = profile.querySelector<HTMLElement>(".tz-vl__meta")!;
+      const avatar = box(profile.querySelector(".tz-vl__avatar")!);
+      // The handle with its "·" (they never part: the "·" sits on the handle's line).
+      const handle = meta.querySelector("strong")!;
+      const dot = document.createRange();
+      dot.setStart(handle.nextSibling!, 1);
+      dot.setEnd(handle.nextSibling!, 2);
+      // For the failure message: each one's natural (unwrapped) width, and the room it has.
+      const natural = (node: Element, measure: (copy: Element) => number) => {
+        const copy = node.cloneNode(true) as HTMLElement;
+        copy.style.cssText = "position:absolute;visibility:hidden;white-space:nowrap;width:max-content;max-width:none";
+        node.parentElement!.append(copy);
+        const width = measure(copy);
+        copy.remove();
+        return width.toFixed(1);
+      };
+      const handleAndDot = natural(meta, (copy) => {
+        const range = document.createRange();
+        range.setStartBefore(copy.querySelector("strong")!);
+        range.setEnd(copy.querySelector("strong")!.nextSibling!, 2);
+        return range.getBoundingClientRect().width;
+      });
+      const measure = `handle and dot ${handleAndDot}px in ${meta.clientWidth}px, ` +
+        `button ${natural(channel, (copy) => copy.getBoundingClientRect().width)}px in ${box(profile).width.toFixed(1)}px`;
+      return {
+        measure,
+        fits: {
+          channelOneLine: new Set([...label.getClientRects()].map((rect) => Math.round(rect.top))).size === 1,
+          channelInside: box(channel).right <= box(profile).right + 0.5,
+          metaBesideLogo: box(meta).left >= avatar.right,
+          handleOneLine: handle.getClientRects().length === 1,
+          dotWithHandle: Math.abs(dot.getBoundingClientRect().top - handle.getClientRects()[0].top) < 2,
+          metaInside: meta.scrollWidth <= meta.clientWidth
+        },
+        sizes: {
+          avatar: avatar.width,
+          title: style(".tz-vl__title").fontSize,
+          meta: style(".tz-vl__meta").fontSize,
+          channel: `${style(".tz-vl__channel").fontSize} ${style(".tz-vl__channel").padding} ${style(".tz-vl__channel").letterSpacing}`
+        }
+      };
+    });
+    expect(header.fits, `${width}px (${header.measure})`).toEqual({ channelOneLine: true, channelInside: true, metaBesideLogo: true, handleOneLine: true, dotWithHandle: true, metaInside: true });
+    if (width >= 375) expect(header.sizes, `${width}px`).toEqual({ avatar: 84, title: "40px", meta: "14px", channel: "12px 10px 16px 0.4px" });
+  }
+  await expectClean(page, errors);
+});
+
+// Between 374 and 375px (a zoomed page has fractional widths) the header keeps its smaller sizes: the 375px
+// sizes start at 375px, where the test above proves they fit. A same-origin frame zoomed 4x gives the
+// fractional width (Chromium snaps a frame's width to whole device pixels), as in e2e/gallery.spec.ts. The page
+// loads once; each width resizes the frame.
+test("between 374 and 375px wide, the channel header keeps its smaller sizes", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own sizes");
+  const errors = trackPageErrors(page);
+  await page.route("**/__classes-frame/", (route) => route.fulfill({
+    contentType: "text/html",
+    body: `<!doctype html><body style="margin:0"><iframe src="/classes/" style="border:0;zoom:4;width:374px;height:600px"></iframe></body>`
+  }));
+  await page.goto("/__classes-frame/");
+  const frame = page.frame({ url: /\/classes\/$/ })!;
+  await frame.waitForLoadState("load");
+  const headerAt = async (width: number) => {
+    // Resize the frame and lay the outer page out, so the frame's own viewport has the new width.
+    await page.locator("iframe").evaluate((node, value) => {
+      (node as HTMLElement).style.width = `${value}px`;
+      node.getBoundingClientRect();
+    }, width);
+    return frame.evaluate(() => {
+      const style = (selector: string) => getComputedStyle(document.querySelector(selector)!);
+      return {
+        viewport: document.documentElement.getBoundingClientRect().width,
+        avatar: document.querySelector(".tz-vl__avatar")!.getBoundingClientRect().width,
+        meta: style(".tz-vl__meta").fontSize,
+        channel: `${style(".tz-vl__channel").fontSize} ${style(".tz-vl__channel").padding} ${style(".tz-vl__channel").letterSpacing}`
+      };
+    });
+  };
+  const smaller = await headerAt(374);
+  expect(smaller, "374px").toEqual({ viewport: 374, avatar: 56, meta: "12px", channel: "10.5px 10px normal" });
+  for (const width of [374.25, 374.5, 374.75]) expect(await headerAt(width), `${width}px`).toEqual({ ...smaller, viewport: width });
+  expect(await headerAt(375), "375px").toEqual({ viewport: 375, avatar: 84, meta: "14px", channel: "12px 10px 16px 0.4px" });
   await expectClean(page, errors);
 });
 

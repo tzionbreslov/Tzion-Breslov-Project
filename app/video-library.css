@@ -138,6 +138,8 @@
 .tz-vl .tz-vl__grid[data-kind="short"] .tz-vl__details strong { -webkit-line-clamp: 3; }
 .tz-vl .tz-vl__details span { color: var(--tz-vl-muted); font-size: 13px; line-height: 1.4; }
 .tz-vl .tz-vl__empty { min-height: 200px; display: grid; place-items: center; margin: 0; color: var(--tz-vl-muted); font-size: 16px; text-align: center; }
+/* The live region stays on the page (lib/client/video-library.ts changes its text): empty, it takes no room. */
+.tz-vl .tz-vl__empty:empty { min-height: 0; }
 
 /* ---------------------------------------------------------------- Player */
 /* The dialog box clips and scrolls its content (dialog.css), so the rounding and the shadow are on the box itself. */
@@ -176,14 +178,21 @@
 }
 @media (max-width: 480px) {
   .tz-vl .tz-vl__grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  /* Keeps "Visit our YouTube channel" on one line down to 360px. */
+  /* Keeps "Visit our YouTube channel" on one line down to 375px (below that, the next query). */
   .tz-vl .tz-vl__channel { padding: 10px 16px; font-size: 12px; letter-spacing: .4px; }
 }
-@media (max-width: 374px) {
-  /* Too narrow for the handle beside the logo (it would break mid-word): the line goes under both. */
-  .tz-vl .tz-vl__avatar { grid-row: 1; }
-  .tz-vl .tz-vl__title { align-self: center; }
-  .tz-vl .tz-vl__meta { grid-column: 1 / -1; margin-top: 14px; }
+@media (max-width: 374.98px) {
+  /* Below 375px (zoomed fractional widths too: 374.98, not 374) down to 320px: a smaller logo and
+   * handle, so the handle stays beside the logo without breaking mid-word, and smaller channel-button
+   * type, so "Visit our YouTube channel" keeps to one line.
+   * Each keeps room to spare at 320px (about 21px and 18px here): Chromium on Linux at a phone's
+   * 2.625 scale measures this text about 1 device pixel wider per letter (8-10px in all). */
+  .tz-vl .tz-vl__profile { grid-template-columns: 56px minmax(0, 1fr); column-gap: 10px; }
+  .tz-vl .tz-vl__avatar { width: 56px; height: 56px; }
+  .tz-vl .tz-vl__avatar img { width: 46px; height: 46px; }
+  .tz-vl .tz-vl__meta { font-size: 12px; }
+  .tz-vl .tz-vl__channel { gap: 6px; padding: 10px; font-size: 10.5px; letter-spacing: 0; }
+  .tz-vl .tz-vl__channel svg { width: 14px; height: 14px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

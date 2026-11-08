@@ -7,6 +7,10 @@
 [data-tz-youtube-feed] .sby_video_thumbnail { aspect-ratio: 16 / 9; overflow: hidden; }
 [data-tz-youtube-feed] .sby_item.tz-more { display: none !important; }
 
+/* The new pages' icons (lib/icons.ts: the external-link icon on the Classes channel link and the
+ * Contact map's links): an outline in the text colour. Each page sizes and places them. */
+.tz-icon { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
 /* Form plumbing */
 .tz-hp { position: absolute !important; left: -10000px !important; width: 1px; height: 1px; overflow: hidden; }
 .tz-turnstile:empty { display: none; }

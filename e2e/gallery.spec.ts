@@ -64,7 +64,9 @@ test("/gallery/ opens with its own hero (hero2.png, \"Gallery\", no Resources su
   await expect(heroImage).toHaveAttribute("src", "/wp-content/uploads/2023/06/hero2.png");
   expect(await heroImage.getAttribute("srcset")).toBeNull();
   expect(await heroImage.getAttribute("sizes")).toBeNull();
-  await expect(hero.locator("h2 > strong")).toHaveText("Gallery");
+  // The hero's heading is the page's main heading: its only h1.
+  await expect(hero.locator("h1 > strong")).toHaveText("Gallery");
+  await expect(page.locator("h1")).toHaveCount(1);
   await expect(hero.locator(".wp-block-cover__inner-container > *")).toHaveCount(1);
   await expect(hero.locator("p, .wp-block-spacer")).toHaveCount(0);
   await expect(page.getByText("Resources for those seeking spiritual growth.")).toHaveCount(0);
@@ -128,6 +130,57 @@ test("photos are shown whole at their own ratio, three across from 1024px, two f
       expect(Math.abs(layout[0].left - content.left), `photo left edge at ${width}px`).toBeLessThan(0.5);
       expect(Math.abs(layout[0].w - content.width), `photo width at ${width}px`).toBeLessThan(0.5);
     }
+  }
+  await expectClean(page, errors);
+});
+
+// The hero heading became an h1, styled as it was: the same look as the h2 the same hero has on /events/.
+test("the hero's h1 looks exactly like the Events hero's h2", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  const PROPS = ["display", "font-family", "font-size", "font-weight", "font-style", "line-height", "letter-spacing", "color",
+    "text-align", "text-transform", "margin-top", "margin-right", "margin-bottom", "margin-left", "padding-top", "padding-bottom"];
+  const look = async (heading: string) => {
+    await expect(page.locator(".hero").locator(heading)).toHaveCount(1);
+    return page.locator(`.hero ${heading}`).evaluate((node, props) => {
+      const read = (el: Element) => Object.fromEntries(props.map((prop) => [prop, getComputedStyle(el).getPropertyValue(prop)]));
+      const box = node.getBoundingClientRect();
+      return { heading: read(node), strong: read(node.querySelector("strong")!), height: Math.round(box.height * 100) / 100 };
+    }, PROPS);
+  };
+  await page.goto("/events/");
+  const events = await look("h2");
+  await openGallery(page);
+  expect(await look("h1")).toEqual(events);
+  await expectClean(page, errors);
+});
+
+// Between 599 and 600px (a zoomed page has fractional widths) one of the two layouts still applies: the
+// photos never get the 16px inset of neither query. A same-origin frame zoomed 4x gives the fractional width
+// (Chromium snaps a frame's width to whole device pixels).
+test("between 599 and 600px wide, one photo across still takes the whole content width", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "sets its own sizes");
+  const errors = trackPageErrors(page);
+  for (const width of [599.25, 599.5, 599.75]) {
+    await page.route("**/__gallery-frame/", (route) => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><body style="margin:0"><iframe src="/gallery/" style="border:0;zoom:4;width:${width}px;height:600px"></iframe></body>`
+    }));
+    await page.goto("/__gallery-frame/");
+    const frame = page.frame({ url: /\/gallery\/$/ })!;
+    await frame.waitForLoadState("load");
+    const layout = await frame.evaluate(() => {
+      const photo = document.querySelector(".tz-gallery__item img")!.getBoundingClientRect();
+      const content = document.querySelector(".entry-content")!.getBoundingClientRect();
+      return {
+        viewport: document.documentElement.getBoundingClientRect().width,
+        columns: getComputedStyle(document.querySelector(".tz-gallery__grid")!).gridTemplateColumns.split(" ").length,
+        left: Math.abs(photo.left - content.left) < 0.5,
+        width: Math.abs(photo.width - content.width) < 0.5
+      };
+    });
+    expect(layout.viewport, "the frame's own width").toBe(width);
+    expect(layout, `${width}px`).toEqual({ viewport: width, columns: 1, left: true, width: true });
+    await page.unroute("**/__gallery-frame/");
   }
   await expectClean(page, errors);
 });

@@ -1,10 +1,12 @@
 import copy from "@/content/copy/en.json";
+import { EXTERNAL_LINK_ICON } from "@/lib/icons";
 import { divAt, esc, findOnce, markerMissing } from "@/lib/pages/parts";
 
 /**
  * The map on the imported Contact page (content/pages/contact.json): a card in
  * the Contact cards' style with a Google map pinned on Bet Shemesh, Israel
- * (owner), a "Get directions" link and an "Open in Google Maps" link. It goes
+ * (owner), a "Get directions" link and an "Open in Google Maps" link (both open
+ * in a new tab, with the external-link icon the Classes channel link has). It goes
  * right after the contact columns (the form and the three cards), inside their
  * section, so the rest of the page stays exactly as it was. Styles: app/pages.css.
  * The embed's origin is SOURCES.maps in config/security-headers.mjs.
@@ -20,7 +22,7 @@ const MAP_DIRECTIONS = `https://www.google.com/maps/dir/?api=1&destination=${PLA
 const MAP_OPEN = `https://www.google.com/maps/search/?api=1&query=${PLACE}`;
 
 const button = (style: string, href: string, label: string) =>
-  `<div class="wp-block-button ${style}"><a class="wp-block-button__link wp-element-button" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a></div>`;
+  `<div class="wp-block-button ${style}"><a class="wp-block-button__link wp-element-button" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(label)}${EXTERNAL_LINK_ICON}</a></div>`;
 
 function mapSection(): string {
   const text = copy.map;

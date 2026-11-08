@@ -39,7 +39,7 @@
 
 /* The theme's buttons, centred. The theme zeroes flex gaps (.wp-block-buttons
  * {gap:0!important}, for Safari 13) and spaces buttons with a margin on the
- * second one only, so pills that wrap to a second row (601–667px) would touch
+ * second one only, so pills that wrap to a second row (601–721px) would touch
  * and sit off-centre. Space them with the theme's .5em as a gap instead, in
  * both directions, at every width. */
 .tz-map .tz-map__links {
@@ -62,15 +62,52 @@
 .tz-map .tz-map__links .wp-block-button .wp-block-button__link:focus-visible {
   outline: 3px solid var(--wp--preset--color--dark-blue, #1e61a1); outline-offset: 3px;
 }
+/* The theme lifts its filled buttons on hover and focus (translateY(-.3em), over its .25s
+ * transition); the outline one lifts the same way. */
+@media (prefers-reduced-motion: no-preference) {
+  .tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:hover,
+  .tz-map .tz-map__links .wp-block-button.is-style-outline .wp-block-button__link:focus { transform: translateY(-.3em); }
+}
+/* Both open in a new tab, so each ends with the external-link icon (lib/icons.ts), drawn as
+ * on the Classes channel link: beside the label, never on a line of its own. Below 390px a phone's
+ * pill has no room for "Open in Google Maps" and the icon on one line (at 390px they have 9px to
+ * spare: text can measure a few px wider on other systems), so there it has none. */
+.tz-map .tz-map__links .wp-block-button .wp-block-button__link {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.tz-map .tz-map__links .wp-block-button__link svg { flex: none; width: 16px; height: 16px; }
+@media (max-width: 389px) {
+  .tz-map .tz-map__links .wp-block-button__link svg { display: none; }
+}
 
 /* Phones: the third Contact card's side padding, a shorter map, and the
  * stacked buttons as wide as the card (the theme's 300px would overflow it),
- * with room for "Open in Google Maps" on one line from 360px. */
+ * with room for "Open in Google Maps" on one line from 390px (tested; at 360px it fits locally with
+ * about 3px to spare, but Chromium on Linux wraps it). */
 @media (max-width: 600px) {
   .tz-map .tz-map__card { gap: 20px; padding: 40px 20px; }
   .tz-map .tz-map__frame { height: 300px; }
   .tz-map .tz-map__links .wp-block-button { width: 100%; }
   .tz-map .tz-map__links .wp-block-button .wp-block-button__link { width: 100%; padding-left: 16px; padding-right: 16px; text-align: center; }
+}
+
+/* Safari before 14.1 has no flex gap. @supports can't ask for it (that Safari knows gap from grid),
+ * but it also lacks inset, which came with it. There, margins space the card's parts, the buttons
+ * (.25em round each, the row pulled out by as much) and each icon exactly as the gaps do elsewhere
+ * (e2e/contact.spec.ts applies these rules and compares). Every selector outranks the theme's. */
+@supports not (inset: 0) {
+  .tz-map .tz-map__card { gap: 0; }
+  .tz-map .tz-map__card > .tz-map__frame { margin-top: 30px; }
+  .tz-map .tz-map__card > .tz-map__links { gap: 0 !important; margin: calc(30px - .25em) -.25em -.25em; }
+  .tz-map .tz-map__links .wp-block-button,
+  .tz-map .tz-map__links .wp-block-button + .wp-block-button { margin: .25em; }
+  .tz-map .tz-map__links .wp-block-button .wp-block-button__link { gap: 0; }
+  .tz-map .tz-map__links .wp-block-button__link svg { margin-left: 8px; }
+  @media (max-width: 600px) {
+    .tz-map .tz-map__card > .tz-map__frame { margin-top: 20px; }
+    .tz-map .tz-map__card > .tz-map__links { margin-top: calc(20px - .25em); }
+    .tz-map .tz-map__links .wp-block-button { width: calc(100% - .5em); }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
