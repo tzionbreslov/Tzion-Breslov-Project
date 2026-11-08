@@ -124,7 +124,11 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
 - **Gallery:**
   - the focus ring's radius doesn't match the placeholders' baked corners;
   - on phones the gallery is as wide as Articles (330 px at 390), while the Classes cards keep a 16 px inset (298 px).
-- **Contact:** "Find us in Bet Shemesh" versus the card's "Beit Shemesh, Israel" (owner's call).
+- **Contact:**
+  - "Find us in Bet Shemesh" versus the card's "Beit Shemesh, Israel" (owner's call).
+  - The map links' external-link icon is hidden below 390px (Group 7): there a phone's pill has no room for "Open in
+    Google Maps" and the icon on one line, so common phone widths (360, 375, 384px) get no new-tab cue on those links.
+    Options: let the label wrap to two lines, or use smaller pill type on phones (owner's call).
 - **No flex `gap` before Safari 14.1, outside the Contact map** (found by Group 7, 2026-11-08). The map has a margin
   fallback since Group 7 (`app/pages.css`, `@supports not (inset: 0)`). The other new pieces still space flex items
   with `gap` only, so there they touch:

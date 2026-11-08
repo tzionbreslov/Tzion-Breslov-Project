@@ -47,7 +47,8 @@ WordPress backup (.wpress, private, not in git)
   edits are in `edits.mjs` (unit-tested). All markup built as strings (these pages, the menus, the feeds, the Events
   list) escapes text with the one `esc()` in `lib/html.mjs`. `contact-map.ts` adds the map
   (Google Maps pinned on Bet Shemesh, with directions) to the imported Contact page, right after its form and cards;
-  its two new-tab links end with the external-link icon in `lib/icons.ts`, as the Classes channel link does.
+  from 390px its two new-tab links end with the external-link icon in `lib/icons.ts` (drawn by `.tz-icon` in
+  `app/enhancements.css`), as the Classes channel link does; below 390px a phone's pill has no room for it.
   Their new English text lives only in `content/copy/en.json`.
 - `/privacy/` (`lib/pages/privacy.ts`) — the privacy notice, linked from the footer Quick Links and from the
   "privacy notice" words in the RSVP and "Get event announcements" consent lines. Its text (`content/copy/en.json`

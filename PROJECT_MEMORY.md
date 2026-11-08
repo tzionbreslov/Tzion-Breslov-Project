@@ -133,8 +133,9 @@
   - `scripts/check-rsvp-availability.mjs` checks `ok` and retries for 2 minutes while events are missing.
   - `npm run test:worker` no longer reads a local `.dev.vars` (no "Missing required secrets" noise).
 - Follow-up Group 7 (2026-11-08): small layout and accessibility fixes on the new pages, no new wording.
-  - Classes: below 375px the channel header is smaller (56px logo, 12px handle line, 10.5px channel button), so the
-    handle stays beside the logo and "Visit our YouTube channel" on one line down to 320px; from 375px it is unchanged.
+  - Classes: below 375px (zoomed fractional widths too) the channel header is smaller (56px logo, 12px handle line,
+    10.5px channel button), so the handle stays beside the logo and "Visit our YouTube channel" on one line down to
+    320px; from 375px it is unchanged.
     The empty-search message is a live region that is always on the page; only its text changes.
   - Menu: only keyboard focus inside the Resources panel (or a click on its button) keeps it open after the mouse
     leaves; a mouse press on a link inside it no longer does.
@@ -143,8 +144,8 @@
   - Contact map: the outline pill lifts on hover and focus like the turquoise one (not with reduced motion); both
     links end with the Classes channel link's external-link icon from 390px (below that a phone's pill has no room
     for it), so the pills fit on one row from 722px (was 668px); margins replace the flex gaps in Safari before 14.1.
-  - Left: the iOS sticky `:hover` before the scripts load, and the no-JS footer's "lighter blue" (the theme's 1 s
-    fade-in): `docs/superpowers/follow-ups.md`.
+  - Left: the iOS sticky `:hover` before the scripts load, the no-JS footer's "lighter blue" (the theme's 1 s
+    fade-in), and the map links' icon below 390px (owner's call): `docs/superpowers/follow-ups.md`.
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,

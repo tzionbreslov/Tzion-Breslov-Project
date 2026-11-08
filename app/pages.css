@@ -82,7 +82,8 @@
 
 /* Phones: the third Contact card's side padding, a shorter map, and the
  * stacked buttons as wide as the card (the theme's 300px would overflow it),
- * with room for "Open in Google Maps" on one line from 360px. */
+ * with room for "Open in Google Maps" on one line from 390px (tested; at 360px it fits locally with
+ * about 3px to spare, but Chromium on Linux wraps it). */
 @media (max-width: 600px) {
   .tz-map .tz-map__card { gap: 20px; padding: 40px 20px; }
   .tz-map .tz-map__frame { height: 300px; }
