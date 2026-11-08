@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { violatesOurPolicy } from "../scripts/lib/csp-console.mjs";
 
 // A pre-existing bug in the original theme, kept for fidelity: its number
@@ -41,6 +41,35 @@ export async function cspViolations(page: Page): Promise<string[]> {
   // A round trip to the page first, so messages it logged before now have arrived.
   await page.evaluate(() => 0).catch(() => undefined);
   return [...violations];
+}
+
+/**
+ * Scrolls `target` into view and waits until it has stopped moving, so a click on it (or on
+ * anything near it) doesn't scroll the page itself.
+ *
+ * On desktop (1280 px and up) the theme's header (global.js) turns `position: fixed` on the
+ * first scroll event at 100 px or more, one frame after the scroll, and everything under it moves
+ * up by the header's height (89 px). When a click's own scroll crosses 100 px, that jump can land
+ * between its mousedown and its mouseup: the click then goes to a common ancestor, not the
+ * target, and does nothing (e2e/classes.spec.ts flaked this way in CI).
+ */
+export async function scrollIntoViewAndSettle(target: Locator): Promise<void> {
+  await target.scrollIntoViewIfNeeded();
+  // The same box in three animation frames in a row: the scroll event and the header's switch
+  // run before the first of them.
+  await target.evaluate((node) => new Promise<void>((resolve) => {
+    let last = "";
+    let same = 0;
+    const tick = () => {
+      const { top, left, width, height } = node.getBoundingClientRect();
+      const box = `${top},${left},${width},${height}`;
+      same = box === last ? same + 1 : 0;
+      last = box;
+      if (same >= 2) resolve();
+      else requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }));
 }
 
 /** No page errors and no CSP violations. Every spec calls this at the end. */
