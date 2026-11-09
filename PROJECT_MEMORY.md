@@ -48,6 +48,24 @@
     only in the forms service's private settings; until then every page keeps "(+972) 54-671-3013".
   - Wording the owner changes is listed, with the owner's words, in `tests/wording/owner-approved.json` (README →
     Wording check); checkpoint-001's baseline stays as it is.
+- 2026-11-09 — **Hidden contact details: design approved** ("approve and record choices"):
+  `docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md`. Not built yet.
+  - The owner's words: "conceal the phone number to check if the person requesting it is human or a bot. should be
+    challenging enough that a bot can't figure it out. this would apply to the whatsapp icon as well and the email
+    address." And: "we want to avoid spam calls, e-mails, and whatsapp messages, while still making it obvious that
+    the number is available to the elderly human."
+  - The owner's choices (2026-11-08/09):
+    - **The look:** Option A. The phone and email are partly covered, with "Show" buttons. "when one is virified,
+      they all show". They stay shown for the rest of the visit.
+    - **Hidden in:** the footer of every page, the Contact page cards, the privacy notice, the "Live Speaking
+      Engagements" paragraph on Classes and Articles, and the article "Parshas Toldos" (Nov 5–6, 2021).
+    - **Kept written out:** the Events messages and the forms' error messages (the email). The Contact page's
+      link-preview text: "leave as is".
+    - **The new phone number,** "(+1) …" format, tap to call plus a WhatsApp icon. It is never in the public
+      repository: it lives only in the forms Worker's private settings and is set on switch day.
+    - **The check:** Cloudflare Turnstile, verified by the forms Worker (usually invisible, never a puzzle).
+    - **Wording and privacy:** the proposed wording (buttons, states) and the privacy notice edits are approved as in
+      the design.
 
 ## Cloudflare state (2026-11-06)
 
