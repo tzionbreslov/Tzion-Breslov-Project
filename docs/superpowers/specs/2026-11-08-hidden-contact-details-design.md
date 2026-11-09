@@ -238,6 +238,13 @@ The edits, before → after:
   own green is about 1.9:1 there).
 - **Turnstile's box uses the compact size** (150 px wide). The default flexible box needs at least 300 px, and the
   footer's contact column can be about 185 px wide.
+- **Calls made while building (2026-11-09):**
+  - **The privacy notice's address is underlined once revealed,** as it was before it was covered. This is an
+    exception to "no underline" under "What the visitor sees".
+  - **Privacy edit 1 drops the "and"** that came before "when you open the Events page". The approved After begins
+    after it ("…when you open the Events page…"), so the list ends "…, when you open the Events page…, and when you
+    tap "Show"…".
+  - **The new strings use curly quotes and apostrophes,** like the rest of the site's copy.
 
 ## Found while planning (2026-11-09; they refine the design, they don't change what the owner approved)
 - **The email stays in the site's JavaScript.** The site bundles all of `content/copy/en.json` into its scripts, and

@@ -149,7 +149,7 @@
   }
   .footer-widgets .wp-block-column:has(#menu-mobile-menu-1) { flex-basis: var(--tz-quick-links) !important; }
   .footer-widgets .wp-block-column:has([data-tz-form="signup"]) { flex-basis: var(--tz-sign-up) !important; }
-  .footer-widgets .wp-block-column:has(a[href^="mailto:"]) {
+  .footer-widgets .wp-block-column:has([data-tz-contact]) {
     flex-basis: calc(82% - var(--tz-quick-links) - var(--tz-sign-up)) !important;
   }
 }

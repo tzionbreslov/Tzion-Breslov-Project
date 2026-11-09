@@ -1,6 +1,8 @@
 import copy from "@/content/copy/en.json";
 import type { PageContent } from "@/lib/content-files";
 import { composePage } from "@/lib/pages/compose";
+import { emailSlot } from "@/lib/contact-details.mjs";
+import { formsEnabled } from "@/lib/client/config";
 import { LARGE_SPACER, esc, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 /**
@@ -18,10 +20,14 @@ import { LARGE_SPACER, esc, renderHero, wrapEntry } from "@/lib/pages/parts";
 
 const HERO_IMAGE = "/wp-content/uploads/2023/06/clouds-in-the-sky-1.png";
 
-/** An email address in the text becomes a link to write to it. */
+/**
+ * An email address in the text becomes a link to write to it; "{email}" is Tzion's own address, covered, with
+ * "Show email" when the forms are on (owner, 2026-11-08: lib/contact-details.mjs).
+ */
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 const paragraph = (text: string) =>
-  `<p>${esc(text).replace(EMAIL, (address) => `<a href="mailto:${address}">${address}</a>`)}</p>`;
+  `<p>${esc(text).replace(EMAIL, (address) => `<a href="mailto:${address}">${address}</a>`)
+    .split("{email}").join(emailSlot({ formsOn: formsEnabled(), variant: "inline" }))}</p>`;
 
 function notice() {
   const text = copy.privacy;

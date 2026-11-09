@@ -96,9 +96,11 @@ test("the no-JavaScript lines link to the one contact address (config/contact.mj
   const link = `<a href="mailto:${CONTACT_EMAIL}">${CONTACT_EMAIL}</a>`;
   assert.equal(renderEventsList([record()], copy.events, copy.rsvp).split(link).length, 2);
   assert.equal(renderAnnouncements(copy.announcements).split(link).length, 2);
-  // The sentences that name the address are wording, written out in content/copy/en.json: the same address.
+  // The sentences that name the address are wording, written out in content/copy/en.json: the same address. The
+  // RSVP messages keep it (owner, 2026-11-08); the privacy notice's "write to {email}" shows it covered
+  // (lib/contact-details.mjs), so it is no longer spelled there.
   const addresses = JSON.stringify(copy).match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g);
-  assert.ok(addresses.length >= 4);
+  assert.equal(addresses.length, 3);
   assert.deepEqual([...new Set(addresses)], [CONTACT_EMAIL]);
 });
 

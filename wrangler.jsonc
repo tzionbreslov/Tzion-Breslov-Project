@@ -28,7 +28,10 @@
     // The site's own list of upcoming events (scripts/write-site-files.mjs): which events take
     // RSVPs, when they start and end, and their limit. Fetched without following redirects, so until
     // switch day (.org still 302s to .com) RSVPs answer EVENTS_UNAVAILABLE.
-    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json"
+    "EVENTS_FEED_URL": "https://tzionbreslov.org/events.json",
+    // Not a secret (it is already public): the email address the site shows covered, answered by
+    // POST /v1/contact-details once Turnstile passes. The phone number is the secret CONTACT_PHONE below.
+    "PUBLIC_CONTACT_EMAIL": "tzionbreslovproject@gmail.com"
   },
   // Install each with `npx wrangler secret put NAME`. Values never live in this file.
   // TURNSTILE_SECRET_KEY belongs to the "Tzion Breslov forms" widget
@@ -44,7 +47,11 @@
       "RESEND_NEWSLETTER_TOPIC_ID",
       // The "Event announcements" topic (scripts/setup-resend.mjs); install before the next deploy.
       "RESEND_EVENTS_TOPIC_ID",
-      "RESEND_WEBHOOK_SECRET"
+      "RESEND_WEBHOOK_SECRET",
+      // The phone number (with WhatsApp) the site shows covered, in E.164 (+1 and 10 digits), answered by
+      // POST /v1/contact-details. The owner gives it on switch day; it is never in this repository (README →
+      // Switch day, step 3).
+      "CONTACT_PHONE"
     ]
   },
   // With invocation logs off, Workers Logs (dashboard → Workers & Pages → the Worker → Observability)

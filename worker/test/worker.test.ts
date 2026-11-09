@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEventWhen } from "../../lib/events.mjs";
+import { contactDetailsFrom } from "../src/contact-details";
 import { sha256Hex, verifyResendSignature } from "../src/crypto";
 import { cancelRsvp, confirmRsvp, confirmedRsvp, reserveRsvp, rsvpConfirmationId, rsvpWait } from "../src/database";
 import { loadEventFeed, resetEventFeedCache, type FeedEvent } from "../src/events";
@@ -309,7 +310,7 @@ describe("HTTP boundary", () => {
 
   it("rejects public requests from unknown or missing origins without CORS headers", async () => {
     const outbound = mockProviders("contact");
-    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp", "/v1/contact-details"]) {
       const response = await fetchHandler(publicRequest(path, contactPayload(), "203.0.113.10", "https://attacker.test"), env);
       expect(response.status).toBe(403);
       expect(response.headers.get("access-control-allow-origin")).toBeNull();
@@ -344,7 +345,7 @@ describe("HTTP boundary", () => {
   });
 
   it("answers a constrained CORS preflight for allowed origins", async () => {
-    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp"]) {
+    for (const path of ["/v1/contact", "/v1/subscribe", "/v1/subscribe/confirm", "/v1/rsvp", "/v1/contact-details"]) {
       const response = await fetchHandler(new Request(`https://api.test${path}`, {
         method: "OPTIONS",
         headers: {
@@ -565,6 +566,133 @@ describe("POST /v1/contact", () => {
       statuses.push(response.status);
     }
     expect(statuses).toEqual([202, 202, 202, 202, 429]);
+  });
+});
+
+describe("POST /v1/contact-details", () => {
+  // The test bindings (vitest.worker.config.mts): CONTACT_PHONE is a fake 555 number, PUBLIC_CONTACT_EMAIL comes from wrangler.jsonc.
+  const DETAILS = {
+    ok: true,
+    phone: { display: "(+1) 555-555-0123", tel: "+15555550123" },
+    whatsapp: "https://wa.me/15555550123",
+    email: "tzionbreslovproject@gmail.com"
+  };
+  const detailsPayload = (overrides: Record<string, unknown> = {}) => ({
+    requestId: crypto.randomUUID(),
+    "cf-turnstile-response": "XXXX.DUMMY.TOKEN.XXXX",
+    ...overrides
+  });
+  const ipLimits = async () => (await env.DB.prepare("SELECT COUNT(*) AS count FROM rate_limits WHERE key LIKE 'contact-details:ip:%'")
+    .first<{ count: number }>())?.count;
+
+  it("answers the details once Turnstile passes, never cached, with no request_log row and one IP rate-limit row", async () => {
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const outbound = mockProviders("contact-details");
+    const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), env);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("access-control-allow-origin")).toBe(origin);
+    await expect(response.json()).resolves.toEqual(DETAILS);
+    // One siteverify call, nothing else leaves the Worker.
+    expect(outbound.turnstile()).toHaveLength(1);
+    expect(outbound.calls).toHaveLength(1);
+    expect(await count("request_log")).toBe(0);
+    expect(await ipLimits()).toBe(1);
+    expect(await count("rate_limits")).toBe(1);
+    // Nothing is logged on success.
+    expect(logs).not.toHaveBeenCalled();
+  });
+
+  it("takes a tap at any time: no honeypot or timing fields are needed", async () => {
+    mockProviders("contact-details");
+    const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), env);
+    expect(response.status).toBe(200);
+    // Extra fields are ignored, as on the other endpoints.
+    const extra = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload({ website: "", startedAt: Date.now() })), env);
+    expect(extra.status).toBe(200);
+  });
+
+  it("refuses a Turnstile token issued for another action", async () => {
+    mockProviders("contact");
+    const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), env);
+    expect(response.status).toBe(400);
+    const body = await errorBody(response);
+    expect(body.error).toBe("BOT_CHALLENGE_FAILED");
+    expect(JSON.stringify(body)).not.toContain("5555550123");
+  });
+
+  it("refuses a failed Turnstile check", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ success: false }));
+    const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), env);
+    expect(response.status).toBe(400);
+    const body = await errorBody(response);
+    expect(body.error).toBe("BOT_CHALLENGE_FAILED");
+    expect(JSON.stringify(body)).not.toContain("5555550123");
+    expect(await count("request_log")).toBe(0);
+  });
+
+  it("rate limits 10 requests per IP in 10 minutes", async () => {
+    mockProviders("contact-details");
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 11; attempt += 1) {
+      statuses.push((await fetchHandler(publicRequest("/v1/contact-details", detailsPayload(), "192.0.2.77"), env)).status);
+    }
+    expect(statuses).toEqual([...Array<number>(10).fill(200), 429]);
+    const limited = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload(), "192.0.2.77"), env);
+    const body = await errorBody(limited);
+    expect(body.error).toBe("RATE_LIMITED");
+    expect(JSON.stringify(body)).not.toContain("5555550123");
+    // Another visitor still gets them.
+    expect((await fetchHandler(publicRequest("/v1/contact-details", detailsPayload(), "192.0.2.78"), env)).status).toBe(200);
+  });
+
+  it("refuses a missing token or a malformed requestId before asking Turnstile", async () => {
+    const outbound = mockProviders("contact-details");
+    for (const token of [undefined, "", "a\nb", "x".repeat(2049)]) {
+      const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload({ "cf-turnstile-response": token })), env);
+      expect(response.status).toBe(400);
+      const body = await errorBody(response);
+      expect(body.error).toBe("INVALID_INPUT");
+      expect(body.field).toBe("cf-turnstile-response");
+    }
+    for (const requestId of [undefined, "", "not-a-uuid", 42]) {
+      const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload({ requestId })), env);
+      expect(response.status).toBe(400);
+      const body = await errorBody(response);
+      expect(body.error).toBe("INVALID_INPUT");
+      expect(body.field).toBe("requestId");
+    }
+    expect(outbound.calls).toHaveLength(0);
+    expect(await count("rate_limits")).toBe(0);
+  });
+
+  it("answers 503 SERVICE_NOT_CONFIGURED, never the value, when CONTACT_PHONE is blank or not a +1 number", async () => {
+    const logs = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mockProviders("contact-details");
+    for (const phone of ["", "   ", "+972546713013", "+1555555012", "+155555501234", "15555550123", "+1 555 555 0123"]) {
+      const response = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), { ...env, CONTACT_PHONE: phone });
+      expect(response.status, phone).toBe(503);
+      const text = await response.text();
+      expect(JSON.parse(text).error, phone).toBe("SERVICE_NOT_CONFIGURED");
+      for (const digits of ["546713013", "555555012", "5550123"]) expect(text, phone).not.toContain(digits);
+    }
+    const noEmail = await fetchHandler(publicRequest("/v1/contact-details", detailsPayload()), { ...env, PUBLIC_CONTACT_EMAIL: " " });
+    expect(noEmail.status).toBe(503);
+    expect((await errorBody(noEmail)).error).toBe("SERVICE_NOT_CONFIGURED");
+    // The error lines carry the code, never the value.
+    const logged = logs.mock.calls.map((args) => String(args[0])).join("\n");
+    for (const digits of ["546713013", "555555012", "5550123"]) expect(logged).not.toContain(digits);
+  });
+
+  it("builds the display text and the WhatsApp link from the E.164 number (contactDetailsFrom)", () => {
+    expect(contactDetailsFrom({ ...env, CONTACT_PHONE: " +15555550123 ", PUBLIC_CONTACT_EMAIL: " tzionbreslovproject@gmail.com " })).toEqual(DETAILS);
+    expect(contactDetailsFrom({ ...env, CONTACT_PHONE: "+12025550186" }).phone).toEqual({ display: "(+1) 202-555-0186", tel: "+12025550186" });
+    expect(() => contactDetailsFrom({ ...env, PUBLIC_CONTACT_EMAIL: "not an address" })).toThrow(/PUBLIC_CONTACT_EMAIL/);
+  });
+
+  it("answers a POST only: a GET is not found", async () => {
+    const response = await fetchHandler(new Request("https://api.test/v1/contact-details", { headers: { Origin: origin } }), env);
+    expect(response.status).toBe(404);
   });
 });
 

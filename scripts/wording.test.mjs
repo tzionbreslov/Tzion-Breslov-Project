@@ -148,6 +148,28 @@ test("an entry matches only its exact node: never part of a node, nor two nodes"
     ['owner-approved change 1 ("Welcome"): / already has a change for this text']);
 });
 
+test("an entry may say how many nodes it changes on a route (`counts`, 1 by default), and must match exactly that many", () => {
+  // The Contact page shows the address twice (its card and the footer): one entry changes both there, one elsewhere.
+  const both = applyApprovedChanges(BASELINE, [change({ text: "Card", to: "Box", routes: ["/contact/"], counts: { "/contact/": 2 } })], checked);
+  assert.deepEqual(both.problems, []);
+  assert.deepEqual(both.baseline["/contact/"], ["Box", "Box", "© 2026 Tzion Beslov | Site by", "Esti Wolo"]);
+  const dropped = applyApprovedChanges(BASELINE, [change({ text: "Card", to: null, routes: ["/contact/"], counts: { "/contact/": 2 } })], checked);
+  assert.deepEqual(dropped.baseline["/contact/"], ["© 2026 Tzion Beslov | Site by", "Esti Wolo"]);
+  // Routes it doesn't count still take exactly one.
+  const mixed = applyApprovedChanges(BASELINE, [change({ text: "Esti Wolo", to: "E.", routes: ["/", "/contact/"], counts: { "/contact/": 1 } })], checked);
+  assert.deepEqual(mixed.problems, []);
+  // A count that doesn't match fails, more or fewer.
+  assert.deepEqual(applyApprovedChanges(BASELINE, [change({ text: "Card", to: "Box", routes: ["/contact/"], counts: { "/contact/": 3 } })], checked).problems,
+    ['owner-approved change 1 ("Card"): matches 2 nodes on /contact/, not 3']);
+  assert.deepEqual(applyApprovedChanges(BASELINE, [change({ text: "Welcome", to: "Hello", counts: { "/": 2 } })], checked).problems,
+    ['owner-approved change 1 ("Welcome"): matches 1 node on /, not 2']);
+  // Only for its own routes, and only whole numbers from 1.
+  for (const counts of [{ "/contact/": 2 }, { "/": 0 }, { "/": 1.5 }, { "/": "2" }, ["/"], "2"]) {
+    assert.deepEqual(applyApprovedChanges(BASELINE, [change({ text: "Welcome", to: "Hello", counts })], checked).problems,
+      ['owner-approved change 1 ("Welcome"): bad counts (each a route of the entry, and a whole number from 1)'], JSON.stringify(counts));
+  }
+});
+
 test("an entry needs a page the check reads, a date, the owner's words, its text and a new text (or null)", () => {
   const problems = (overrides) => applyApprovedChanges(BASELINE, [change({ text: "Welcome", to: "Hello", ...overrides })], checked).problems;
   assert.deepEqual(problems({ routes: ["/old-page/"] }), ['owner-approved change 1 ("Welcome"): /old-page/ is not a page the check reads']);
@@ -164,28 +186,46 @@ test("an entry needs a page the check reads, a date, the owner's words, its text
   assert.deepEqual(problems({ text: "" }), ['owner-approved change 1 (""): no text']);
 });
 
-test("the committed list applies to the committed baseline cleanly: the footer's credit line on every page the check reads", () => {
+test("the committed list applies to the committed baseline cleanly: the footer's credit line and contact details on every page the check reads", () => {
   const read = (file) => JSON.parse(fs.readFileSync(new URL(`../tests/wording/${file}`, import.meta.url), "utf8"));
   const baseline = read("checkpoint-001.json");
   const { changes } = read("owner-approved.json");
   const isChecked = (route) => !isRemovedPath(route);
   const result = applyApprovedChanges(baseline, changes, isChecked);
   assert.deepEqual(result.problems, []);
-  assert.deepEqual(changes.map(({ text, to, date }) => [text, to, date]), [
-    ["© 2026 Tzion Beslov | Site by", "© 2026 Tzion Breslov", "2026-11-08"],
-    ["Esti Wolo", null, "2026-11-08"]
+  const ARTICLE = "/parshas-toldos-nov-5-6-2021/";
+  const ARTICLE_LINE = "Do you have comments or suggestions for our upcoming newsletters? Want to sponsor our next newsletter? Please email us at";
+  assert.deepEqual(changes.map(({ text, to, date, counts }) => [text, to, date, counts]), [
+    ["© 2026 Tzion Beslov | Site by", "© 2026 Tzion Breslov", "2026-11-08", undefined],
+    ["Esti Wolo", null, "2026-11-08", undefined],
+    // The covered contact details (2026-11-09): the Contact page shows each twice, its card and its footer.
+    ["tzionbreslovproject@gmail.com", "tzion••••••@gmail.com", "2026-11-09", { "/contact/": 2 }],
+    ["(+972) 54-671-3013", "(+1) 347-•••-••••", "2026-11-09", { "/contact/": 2 }],
+    [`${ARTICLE_LINE} TzionBreslovProject@gmail.com.`, ARTICLE_LINE, "2026-11-09", undefined]
   ]);
   const routes = Object.keys(baseline).filter(isChecked);
   assert.equal(routes.length, 23);
-  for (const entry of changes) assert.deepEqual(entry.routes, routes, entry.text);
+  for (const entry of changes.slice(0, 4)) assert.deepEqual(entry.routes, routes, entry.text);
+  assert.deepEqual(changes[4].routes, [ARTICLE]);
+  const swap = { "tzionbreslovproject@gmail.com": "tzion••••••@gmail.com", "(+972) 54-671-3013": "(+1) 347-•••-••••",
+    [`${ARTICLE_LINE} TzionBreslovProject@gmail.com.`]: ARTICLE_LINE };
   for (const [route, nodes] of Object.entries(result.baseline)) {
     if (!isChecked(route)) {
       assert.deepEqual(nodes, baseline[route], route);
       continue;
     }
-    // Every page the check reads loses the linked name and has the new line where the old one was.
+    // Every page the check reads loses the linked name and has the new line where the old one was, and shows its
+    // contact details covered where they were: the email and the phone (twice each on /contact/), and the article's line.
     const at = baseline[route].indexOf("© 2026 Tzion Beslov | Site by");
-    assert.deepEqual(nodes, [...baseline[route].slice(0, at), "© 2026 Tzion Breslov", ...baseline[route].slice(at + 2)], route);
     assert.equal(baseline[route][at + 1], "Esti Wolo", route);
+    const expected = [...baseline[route].slice(0, at), "© 2026 Tzion Breslov", ...baseline[route].slice(at + 2)]
+      .map((node) => swap[node] ?? node);
+    assert.deepEqual(nodes, expected, route);
+    const covered = (text) => baseline[route].filter((node) => node === text).length;
+    assert.equal(covered("tzionbreslovproject@gmail.com"), route === "/contact/" ? 2 : 1, route);
+    assert.equal(covered("(+972) 54-671-3013"), route === "/contact/" ? 2 : 1, route);
+    assert.equal(covered(`${ARTICLE_LINE} TzionBreslovProject@gmail.com.`), route === ARTICLE ? 1 : 0, route);
+    // Nothing the check reads still names the old number or the address.
+    assert.ok(!nodes.some((node) => /54-671-3013|tzionbreslovproject@gmail\.com/i.test(node)), route);
   }
 });

@@ -21,6 +21,13 @@ export interface Env {
   RESEND_WEBHOOK_SECRET: string;
   /** The site's published events (`https://tzionbreslov.org/events.json`): which events take RSVPs. */
   EVENTS_FEED_URL: string;
+  /**
+   * Secret: the phone number (with WhatsApp) the site shows covered, in E.164 (+1 and 10 digits). Never in the
+   * repository: set with `wrangler secret put` on switch day (README). Answered by POST /v1/contact-details only.
+   */
+  CONTACT_PHONE: string;
+  /** Not a secret: the email address the site shows covered (POST /v1/contact-details). */
+  PUBLIC_CONTACT_EMAIL: string;
 }
 
 export class PublicError extends Error {

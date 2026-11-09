@@ -9,3 +9,13 @@ export function publicConfig() {
     contactEmail: CONTACT_EMAIL
   };
 }
+
+/**
+ * Whether the forms are on: the forms API and the Turnstile key were given at build time (they stay unset on the
+ * github.io preview until switch day). The pages render the covered contact details' "Show" buttons only then
+ * (lib/contact-details.mjs); without them there is nothing a button could do (Ruling R13).
+ */
+export function formsEnabled(): boolean {
+  const { apiBaseUrl, turnstileSiteKey } = publicConfig();
+  return Boolean(apiBaseUrl && turnstileSiteKey);
+}

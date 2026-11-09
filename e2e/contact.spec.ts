@@ -5,7 +5,9 @@ import { expectClean, gapFallbackRules, trackPageErrors } from "./helpers";
 const EMBED = "https://www.google.com/maps?q=Bet%20Shemesh%2C%20Israel&z=13&output=embed";
 const DIRECTIONS = "https://www.google.com/maps/dir/?api=1&destination=Bet%20Shemesh%2C%20Israel";
 const OPEN_IN_MAPS = "https://www.google.com/maps/search/?api=1&query=Bet%20Shemesh%2C%20Israel";
-const CARDS = ["(+972) 54-671-3013", "tzionbreslovproject@gmail.com", "Beit Shemesh, Israel"];
+// The phone and email cards show the details covered (lib/contact-details.mjs; this is the forms-off build, with no
+// "Show" buttons: e2e/contact-details.spec.ts).
+const CARDS = ["(+1) 347-•••-••••", "tzion••••••@gmail.com", "Beit Shemesh, Israel"];
 
 const FRAME = "section.tz-map iframe";
 const section = (page: Page) => page.locator("section.tz-map");

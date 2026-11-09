@@ -46,7 +46,10 @@ export default defineConfig({
             // The site's /events.json, answered by the tests' fetch stub (worker/test/worker.test.ts).
             EVENTS_FEED_URL: "https://site.test/events.json",
             // Svix-style secret (base64 after the whsec_ prefix) so signed webhooks can be tested end to end.
-            RESEND_WEBHOOK_SECRET: "whsec_dGVzdC13ZWJob29rLXNpZ25pbmctc2VjcmV0"
+            RESEND_WEBHOOK_SECRET: "whsec_dGVzdC13ZWJob29rLXNpZ25pbmctc2VjcmV0",
+            // A fake number (555 is reserved for fiction); the real one is only ever a Worker secret.
+            // PUBLIC_CONTACT_EMAIL comes from wrangler.jsonc's vars.
+            CONTACT_PHONE: "+15555550123"
           }
         }
       };

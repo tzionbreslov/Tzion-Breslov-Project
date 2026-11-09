@@ -1,5 +1,7 @@
 import { loadImportedPage } from "@/lib/content-files";
 import { esc, markerMissing, markerRepeated, swapHero, type HeroOptions } from "@/lib/pages/edits.mjs";
+import { editSpeakingEmail } from "@/lib/contact-details.mjs";
+import { formsEnabled } from "@/lib/client/config";
 
 export { esc, markerMissing };
 
@@ -69,10 +71,14 @@ export function renderHero(options: HeroOptions): string {
   return swapHero(resourcesHero(), options);
 }
 
-/** From the large spacer to the end of the Resources entry content: "Live Speaking Engagements", the quote and the donate prompt. */
+/**
+ * From the large spacer to the end of the Resources entry content: "Live Speaking Engagements", the quote and the
+ * donate prompt. The speaking paragraph's email address is covered, with "Show email" when the forms are on (owner,
+ * 2026-11-09: lib/contact-details.mjs).
+ */
 export function closingSections(): string {
   const main = resourcesMain();
-  return main.slice(findOnce(main, LARGE_SPACER, "large spacer"), entryEnd(main));
+  return editSpeakingEmail(main.slice(findOnce(main, LARGE_SPACER, "large spacer"), entryEnd(main)), { formsOn: formsEnabled() });
 }
 
 /** The Resources "Articles" tab grid for page 1 or 2, its pagination pointing at /articles/. */

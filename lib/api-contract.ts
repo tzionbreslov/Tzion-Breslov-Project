@@ -13,11 +13,13 @@
  * - have a JSON object body of at most 16 KiB;
  * - include the security envelope fields described by {@link SecurityEnvelope}
  *   (except `POST /v1/subscribe/confirm`, whose single-use token is the credential;
- *   see {@link SubscribeConfirmRequest}).
+ *   see {@link SubscribeConfirmRequest}, and `POST /v1/contact-details`, which takes
+ *   only the request id and the Turnstile token; see {@link ContactDetailsRequest}).
  *
  * Unknown extra fields are ignored. Strings are NFKC-normalized and trimmed
  * server-side before length checks. Success responses are HTTP 202
- * (HTTP 200 for `POST /v1/subscribe/confirm`, which finishes synchronously).
+ * (HTTP 200 for `POST /v1/subscribe/confirm`, which finishes synchronously, and
+ * for `POST /v1/contact-details`, which answers with the details).
  *
  * One public GET: `/v1/rsvp/availability` (no body, no preflight), see
  * {@link RsvpAvailabilityResponse}.
@@ -43,7 +45,13 @@ export const API_PATHS = {
   /** `POST` {@link RsvpRequest}: an RSVP to one event of the site's /events.json. */
   rsvp: "/v1/rsvp",
   /** `GET`: which open events are full ({@link RsvpAvailabilityResponse}). Counts only. */
-  rsvpAvailability: "/v1/rsvp/availability"
+  rsvpAvailability: "/v1/rsvp/availability",
+  /**
+   * `POST` {@link ContactDetailsRequest}: the phone number, WhatsApp link and
+   * email address the site shows covered, once Turnstile says a person asked
+   * ({@link ContactDetailsSuccessResponse}).
+   */
+  contactDetails: "/v1/contact-details"
 } as const;
 
 /**
@@ -53,7 +61,9 @@ export const API_PATHS = {
 export const TURNSTILE_ACTIONS = {
   contact: "contact",
   subscribe: "subscribe",
-  rsvp: "rsvp"
+  rsvp: "rsvp",
+  /** The "Show number" / "Show email" check (lib/client/contact-details.ts). */
+  contactDetails: "contact-details"
 } as const;
 
 /**
@@ -219,6 +229,20 @@ export type SubscribeConfirmRequest = {
   token: string;
 };
 
+/**
+ * `POST /v1/contact-details` (Turnstile action "contact-details"): a visitor
+ * tapped "Show" next to the covered phone number or email address. No
+ * honeypot or timing fields: a tap may come as soon as the page opens. Rate-
+ * limited per IP (10 in 10 minutes, `RATE_LIMITED`). The Worker keeps nothing
+ * but that short-lived, hashed rate-limit record: no request_log row.
+ */
+export type ContactDetailsRequest = {
+  /** UUID (crypto.randomUUID()), fresh per tap; Turnstile's idempotency key. */
+  requestId: string;
+  /** Turnstile token rendered with action TURNSTILE_ACTIONS.contactDetails. */
+  "cf-turnstile-response": string;
+};
+
 export type ContactSuccessResponse = {
   ok: true;
   requestId: string;
@@ -242,6 +266,21 @@ export type RsvpSuccessResponse = {
   requestId: string;
   /** Also in the guest's "RSVP received" email. UUID-shaped; the same for every retry of one requestId. */
   confirmationId: string;
+};
+
+/**
+ * HTTP 200, `Cache-Control: no-store`. Built from the Worker's secret
+ * CONTACT_PHONE (E.164: +1 and 10 digits) and its variable PUBLIC_CONTACT_EMAIL;
+ * a missing or malformed one is `SERVICE_NOT_CONFIGURED` (503), which never
+ * carries the value.
+ */
+export type ContactDetailsSuccessResponse = {
+  ok: true;
+  /** `display` as the site writes numbers, "(+1) 555-555-0123"; `tel` in E.164, "+15555550123". */
+  phone: { display: string; tel: string };
+  /** A WhatsApp chat with the same number: `https://wa.me/` and its digits. */
+  whatsapp: string;
+  email: string;
 };
 
 /**
@@ -308,7 +347,8 @@ export type ApiInputField =
   | Exclude<keyof ContactRequest, "website">
   | Exclude<keyof SubscribeRequest, "website">
   | Exclude<keyof RsvpRequest, "website">
-  | keyof SubscribeConfirmRequest;
+  | keyof SubscribeConfirmRequest
+  | keyof ContactDetailsRequest;
 
 export type ApiErrorResponse = {
   ok: false;
@@ -329,3 +369,4 @@ export type ContactResponse = ContactSuccessResponse | ApiErrorResponse;
 export type SubscribeResponse = SubscribeSuccessResponse | ApiErrorResponse;
 export type SubscribeConfirmResponse = SubscribeConfirmSuccessResponse | ApiErrorResponse;
 export type RsvpResponse = RsvpSuccessResponse | ApiErrorResponse;
+export type ContactDetailsResponse = ContactDetailsSuccessResponse | ApiErrorResponse;

@@ -42,6 +42,55 @@ export function hostForms(origin) {
   return [`//${host}`, `//www.${host}`];
 }
 
+// ------------------------------------------------------------ The covered contact details
+// The site shows the phone number and the email address covered (lib/contact-details.mjs): a bot reading the pages
+// gets nothing usable. So no exported page, nor any of the RSC payloads (.txt) Next writes beside it, may hold the
+// old number, the email address, or a link to call, write or chat, in the HTML or in Next's flight data, in any case.
+const CONTACT_DETAILS = [
+  ["the old phone number", /54-671-3013/gi],
+  ["the email address", /tzionbreslovproject@gmail\.com/gi],
+  ["a mailto: link", /mailto:/gi],
+  // "hotel:" is no link.
+  ["a tel: link", /\btel:/gi],
+  ["a wa.me link", /\bwa\.me\b/gi],
+  ["an api.whatsapp.com link", /\bapi\.whatsapp\.com\b/gi]
+];
+
+/**
+ * The Contact page's link-preview text (og:description, content/pages/contact.json), kept as it is (owner, 2026-11-09:
+ * "leave as is"): the old number and the address, then a space and a no-break space before "Beit".
+ */
+export const CONTACT_OG_DESCRIPTION = "Questions? Comments? Try Us! (+972) 54-671-3013 tzionbreslovproject@gmail.com \u00a0Beit Shemesh, Israel";
+// That text as the og:description's value only: `<meta property="og:description" content="…"` in the head, and
+// `"property":"og:description","content":"…"` in the RSC payloads and (its quotes escaped) in the flight data.
+const OG_DESCRIPTION = new RegExp(`og:description(?:" content="|(\\\\*)",\\1"content\\1":\\1")${escapeRegExp(CONTACT_OG_DESCRIPTION)}`, "g");
+// The Events page's "Get event announcements" no-JavaScript line (lib/events.mjs), plain and in the flight data.
+const ANNOUNCEMENTS_NO_SCRIPT = [
+  /<noscript><p class="tz-announce__noscript">[\s\S]*?<\/p><\/noscript>/g,
+  /\\u003cnoscript\\u003e\\u003cp class=\\+"tz-announce__noscript\\+"\\u003e[\s\S]*?\\u003c\/p\\u003e\\u003c\/noscript\\u003e/g
+];
+
+/**
+ * What `text` (an exported page of `route`, or one of its RSC payloads) still holds of the contact details, each as
+ * the words that follow its file name. Allowed, because the owner kept them written out:
+ * - on /contact/, its link-preview text, exactly (CONTACT_OG_DESCRIPTION);
+ * - on /events/, the Events cards and the no-JavaScript lines (withoutEventCards, and the announcements line);
+ * - the scripts (_next/static), which hold the email through the sentences the owner kept (content/copy/en.json) and
+ *   the forms' "temporarily unavailable" message (config/contact.mjs): they are not pages, and are not read.
+ * @param {string} route the page's path ("/", "/contact/", "/404/")
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function contactDetailsProblems(route, text) {
+  let rest = text;
+  if (route === "/contact/") rest = rest.replace(OG_DESCRIPTION, "og:description");
+  if (route === "/events/") rest = ANNOUNCEMENTS_NO_SCRIPT.reduce((page, line) => page.replace(line, ""), withoutEventCards(rest));
+  return CONTACT_DETAILS.flatMap(([what, pattern]) => {
+    const found = rest.match(pattern)?.length ?? 0;
+    return found ? [`holds ${what} (${found}×)`] : [];
+  });
+}
+
 /** Plain, or with JSON's escaped slashes (`https:\/\/…`, as in JSON-LD). */
 const SLASHES = ["/", "\\/"];
 

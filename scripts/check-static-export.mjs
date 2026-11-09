@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { REMOVED_SITEMAPS, siteRoutes } from "../config/site-structure.mjs";
 import { resolveSiteUrl } from "../config/site-url.mjs";
-import { exportGuard } from "./lib/export-guard.mjs";
+import { contactDetailsProblems, exportGuard } from "./lib/export-guard.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const out = path.join(root, "out");
@@ -100,6 +100,28 @@ if (fs.existsSync(contactFile)) {
   else if (cards !== 1) fail(`/contact/ has ${cards} "Beit Shemesh, Israel" cards (${BEIT_SHEMESH_CARD}), expected 1`);
   else if (card > map) fail("/contact/ map is not after the \"Beit Shemesh, Israel\" card");
 }
+
+// The covered contact details (lib/contact-details.mjs): no page, and none of the RSC payloads (.txt) Next writes
+// beside it, holds the old number, the email address or a mailto:/tel:/wa.me link, except what the owner kept
+// written out (scripts/lib/export-guard.mjs, contactDetailsProblems). Each file is read as its route's: a page's
+// folder, without Next's __next.* folders; the 404 page is root 404.html, 404/ and _not-found/. The scripts in
+// _next/ are not pages and keep the email through the kept sentences.
+const pageFiles = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+  const full = path.join(dir, e.name);
+  if (e.isDirectory()) return dir === out && e.name === "_next" ? [] : pageFiles(full);
+  return /\.(?:html|txt)$/.test(e.name) ? [full] : [];
+});
+const routeOf = (file) => {
+  const parts = path.relative(out, file).split(path.sep).slice(0, -1).filter((part) => !part.startsWith("__next."));
+  if (path.relative(out, file) === "404.html" || ["404", "_not-found"].includes(parts[0])) return "/404/";
+  return parts.length ? `/${parts.join("/")}/` : "/";
+};
+let detailFiles = 0;
+for (const file of pageFiles(out)) {
+  detailFiles++;
+  for (const problem of contactDetailsProblems(routeOf(file), fs.readFileSync(file, "utf8"))) fail(`${path.relative(out, file)} ${problem}`);
+}
+if (detailFiles < routes.length * 2) fail(`only ${detailFiles} pages and payloads read for the contact details`);
 
 for (const forbidden of [".dev.vars", ".env"]) if (fs.existsSync(path.join(out, forbidden))) fail(`secret-looking file exported: ${forbidden}`);
 
