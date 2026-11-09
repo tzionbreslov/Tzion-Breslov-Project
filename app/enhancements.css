@@ -223,8 +223,17 @@ body.single-post .wp-block-cover.hero { aspect-ratio: 1920 / 739; }
 .tz-contact .tz-contact__show:hover { background: rgb(255 255 255 / .14); color: inherit; }
 .tz-contact .tz-contact__show:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .tz-contact .tz-contact__show[aria-disabled="true"] { opacity: .75; cursor: progress; }
-/* Footer (every page): white on the dark blue, the pill after the value or, in the narrow column, under it. */
+/* Footer (every page): white on the dark blue. The covered email keeps the line height of the link it stands for (the
+ * theme's .footer-widgets .wp-block-column a), so the column is laid out as before. While a button shows, the slot is
+ * a wrapping row: the pill after the value or, in the narrow column, under it, never indented. */
 .tz-contact--footer { color: #fff; }
+.tz-contact--footer[data-tz-contact="email"] .tz-contact__value { line-height: 1.8; }
+.tz-contact--footer:has(> .tz-contact__show:not([hidden])) {
+  display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; max-width: 100%;
+}
+.tz-contact--footer:has(> .tz-contact__show:not([hidden])) > .tz-contact__show { margin-left: 0; }
+.tz-contact--footer:has(> .tz-contact__show:not([hidden])) > .tz-contact__check,
+.tz-contact--footer:has(> .tz-contact__show:not([hidden])) > .tz-contact__message { flex-basis: 100%; margin-top: 4px; }
 /* Contact page: the bold dark-blue value, a solid dark-blue pill centred under it. */
 .tz-contact--card .tz-contact__show {
   display: table; min-height: 40px; margin: 10px auto 0; padding: 8px 22px;

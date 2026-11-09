@@ -39,14 +39,20 @@ export type TurnstileHandle = {
   remove(): void;
 };
 
-export function mountTurnstile(container: HTMLElement, siteKey: string, action: string): TurnstileHandle {
+/**
+ * Widget size (Cloudflare: "flexible" fills its container, at least 300 px wide; "compact" is 150 × 140 px). The
+ * forms use the default; the contact details' check (contact-details.ts) is compact, for the footer's narrow column.
+ */
+export type TurnstileOptions = { size?: "flexible" | "compact" };
+
+export function mountTurnstile(container: HTMLElement, siteKey: string, action: string, options: TurnstileOptions = {}): TurnstileHandle {
   let widgetId: string | undefined;
   const ready = loadTurnstile().then((api) => {
     widgetId = api.render(container, {
       sitekey: siteKey,
       action,
       appearance: "interaction-only",
-      size: "flexible",
+      size: options.size ?? "flexible",
       "response-field": false
     });
     return api;

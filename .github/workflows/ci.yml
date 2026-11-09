@@ -47,9 +47,11 @@ jobs:
       # started), the forms API origin and Turnstile's always-pass test key. The spec
       # stubs both, so nothing leaves CI; the enforced CSP still checks their origins.
       # The export check proves that links pasted into a calendar description (a removed
-      # page, a YouTube embed) can't fail the deploy.
-      - name: Build the events fixture variant and run the RSVP browser tests
-        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && npm run check:static-export && TZ_E2E_EVENTS=1 npx playwright test e2e/rsvp.spec.ts
+      # page, a YouTube embed) can't fail the deploy, and that the forms-on pages hold no
+      # contact details either. The covered contact details' "Show" buttons exist only on
+      # a forms-on build, so their browser tests run here too (e2e/contact-details.spec.ts).
+      - name: Build the events fixture variant and run the RSVP and contact-details browser tests
+        run: node scripts/fixtures/write-events-fixture.mjs && npm run build && npm run check:static-export && TZ_E2E_EVENTS=1 npx playwright test e2e/rsvp.spec.ts e2e/contact-details.spec.ts
         env:
           EVENTS_FIXTURE: scripts/fixtures/events.e2e.json
           NEXT_PUBLIC_API_BASE_URL: https://api.tzionbreslov.org

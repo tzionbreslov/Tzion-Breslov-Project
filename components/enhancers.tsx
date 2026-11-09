@@ -13,6 +13,7 @@ import { enhanceGallery } from "@/lib/client/gallery";
 import { enhanceMenus } from "@/lib/client/menu";
 import { enhanceRsvp } from "@/lib/client/rsvp";
 import { enhanceAnnouncements } from "@/lib/client/announcements";
+import { enhanceContactDetails } from "@/lib/client/contact-details";
 import { DonateForm } from "@/components/donate-form";
 
 const noop = () => () => undefined;
@@ -38,6 +39,8 @@ export function Enhancers({ islands }: { islands: Island[] }) {
     const cleanups: Array<() => void> = [];
     cleanups.push(enhanceMenus(document));
     cleanups.push(enhanceSubscriptionConfirmation(document));
+    // Every page's footer covers the phone number and email address (lib/contact-details.mjs).
+    cleanups.push(enhanceContactDetails(document));
     if (islands.includes("signup") || islands.includes("contact")) cleanups.push(enhanceForms(document));
     if (islands.includes("youtube-feed")) cleanups.push(enhanceYoutubeFeeds(document));
     if (islands.includes("post-grid")) cleanups.push(enhancePostGrids(document));
