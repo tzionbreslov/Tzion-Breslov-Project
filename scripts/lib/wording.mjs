@@ -65,12 +65,13 @@ export function extractPlaceholders(html) {
 /**
  * The owner-approved changes (tests/wording/owner-approved.json) applied to a baseline: on each of an entry's
  * routes, the one baseline text node that is exactly `text` becomes `to`, or is dropped when `to` is null. An entry
- * matches whole nodes only, and exactly one on each of its routes: none means it is stale (its text isn't there),
- * two or more that it would reach beyond its own node; either is a problem, as is a route the check doesn't read,
- * two changes for the same node, or an entry without its date or the owner's words. The baseline given is left as
- * it was.
+ * matches whole nodes only, and exactly one on each of its routes, or as many as its `counts` gives for that route
+ * (a page that shows the same text twice, such as the Contact page's address in its card and its footer): none means
+ * it is stale (its text isn't there), any other number that it would reach beyond its own nodes; either is a
+ * problem, as is a route the check doesn't read, two changes for the same node, a count for a route the entry
+ * doesn't list, or an entry without its date or the owner's words. The baseline given is left as it was.
  * @param {Record<string, string[]>} baseline
- * @param {Array<{ routes: string[], text: string, to: string | null, date: string, owner: string[] }>} changes
+ * @param {Array<{ routes: string[], text: string, to: string | null, date: string, owner: string[], counts?: Record<string, number> }>} changes
  * @param {(route: string) => boolean} isChecked the routes the check reads (removed pages are skipped)
  * @returns {{ baseline: Record<string, string[]>, problems: string[] }}
  */
@@ -79,7 +80,7 @@ export function applyApprovedChanges(baseline, changes, isChecked = () => true) 
   // route -> text -> its new text (null: removed)
   const byRoute = new Map();
   changes.forEach((change, i) => {
-    const { routes, text, to, date, owner } = change ?? {};
+    const { routes, text, to, date, owner, counts = {} } = change ?? {};
     const name = `owner-approved change ${i + 1} (${JSON.stringify(text)})`;
     const invalid = [
       typeof text !== "string" || !text.trim() ? "no text" : null,
@@ -87,7 +88,10 @@ export function applyApprovedChanges(baseline, changes, isChecked = () => true) 
       to === text ? "its new text is the same" : null,
       typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) ? "no date" : null,
       !Array.isArray(owner) || !owner.length || owner.some((words) => typeof words !== "string" || !words.trim()) ? "no owner's words" : null,
-      !Array.isArray(routes) || !routes.length ? "no routes" : null
+      !Array.isArray(routes) || !routes.length ? "no routes" : null,
+      !counts || typeof counts !== "object" || Array.isArray(counts) ||
+        Object.entries(counts).some(([route, n]) => !routes?.includes?.(route) || !Number.isInteger(n) || n < 1)
+        ? "bad counts (each a route of the entry, and a whole number from 1)" : null
     ].filter(Boolean);
     if (invalid.length) {
       problems.push(`${name}: ${invalid.join(", ")}`);
@@ -99,8 +103,10 @@ export function applyApprovedChanges(baseline, changes, isChecked = () => true) 
         continue;
       }
       const found = baseline[route].filter((node) => node === text).length;
-      if (found !== 1) {
-        problems.push(found === 0 ? `${name}: not on ${route} (a stale entry)` : `${name}: matches ${found} nodes on ${route}, not one`);
+      const expected = counts[route] ?? 1;
+      if (found !== expected) {
+        problems.push(found === 0 ? `${name}: not on ${route} (a stale entry)`
+          : `${name}: matches ${found} node${found === 1 ? "" : "s"} on ${route}, not ${expected === 1 ? "one" : expected}`);
         continue;
       }
       const texts = byRoute.get(route) ?? new Map();

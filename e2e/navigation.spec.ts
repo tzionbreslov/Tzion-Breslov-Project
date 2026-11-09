@@ -458,14 +458,15 @@ const footerColumnsLayout = (page: Page) => page.locator("#genesis-footer-widget
   };
   const columns = [...row.children];
   const signUp = columns.find((column) => column.querySelector('[data-tz-form="signup"]'))!;
-  const contact = columns.find((column) => column.querySelector('a[href^="mailto:"]'))!;
+  // The contact column holds the covered email and phone (lib/contact-details.mjs).
+  const contact = columns.find((column) => column.querySelector('[data-tz-contact="email"]'))!;
   return {
     sideBySide: columns.length === 4 && new Set(columns.map((column) => Math.round(column.getBoundingClientRect().top))).size === 1,
     overflowing: columns.filter((column) => column.scrollWidth > column.clientWidth).length,
     // "Find out about what's happening" / "at Tzion Breslov", split by its <br> only.
     signUpLines: lines(signUp.querySelectorAll("p")[1]),
     submitLines: lines(signUp.querySelector('button[type="submit"]')),
-    phoneLines: lines([...contact.querySelectorAll("p")].find((p) => p.textContent!.includes("972")) ?? null)
+    phoneLines: lines(contact.querySelector('[data-tz-contact="phone"] .tz-contact__value'))
   };
 });
 

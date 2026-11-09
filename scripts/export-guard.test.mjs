@@ -1,8 +1,10 @@
 import { strict as assert } from "node:assert";
+import fs from "node:fs";
 import test from "node:test";
 import copy from "../content/copy/en.json" with { type: "json" };
-import { renderEventsList } from "../lib/events.mjs";
-import { exportGuard, withoutEventCards } from "./lib/export-guard.mjs";
+import { emailSlot, phoneSlot } from "../lib/contact-details.mjs";
+import { renderAnnouncements, renderEventsList } from "../lib/events.mjs";
+import { CONTACT_OG_DESCRIPTION, contactDetailsProblems, exportGuard, withoutEventCards } from "./lib/export-guard.mjs";
 
 const COM = "https://tzionbreslov.com";
 const ORG = "https://tzionbreslov.org";
@@ -218,4 +220,83 @@ test("the importer's leftovers, a plain YouTube embed, a bare / under a base pat
   assert.deepEqual(today.pageProblems(page(`<iframe src="https://www.youtube-nocookie.com/embed/abc"></iframe>`)), []);
   assert.deepEqual(preview.pageProblems(page(`<a href="/">Home</a>`)), [`links to "/" without the base path ${BASE}`]);
   assert.deepEqual(switched.pageProblems(page("", `<link rel="canonical" href="https://example.org/">`)), ["canonical is https://example.org/"]);
+});
+
+// ------------------------------------------------------------ The covered contact details (lib/contact-details.mjs)
+// Nothing an exported page or its RSC payloads hold may give a bot the old number, the email address, or a mailto:,
+// tel:, wa.me or api.whatsapp.com link: only the Contact page's link-preview text (owner: "leave as is") and the
+// Events page's cards and no-JavaScript lines (owner: kept written out) may.
+const EMAIL = "tzionbreslovproject@gmail.com";
+/** The page's head metadata as an RSC payload (.txt) holds it, and as the HTML's flight data does. */
+const metaRow = (content) => `["$","meta","h6",{"property":"og:description","content":${JSON.stringify(content)}}]`;
+const announcementsLine = () => renderAnnouncements(copy.announcements);
+
+test("a covered page passes, on any route, with or without its Show buttons, in the HTML and the flight data", () => {
+  for (const formsOn of [false, true]) {
+    const body = `<p>${emailSlot({ formsOn, variant: "footer" })}</p><p>${phoneSlot({ formsOn, variant: "card" })}</p>` +
+      `<p>write to ${emailSlot({ formsOn, variant: "inline" })}.</p>`;
+    for (const route of ["/", "/contact/", "/privacy/", "/events/", "/404/"]) {
+      assert.deepEqual(contactDetailsProblems(route, page(body + flight(body))), [], `${route} ${formsOn}`);
+    }
+  }
+  // Words like "hotel:" are not a tel: link.
+  assert.deepEqual(contactDetailsProblems("/", page("<p>Hotel: the Inn. Motel: none.</p>")), []);
+});
+
+test("each detail fails, in the HTML, the flight data and an RSC payload, whatever its case", () => {
+  const cases = [
+    ["(+972) 54-671-3013", "holds the old phone number (1×)"],
+    [`<a href="mailto:someone@example.com">write</a>`, "holds a mailto: link (1×)"],
+    [`<a href="MAILTO:someone@example.com">write</a>`, "holds a mailto: link (1×)"],
+    [`<a href="tel:+15555550123">call</a>`, "holds a tel: link (1×)"],
+    [`<a href="https://wa.me/15555550123">chat</a>`, "holds a wa.me link (1×)"],
+    [`<a href="https://api.whatsapp.com/send?phone=1">chat</a>`, "holds an api.whatsapp.com link (1×)"],
+    [EMAIL, "holds the email address (1×)"],
+    ["TzionBreslovProject@gmail.com", "holds the email address (1×)"]
+  ];
+  for (const [html, problem] of cases) {
+    assert.deepEqual(contactDetailsProblems("/", page(`<p>${html}</p>`)), [problem], html);
+    assert.deepEqual(contactDetailsProblems("/", page(flight(`<p>${html}</p>`))), [problem], `${html} (flight)`);
+    assert.deepEqual(contactDetailsProblems("/about-us/", `1:${JSON.stringify(["$", "p", null, { children: html }])}`), [problem], `${html} (.txt)`);
+  }
+  // A mailto link to the address holds both, each counted.
+  assert.deepEqual(contactDetailsProblems("/", page(`<a href="mailto:${EMAIL}">${EMAIL}</a><a href="mailto:${EMAIL}">${EMAIL}</a>`)),
+    ["holds the email address (4×)", "holds a mailto: link (2×)"]);
+});
+
+test("the Contact page's link-preview text passes there, exactly as the owner left it, and nowhere else", () => {
+  const head = `<meta property="og:description" content="${CONTACT_OG_DESCRIPTION}"/>`;
+  const html = page(flight(metaRow(CONTACT_OG_DESCRIPTION)), head);
+  assert.deepEqual(contactDetailsProblems("/contact/", html), []);
+  assert.deepEqual(contactDetailsProblems("/contact/", `0:${metaRow(CONTACT_OG_DESCRIPTION)}\n`), []);
+  // On any other page, it is the old number and the address.
+  assert.deepEqual(contactDetailsProblems("/", html), ["holds the old phone number (2×)", "holds the email address (2×)"]);
+  // Only that exact text: changed, or with its no-break space gone, it fails; so does a detail beside it.
+  const changed = CONTACT_OG_DESCRIPTION.replace("Try Us!", "Call us!");
+  assert.deepEqual(contactDetailsProblems("/contact/", page("", `<meta property="og:description" content="${changed}"/>`)),
+    ["holds the old phone number (1×)", "holds the email address (1×)"]);
+  const plain = CONTACT_OG_DESCRIPTION.replace("\u00a0", " ");
+  assert.deepEqual(contactDetailsProblems("/contact/", `0:${metaRow(plain)}\n`), ["holds the old phone number (1×)", "holds the email address (1×)"]);
+  assert.deepEqual(contactDetailsProblems("/contact/", page(`<p><strong>${EMAIL}</strong></p>`, head)), ["holds the email address (1×)"]);
+  // Another tag with the same text is no exception.
+  assert.deepEqual(contactDetailsProblems("/contact/", page("", `<meta name="description" content="${CONTACT_OG_DESCRIPTION}"/>`)),
+    ["holds the old phone number (1×)", "holds the email address (1×)"]);
+});
+
+test("the exception is the Contact page's og:description as imported (content/pages/contact.json), no-break space and all", () => {
+  const { head } = JSON.parse(fs.readFileSync(new URL("../content/pages/contact.json", import.meta.url), "utf8"));
+  const og = head.filter((item) => item.t === "meta" && item.attrs.property === "og:description");
+  assert.equal(og.length, 1);
+  assert.equal(og[0].attrs.content, CONTACT_OG_DESCRIPTION);
+  assert.ok(CONTACT_OG_DESCRIPTION.includes("tzionbreslovproject@gmail.com \u00a0Beit Shemesh"));
+});
+
+test("the Events page's cards and its no-JavaScript lines keep the address there, and only there", () => {
+  const events = page(cards({ rsvp: "open" }) + announcementsLine() + flight(cards({ rsvp: "open" }) + announcementsLine()));
+  assert.ok(events.includes(`mailto:${EMAIL}`));
+  assert.deepEqual(contactDetailsProblems("/events/", events), []);
+  assert.deepEqual(contactDetailsProblems("/events/", `0:"$Sreact.fragment"\n2:T80,${announcementsLine()}\n`), []);
+  assert.notDeepEqual(contactDetailsProblems("/", events), []);
+  // Anything else on the Events page still fails.
+  assert.deepEqual(contactDetailsProblems("/events/", page(`${announcementsLine()}<p>${EMAIL}</p>`)), ["holds the email address (1×)"]);
 });

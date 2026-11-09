@@ -1,5 +1,5 @@
 {
-  "about": "Wording changes the owner asked for. scripts/check-wording.mjs applies them to checkpoint-001.json (never edited) before it compares: on each listed route, the one baseline text node that is exactly `text` becomes `to`, or is removed when `to` is null. An entry that is not used (its text is not on a route), that would reach more than its own node, or that has no date or no owner's words fails the check. Add an entry only with the owner's own words (README, Wording check).",
+  "about": "Wording changes the owner asked for. scripts/check-wording.mjs applies them to checkpoint-001.json (never edited) before it compares: on each listed route, the one baseline text node that is exactly `text` (or as many as `counts` gives for that route) becomes `to`, or is removed when `to` is null. An entry that is not used (its text is not on a route), that would reach more than its own node, or that has no date or no owner's words fails the check. Add an entry only with the owner's own words (README, Wording check).",
   "changes": [
     {
       "date": "2026-11-08",
@@ -19,6 +19,43 @@
       "text": "Esti Wolo",
       "to": null,
       "routes": ["/", "/about-us/", "/contact/", "/donate/", "/parashas-beshalach-jan-15th-2022/", "/parashas-bo-jan-7th-8th-2022/", "/parashas-mikeitz-dec-3rd-4th-2021/", "/parashas-mishpatim-jan-29nd-2022/", "/parashas-shemos-dec-24th-25th-2021/", "/parashas-terumah-feb-5th-29nd-2022/", "/parashas-tetzaveh-feb-12th-2022/", "/parashas-vaeira-dec-31st-jan-1-2022/", "/parashas-vayechi-dec-17th-18th-2021/", "/parashas-vayeishev-nov-26th-27th-2021/", "/parashas-vayeitzei-nov-12th-13th-2021/", "/parashas-vayigash-dec10th-11th-2021/", "/parashas-vayishlach-nov-19th-20th-2021/", "/parashas-yisro-jan-22nd-2022/", "/parshas-toldos-nov-5-6-2021/", "/parshat-chayei-sarah-oct-29-30-2021/", "/parshat-lech-lecha-october-15-16-2021/", "/parshat-noach-october-8-9-2021/", "/404/"]
+    },
+    {
+      "date": "2026-11-09",
+      "owner": [
+        "conceal the phone number to check if the person requesting it is human or a bot. should be challenging enough that a bot can't figure it out. this would apply to the whatsapp icon as well and the email address.",
+        "we want to avoid spam calls, e-mails, and whatsapp messages, while still making it obvious that the number is available to the elderly human.",
+        "The controller's summary of the owner's choices (2026-11-08/09), not the owner's own words: the email address shows partly covered, as \"tzion••••••@gmail.com\", in the footer of every page and on the Contact page's email card, with a \"Show email\" button once the forms are on (docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md)"
+      ],
+      "what": "The email address in the footer's contact column on every page, and on the Contact page's email card (so twice there): covered, the mailto link gone.",
+      "text": "tzionbreslovproject@gmail.com",
+      "to": "tzion••••••@gmail.com",
+      "routes": ["/", "/about-us/", "/contact/", "/donate/", "/parashas-beshalach-jan-15th-2022/", "/parashas-bo-jan-7th-8th-2022/", "/parashas-mikeitz-dec-3rd-4th-2021/", "/parashas-mishpatim-jan-29nd-2022/", "/parashas-shemos-dec-24th-25th-2021/", "/parashas-terumah-feb-5th-29nd-2022/", "/parashas-tetzaveh-feb-12th-2022/", "/parashas-vaeira-dec-31st-jan-1-2022/", "/parashas-vayechi-dec-17th-18th-2021/", "/parashas-vayeishev-nov-26th-27th-2021/", "/parashas-vayeitzei-nov-12th-13th-2021/", "/parashas-vayigash-dec10th-11th-2021/", "/parashas-vayishlach-nov-19th-20th-2021/", "/parashas-yisro-jan-22nd-2022/", "/parshas-toldos-nov-5-6-2021/", "/parshat-chayei-sarah-oct-29-30-2021/", "/parshat-lech-lecha-october-15-16-2021/", "/parshat-noach-october-8-9-2021/", "/404/"],
+      "counts": { "/contact/": 2 }
+    },
+    {
+      "date": "2026-11-09",
+      "owner": [
+        "also we nedd to change the phone number [new phone number withheld] which also has a whatsapp with the same number.",
+        "we want to avoid spam calls, e-mails, and whatsapp messages, while still making it obvious that the number is available to the elderly human.",
+        "The controller's summary of the owner's choices (2026-11-08/09), not the owner's own words: the new number replaces \"(+972) 54-671-3013\", in the site's \"(+1) …\" style and partly covered, as \"(+1) 347-•••-••••\", in the footer of every page and on the Contact page's phone card, with a \"Show number\" button once the forms are on; the number itself is only in the forms service's private settings (\"Keep it out of GitHub\")"
+      ],
+      "what": "The phone number in the footer's contact column on every page, and on the Contact page's phone card (so twice there): the old number replaced by the new one, covered.",
+      "text": "(+972) 54-671-3013",
+      "to": "(+1) 347-•••-••••",
+      "routes": ["/", "/about-us/", "/contact/", "/donate/", "/parashas-beshalach-jan-15th-2022/", "/parashas-bo-jan-7th-8th-2022/", "/parashas-mikeitz-dec-3rd-4th-2021/", "/parashas-mishpatim-jan-29nd-2022/", "/parashas-shemos-dec-24th-25th-2021/", "/parashas-terumah-feb-5th-29nd-2022/", "/parashas-tetzaveh-feb-12th-2022/", "/parashas-vaeira-dec-31st-jan-1-2022/", "/parashas-vayechi-dec-17th-18th-2021/", "/parashas-vayeishev-nov-26th-27th-2021/", "/parashas-vayeitzei-nov-12th-13th-2021/", "/parashas-vayigash-dec10th-11th-2021/", "/parashas-vayishlach-nov-19th-20th-2021/", "/parashas-yisro-jan-22nd-2022/", "/parshas-toldos-nov-5-6-2021/", "/parshat-chayei-sarah-oct-29-30-2021/", "/parshat-lech-lecha-october-15-16-2021/", "/parshat-noach-october-8-9-2021/", "/404/"],
+      "counts": { "/contact/": 2 }
+    },
+    {
+      "date": "2026-11-09",
+      "owner": [
+        "we want to avoid spam calls, e-mails, and whatsapp messages, while still making it obvious that the number is available to the elderly human.",
+        "The controller's summary of the owner's answer (2026-11-09), not the owner's own words: the article \"Parshas Toldos\" (/parshas-toldos-nov-5-6-2021/) hides its \"Please email us at TzionBreslovProject@gmail.com.\" the same way, as \"Tzion••••••@gmail.com\" with \"Show email\""
+      ],
+      "what": "The article's closing line: the address is covered, so the sentence before it is its own node, followed by \"Tzion••••••@gmail.com\" and the full stop.",
+      "text": "Do you have comments or suggestions for our upcoming newsletters? Want to sponsor our next newsletter? Please email us at TzionBreslovProject@gmail.com.",
+      "to": "Do you have comments or suggestions for our upcoming newsletters? Want to sponsor our next newsletter? Please email us at",
+      "routes": ["/parshas-toldos-nov-5-6-2021/"]
     }
   ]
 }
