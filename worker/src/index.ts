@@ -31,6 +31,7 @@ import {
   rsvpWait,
   storeWebhookEvent
 } from "./database";
+import { contactDetailsFrom } from "./contact-details";
 import { findRsvpEvent, loadEventFeed, type FeedEvent } from "./events";
 import { sendEmail, subscribeToTopics, validateTurnstile } from "./providers";
 import { PublicError, requireBinding, requireSalt, type Env } from "./types";
@@ -38,6 +39,7 @@ import {
   readJson,
   subscribeTopics,
   validateContact,
+  validateContactDetails,
   validateRsvp,
   validateSubscription,
   validateSubscriptionConfirmation,
@@ -47,7 +49,13 @@ import {
 type JsonObject = Record<string, unknown>;
 type ExecutionContextLike = Pick<ExecutionContext, "waitUntil">;
 
-const publicPostRoutes = new Set<string>([API_PATHS.contact, API_PATHS.subscribe, API_PATHS.subscribeConfirm, API_PATHS.rsvp]);
+const publicPostRoutes = new Set<string>([
+  API_PATHS.contact,
+  API_PATHS.subscribe,
+  API_PATHS.subscribeConfirm,
+  API_PATHS.rsvp,
+  API_PATHS.contactDetails
+]);
 
 function allowedOrigins(env: Env) {
   return new Set(env.ALLOWED_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean));
@@ -439,6 +447,22 @@ async function handleRsvp(request: Request, env: Env, origin: string, context?: 
 }
 
 /**
+ * `POST /v1/contact-details`: the phone number, WhatsApp link and email address the site shows covered, for a
+ * visitor who tapped "Show" and passed Turnstile (action "contact-details"). In order: the request id and token
+ * (no honeypot or timing check: a tap may come at once), 10 per IP in 10 minutes (the same short-lived, hashed
+ * buckets as the forms, gone at the daily clean-up), Turnstile, then the details from the Worker's settings
+ * (contact-details.ts). Stores nothing else: no request_log row (its route CHECK is live in production, and the
+ * privacy notice's log is of contact and sign-up requests). The answer is JSON like every other, never cached
+ * (Cache-Control: no-store) and never logged.
+ */
+async function handleContactDetails(request: Request, env: Env, origin: string) {
+  const input = validateContactDetails(await readJson(request));
+  await rateLimitValue(env, "contact-details", "ip", remoteIp(request), 10);
+  await validateTurnstile(env, input["cf-turnstile-response"], remoteIp(request), input.requestId, TURNSTILE_ACTIONS.contactDetails);
+  return json(contactDetailsFrom(env), 200, origin);
+}
+
+/**
  * How long an availability answer is shared, and how long a browser keeps it:
  * together at most 60 s, as before the shared cache.
  */
@@ -547,6 +571,7 @@ async function route(request: Request, env: Env, context?: ExecutionContextLike)
     if (url.pathname === API_PATHS.subscribe) return handleSubscription(request, env, origin);
     if (url.pathname === API_PATHS.subscribeConfirm) return handleSubscriptionConfirmation(request, env, origin);
     if (url.pathname === API_PATHS.rsvp) return handleRsvp(request, env, origin, context);
+    if (url.pathname === API_PATHS.contactDetails) return handleContactDetails(request, env, origin);
   }
 
   throw new PublicError("NOT_FOUND");

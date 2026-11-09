@@ -27,6 +27,11 @@ RESEND_EVENTS_TOPIC_ID=replace-me
 
 RESEND_WEBHOOK_SECRET=replace-me
 
+# The phone number POST /v1/contact-details answers ("Show number"), in E.164: + then 1 and 10 digits.
+# Keep this fake one locally; the real number is only ever a Worker secret (README → Switch day, step 3).
+# PUBLIC_CONTACT_EMAIL, the email it answers, comes from wrangler.jsonc's vars.
+CONTACT_PHONE=+15555550123
+
 # RSVPs: the events the Worker takes RSVPs for (the site's /events.json; locally the
 # `node scripts/serve-out.mjs` copy of a build). The daily cleanup reads it too: it deletes an RSVP once
 # its event is over, by the event's current end (while it can't be read, only once the stored end is 7 days past).

@@ -8,6 +8,7 @@ import {
   PHONE_PATTERN,
   SUBSCRIBE_TOPICS,
   type ApiInputField,
+  type ContactDetailsRequest,
   type SubscribeTopic
 } from "../../lib/api-contract";
 import { PublicError, invalidInput } from "./types";
@@ -151,6 +152,22 @@ export function validateRsvp(input: JsonRecord) {
   const eventId = input.eventId;
   if (typeof eventId !== "string" || !EVENT_ID_PATTERN.test(eventId)) invalidInput("eventId");
   return { ...result, eventId, name, email: emailAddress, guests, accessibility };
+}
+
+/**
+ * `POST /v1/contact-details`: the request id and the Turnstile token only. No honeypot or timing check, unlike the
+ * forms' envelope: a visitor may tap "Show" as soon as the page opens.
+ */
+export function validateContactDetails(input: JsonRecord): ContactDetailsRequest {
+  return {
+    requestId: requestId(input),
+    [ENVELOPE_FIELDS.turnstileToken]: singleLineText(
+      input,
+      ENVELOPE_FIELDS.turnstileToken,
+      FIELD_LIMITS.turnstileToken.min,
+      FIELD_LIMITS.turnstileToken.max
+    )
+  };
 }
 
 /** `POST /v1/subscribe/confirm`: just the emailed single-use token (no envelope). */
