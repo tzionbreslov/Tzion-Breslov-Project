@@ -288,8 +288,11 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expect(page.locator('[aria-disabled="true"]')).toHaveCount(0);
     expect(posts).toHaveLength(0);
     // The footer's sign-up form (lib/client/forms.ts) can't load Turnstile either, and leaves its own
-    // TURNSTILE_LOAD_FAILED unobserved (it reads it only on submit): not this test's. The reveal observes its own.
-    const own = errors().filter((error) => !/TURNSTILE_LOAD_FAILED/.test(String(error)));
+    // TURNSTILE_LOAD_FAILED unobserved (it reads it only on submit): at most that one, never a second from the reveal,
+    // which observes its own (docs/superpowers/follow-ups.md).
+    const isLoadFailure = (error: Error) => /TURNSTILE_LOAD_FAILED/.test(String(error));
+    expect(errors().filter(isLoadFailure).length).toBeLessThanOrEqual(1);
+    const own = errors().filter((error) => !isLoadFailure(error));
     expect({ pageErrors: own, cspViolations: await cspViolations(page) }).toEqual({ pageErrors: [], cspViolations: [] });
   });
 
@@ -414,11 +417,21 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await open(page, "/contact/");
     const sizes = (selector: string) => page.locator(selector).evaluateAll((nodes) =>
       nodes.map((node) => node.getBoundingClientRect()).map((box) => [Math.round(box.width), Math.round(box.height)]));
+    // Nothing in a slot (the value, its links, the button) reaches past its paragraph's content box, nor the column.
     const overflow = () => page.locator("#genesis-footer-widgets .wp-block-column:has([data-tz-contact])").evaluate((column) => ({
       column: column.scrollWidth > column.clientWidth,
-      slots: [...column.querySelectorAll(".tz-contact")].some((node) => node.getBoundingClientRect().right > column.getBoundingClientRect().right + 0.5)
+      slots: [...column.querySelectorAll(".tz-contact")].flatMap((slot) => {
+        const paragraph = slot.closest("p")!;
+        const box = paragraph.getBoundingClientRect();
+        const style = getComputedStyle(paragraph);
+        const left = box.left + parseFloat(style.paddingLeft);
+        const right = box.right - parseFloat(style.paddingRight);
+        return [...slot.querySelectorAll(".tz-contact__value, .tz-contact__value a, .tz-contact__show")]
+          .filter((node) => { const r = node.getBoundingClientRect(); return r.left < left - 0.5 || r.right > right + 0.5; })
+          .map((node) => `${slot.getAttribute("data-tz-contact")} ${node.className || node.tagName}`);
+      })
     }));
-    for (const width of [1440, 1024, 960, 390]) {
+    for (const width of [1440, 1280, 1024, 1000, 960, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       const buttons = await sizes("[data-tz-reveal]");
       expect(buttons).toHaveLength(4);
@@ -426,11 +439,11 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
         expect(w, `${width}px: a Show button`).toBeGreaterThanOrEqual(24);
         expect(h, `${width}px: a Show button`).toBeGreaterThanOrEqual(24);
       }
-      expect(await overflow(), `${width}px covered`).toEqual({ column: false, slots: false });
+      expect(await overflow(), `${width}px covered`).toEqual({ column: false, slots: [] });
     }
     await tap(showButton(footer(page), "phone"));
     await expectRevealed(page);
-    for (const width of [1440, 1024, 960, 390]) {
+    for (const width of [1440, 1280, 1024, 1000, 960, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       const icons = await sizes(".tz-contact__whatsapp");
       expect(icons).toHaveLength(2);
@@ -438,7 +451,7 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
         expect(w, `${width}px: the WhatsApp link`).toBeGreaterThanOrEqual(24);
         expect(h, `${width}px: the WhatsApp link`).toBeGreaterThanOrEqual(24);
       }
-      expect(await overflow(), `${width}px revealed`).toEqual({ column: false, slots: false });
+      expect(await overflow(), `${width}px revealed`).toEqual({ column: false, slots: [] });
     }
     await expectClean(page, errors);
   });
