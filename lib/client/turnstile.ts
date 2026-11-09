@@ -19,14 +19,24 @@ declare global {
 
 let loader: Promise<TurnstileApi> | undefined;
 
+/** The token wait's error (`TurnstileHandle.token`): the widget is there, but gave no token in time. */
+export const TURNSTILE_TIMEOUT = "TURNSTILE_TIMEOUT";
+
 function loadTurnstile() {
   if (window.turnstile) return Promise.resolve(window.turnstile);
   loader ??= new Promise<TurnstileApi>((resolve, reject) => {
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
     script.async = true;
-    script.addEventListener("load", () => (window.turnstile ? resolve(window.turnstile) : reject(new Error("TURNSTILE_UNAVAILABLE"))), { once: true });
-    script.addEventListener("error", () => reject(new Error("TURNSTILE_LOAD_FAILED")), { once: true });
+    // A failed load isn't kept: its script goes, and the next mount loads Turnstile again (after a brief network
+    // drop, say). A widget already mounted keeps its own failed load.
+    const fail = (code: string) => {
+      script.remove();
+      loader = undefined;
+      reject(new Error(code));
+    };
+    script.addEventListener("load", () => (window.turnstile ? resolve(window.turnstile) : fail("TURNSTILE_UNAVAILABLE")), { once: true });
+    script.addEventListener("error", () => fail("TURNSTILE_LOAD_FAILED"), { once: true });
     document.head.append(script);
   });
   return loader;
@@ -67,7 +77,7 @@ export function mountTurnstile(container: HTMLElement, siteKey: string, action: 
         if (value) return value;
         await new Promise((r) => setTimeout(r, 250));
       }
-      throw new Error("TURNSTILE_TIMEOUT");
+      throw new Error(TURNSTILE_TIMEOUT);
     },
     reset() {
       if (widgetId) void ready.then((api) => api.reset(widgetId!));

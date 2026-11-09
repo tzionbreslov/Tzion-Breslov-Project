@@ -8,7 +8,7 @@ import {
 } from "@/lib/api-contract";
 import { formsEnabled, publicConfig } from "./config";
 import { submitPublicForm } from "./submit";
-import { mountTurnstile, type TurnstileHandle } from "./turnstile";
+import { mountTurnstile, TURNSTILE_TIMEOUT, type TurnstileHandle } from "./turnstile";
 
 /**
  * The covered contact details' "Show" buttons (owner, 2026-11-08/09; the slots: lib/contact-details.mjs). One tap
@@ -19,14 +19,21 @@ import { mountTurnstile, type TurnstileHandle } from "./turnstile";
  *
  * - The buttons stay hidden until this is ready, and are rendered only when the forms are on (Ruling R13).
  * - One check at a time: while it runs every button is disabled, and further taps do nothing.
- * - A check that fails (no token, Turnstile unreachable, a network error, any error answer or a malformed one) says
- *   so in that slot's alert, resets Turnstile for a fresh token and gives the buttons back; RATE_LIMITED says to wait.
+ * - A check that fails (no token within a minute, Turnstile unreachable, a network error, any error answer or a
+ *   malformed one) says so in that slot's alert, resets Turnstile for a fresh token and gives the buttons back;
+ *   RATE_LIMITED says to wait. A Turnstile that never loaded is dropped instead, so the next tap loads it again.
  * - Storage is a convenience: every read and write may throw (private mode, blocked site data) and is ignored.
  * - The answer is checked before use, and only ever inserted as text and as attributes of links it validated.
  */
 
 const STORAGE_KEY = "tz:contact-details";
 const text = copy.contactDetails;
+
+/**
+ * How long one tap waits for Turnstile's token: a minute, not the forms' 15 s. The widget first appears at the tap,
+ * and when Cloudflare asks the visitor to tick "Verify you are human", an older visitor needs time to see the box.
+ */
+const CHECK_TIMEOUT_MS = 60_000;
 
 const TEL = /^\+\d{8,15}$/;
 const WHATSAPP = /^https:\/\/wa\.me\/\d{8,15}$/;
@@ -162,7 +169,19 @@ export function enhanceContactDetails(doc: Document = document): () => void {
         widget?.handle.remove();
         widget = { handle: mountTurnstile(place, turnstileSiteKey, TURNSTILE_ACTIONS.contactDetails, { size: "compact" }), place };
       }
-      const token = await widget.handle.token();
+      let token: string;
+      try {
+        token = await widget.handle.token(CHECK_TIMEOUT_MS);
+      } catch (error) {
+        // Anything but a timeout means Turnstile never loaded, or never drew the widget: this one can't recover, so
+        // it goes, and the next tap mounts a new one (which loads Turnstile again). After a timeout it stays (reset
+        // below): its box may be on screen.
+        if (!(error instanceof Error && error.message === TURNSTILE_TIMEOUT)) {
+          widget.handle.remove();
+          widget = undefined;
+        }
+        throw error;
+      }
       const response = await submitPublicForm(API_PATHS.contactDetails, {
         [ENVELOPE_FIELDS.requestId]: crypto.randomUUID(),
         [ENVELOPE_FIELDS.turnstileToken]: token

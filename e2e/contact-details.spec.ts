@@ -282,16 +282,24 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     });
   }
 
-  test("a Turnstile that never gives a token brings the button back with the failed message, never stuck on Checking…", async ({ page }) => {
+  test("a Turnstile that never gives a token waits a minute for the visitor, then brings the button back with the failed message, never stuck on Checking…", async ({ page }) => {
+    // About 62 s: the reveal gives its check a minute (lib/client/contact-details.ts, CHECK_TIMEOUT_MS).
     test.slow();
     const errors = trackPageErrors(page);
     const posts = await stubServices(page, reply(200, DETAILS), "");
     await open(page, "/contact/");
     const button = showButton(footer(page), "email");
     await tap(button);
-    await expect(footer(page).getByRole("button", { name: TEXT.checking, exact: true })).toBeVisible();
+    const checking = footer(page).getByRole("button", { name: TEXT.checking, exact: true });
+    await expect(checking).toBeVisible();
     const alert = slot(footer(page), "email").getByRole("alert");
-    await expect(alert).toHaveText(TEXT.failed, { timeout: 25_000 });
+    // Well past the forms' 15 s, an older visitor may still be finding the box to tick: still checking, and the box
+    // not reset under them.
+    await page.waitForTimeout(20_000);
+    await expect(checking).toBeVisible();
+    await expect(slot(footer(page), "email").locator(".tz-contact__message")).toBeEmpty();
+    expect((await turnstileCalls(page)).resets).toBe(0);
+    await expect(alert).toHaveText(TEXT.failed, { timeout: 60_000 });
     await expect(button).toHaveText(TEXT.showEmail);
     await expect(button).toBeEnabled();
     await expect(button).not.toHaveAttribute("aria-disabled", "true");
@@ -302,14 +310,12 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expectClean(page, errors);
   });
 
-  test("a Turnstile script that fails to load brings the button back with the failed message", async ({ page }) => {
+  test("a Turnstile script that fails to load brings the button back with the failed message, and a later tap loads it again", async ({ page }) => {
     const errors = trackPageErrors(page);
-    const posts: unknown[] = [];
-    await page.route("https://challenges.cloudflare.com/**", (route) => route.abort("failed"));
-    await page.route(`${API}/v1/contact-details`, (route) => {
-      posts.push(route.request().postData());
-      return route.abort("failed");
-    });
+    const posts = await stubServices(page);
+    // Turnstile unreachable at first (a brief network drop): this route runs before stubServices' own.
+    const unreachable = (route: Route) => route.abort("failed");
+    await page.route("https://challenges.cloudflare.com/**", unreachable);
     await page.goto("/privacy/");
     const button = showButton(page.locator(".tz-legal"), "email");
     await tap(button);
@@ -317,6 +323,12 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await expect(button).toHaveText(TEXT.showEmail);
     await expect(page.locator('[aria-disabled="true"]')).toHaveCount(0);
     expect(posts).toHaveLength(0);
+    // Back online: the next tap loads Turnstile afresh (a failed load isn't kept) and reveals, with no reload.
+    await page.unroute("https://challenges.cloudflare.com/**", unreachable);
+    await tap(button);
+    await expectRevealed(page);
+    expect(posts).toHaveLength(1);
+    expect(await revealWidgets(page)).toHaveLength(1);
     // The footer's sign-up form (lib/client/forms.ts) can't load Turnstile either, and leaves its own
     // TURNSTILE_LOAD_FAILED unobserved (it reads it only on submit): at most that one, never a second from the reveal,
     // which observes its own (docs/superpowers/follow-ups.md).
