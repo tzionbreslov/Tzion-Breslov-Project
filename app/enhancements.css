@@ -185,9 +185,10 @@ body.single-post .wp-block-cover.hero { aspect-ratio: 1920 / 739; }
 /* ------------------------------------------------------------ Covered contact details
  * The phone number and email address, partly covered, with "Show" buttons (lib/contact-details.mjs: the markup;
  * lib/client/contact-details.ts: the reveal). The covered value, and the links that replace it, look like the detail
- * they stand for (its colour, weight and size, no underline): in the footer white, on the Contact cards the cards'
- * bold dark blue, in a sentence the sentence's own text. The buttons come only with the forms on, and stay out of
- * sight until the page is ready: the `hidden` attribute must win over every display rule here (Ruling R13). */
+ * they stand for (its colour, weight and size, no underline, except the privacy notice's address: see below): in the
+ * footer white, on the Contact cards the cards' bold dark blue, in a sentence the sentence's own text. The buttons
+ * come only with the forms on, and stay out of sight until the page is ready: the `hidden` attribute must win over
+ * every display rule here (Ruling R13). */
 .tz-contact .tz-contact__show[hidden] { display: none !important; }
 .tz-contact__check:empty, .tz-contact__message:empty { display: none; }
 .tz-contact__check { display: block; margin-top: 6px; }
@@ -246,7 +247,7 @@ body.single-post .wp-block-cover.hero { aspect-ratio: 1920 / 739; }
 /* In a sentence (privacy notice, speaking paragraph, article): a small pill in the sentence's colour. */
 .tz-contact--inline .tz-contact__show { min-height: 26px; margin-left: 6px; padding: 2px 10px; font-size: 12px; }
 .tz-legal .tz-contact--inline .tz-contact__value { color: var(--wp--preset--color--dark-blue, #1e61a1); font-weight: 600; }
-/* In the privacy notice the address was an underlined link before it was covered, like the notice's other links
-   (app/pages.css .tz-legal__body a), so once revealed it is underlined again. */
+/* In the privacy notice the address was an underlined link before it was covered, so once revealed it is
+   underlined again, as it was (app/pages.css .tz-legal__body a). A controller's call the owner can overrule. */
 .tz-legal .tz-contact--inline .tz-contact__value a { text-decoration: underline; text-underline-offset: 3px; }
 .tz-legal .tz-contact--inline .tz-contact__value a:hover { text-decoration-thickness: 2px; }

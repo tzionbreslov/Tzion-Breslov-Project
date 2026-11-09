@@ -249,6 +249,10 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     await open(page, "/privacy/");
     await tap(showButton(page.locator(".tz-legal"), "email"));
     await expectRevealed(page);
+    // The privacy notice's address is underlined once revealed, as it was before it was covered (a controller's
+    // call, spec → "Controller's calls"); the footer's revealed address has no underline.
+    await expect(page.locator('.tz-legal .tz-contact__value a[href^="mailto:"]')).toHaveCSS("text-decoration-line", "underline");
+    await expect(footer(page).locator('[data-tz-contact="email"] .tz-contact__value a[href^="mailto:"]')).toHaveCSS("text-decoration-line", "none");
     expect(posts).toHaveLength(1);
     await page.reload();
     await expect(page.locator('.tz-legal a[href="mailto:tzionbreslovproject@gmail.com"]')).toHaveText(DETAILS.email);
