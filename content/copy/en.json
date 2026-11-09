@@ -99,6 +99,16 @@
     "manageMonthly": "Manage your monthly donation",
     "manageMonthlyNote": "Already giving monthly through PayPal? Change or cancel it in your PayPal account."
   },
+  "contactDetails": {
+    "showNumber": "Show number",
+    "showNumberLabel": "Show number (phone and WhatsApp)",
+    "showEmail": "Show email",
+    "showEmailLabel": "Show email address",
+    "checking": "Checking…",
+    "failed": "We couldn’t check that you’re a person. Please try again.",
+    "rateLimited": "Too many tries. Please wait a minute and try again.",
+    "whatsapp": "WhatsApp"
+  },
   "privacy": {
     "title": "Privacy notice",
     "description": "How Tzion Breslov handles the information you send through this website.",
@@ -155,7 +165,7 @@
         "heading": "Your choices",
         "paragraphs": [
           "You can stop newsletter or event-announcement emails at any time with the unsubscribe link in them, or by writing to us.",
-          "To see, correct or delete the information you have sent us, write to tzionbreslovproject@gmail.com."
+          "To see, correct or delete the information you have sent us, write to {email}."
         ]
       }
     ]

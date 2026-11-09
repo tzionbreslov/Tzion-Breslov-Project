@@ -5,6 +5,8 @@ import { renderNavigation, rewriteLinks } from "@/lib/navigation.mjs";
 import { expandTokens } from "@/lib/youtube-feed";
 import { insertContactMap } from "@/lib/pages/contact-map";
 import { editArticleAuthor, editFooterCredit } from "@/lib/pages/edits.mjs";
+import { editArticleEmail, editContactCards, editFooterContact } from "@/lib/contact-details.mjs";
+import { formsEnabled } from "@/lib/client/config";
 import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
 import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
@@ -83,18 +85,26 @@ export function SiteDocument({ page, children }: { page: PageContent; children: 
   );
 }
 
+/** The one article that names the email address in its text (owner, 2026-11-09: covered too). */
+const ARTICLE_WITH_EMAIL = "/parshas-toldos-nov-5-6-2021/";
+
 export function SiteBody({ page }: { page: PageContent }) {
   // The menus are rendered for this page (lib/navigation.mjs); the 404 page has
   // no path and marks nothing as current.
   const currentPath = page.path ?? "";
+  // The phone number and email address are covered, with "Show" buttons when the forms are on (owner, 2026-11-08/09:
+  // lib/contact-details.mjs): in every footer, the Contact page's cards and the article "Parshas Toldos".
+  const formsOn = formsEnabled();
   // The imported Contact page gains its map (lib/pages/contact-map.ts).
-  const main = page.path === "/contact/" ? insertContactMap(page.main) : page.main;
+  const main = page.path === "/contact/" ? insertContactMap(editContactCards(page.main, { formsOn }))
+    : page.path === ARTICLE_WITH_EMAIL ? editArticleEmail(page.main, { formsOn })
+    : page.main;
   const html = [
     page.skipLinks && readShared(page.skipLinks),
     page.header && renderNavigation(readShared(page.header), currentPath),
     rewriteLinks(expandTokens(main)),
     // Every footer's last line reads "© 2026 Tzion Breslov" (owner, 2026-11-08: lib/pages/edits.mjs).
-    page.footer && renderNavigation(editFooterCredit(readShared(page.footer)), currentPath),
+    page.footer && renderNavigation(editFooterContact(editFooterCredit(readShared(page.footer)), { formsOn }), currentPath),
     page.footerExtra
   ].filter(Boolean).join("");
   const rebased = rebaseHtml(html);

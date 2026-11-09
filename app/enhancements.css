@@ -181,3 +181,59 @@ body.single-post .wp-block-cover.hero { aspect-ratio: 1920 / 739; }
 @media (max-width: 1039px) {
   body.single-post .wp-block-cover.hero .wp-block-cover__image-background { object-position: 25% 50%; }
 }
+
+/* ------------------------------------------------------------ Covered contact details
+ * The phone number and email address, partly covered, with "Show" buttons (lib/contact-details.mjs: the markup;
+ * lib/client/contact-details.ts: the reveal). The covered value, and the links that replace it, look like the detail
+ * they stand for (its colour, weight and size, no underline): in the footer white, on the Contact cards the cards'
+ * bold dark blue, in a sentence the sentence's own text. The buttons come only with the forms on, and stay out of
+ * sight until the page is ready: the `hidden` attribute must win over every display rule here (Ruling R13). */
+.tz-contact .tz-contact__show[hidden] { display: none !important; }
+.tz-contact__check:empty, .tz-contact__message:empty { display: none; }
+.tz-contact__check { display: block; margin-top: 6px; }
+.tz-contact__message {
+  display: block; margin-top: 6px;
+  font-size: 14px; font-weight: 600; line-height: 1.4; text-transform: none; white-space: normal;
+}
+.tz-contact[data-tz-contact] .tz-contact__value a {
+  color: inherit; font: inherit; text-decoration: none; text-transform: inherit;
+  border-radius: 2px; overflow-wrap: anywhere;
+}
+.tz-contact[data-tz-contact] .tz-contact__value a:hover { color: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.tz-contact[data-tz-contact] .tz-contact__value a:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+/* The WhatsApp chat, after the number: a 28px target around its 22px icon, in WhatsApp's green (#25D366, 3.3:1 on
+ * the footer's dark blue); on the Contact page's light card a darker green (#128C7E, about 4:1) for the 3:1 an icon
+ * needs. */
+.tz-contact[data-tz-contact] .tz-contact__value a.tz-contact__whatsapp {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; margin-left: 6px; vertical-align: middle;
+  border-radius: 50%; color: #25d366;
+}
+.tz-contact--card[data-tz-contact] .tz-contact__value a.tz-contact__whatsapp { color: #128c7e; }
+.tz-contact[data-tz-contact] .tz-contact__value a.tz-contact__whatsapp:hover { text-decoration: none; transform: scale(1.1); }
+.tz-contact__whatsapp svg { width: 22px; height: 22px; fill: currentColor; }
+/* "Show number" / "Show email": a pill in the text's own colour, at least 24px high. */
+.tz-contact .tz-contact__show {
+  display: inline-block; min-height: 28px; margin: 0 0 0 8px; padding: 3px 12px;
+  border: 1.5px solid currentColor; border-radius: 999px; box-shadow: none;
+  background: transparent; color: inherit; vertical-align: middle;
+  font: 600 13px/1.5 Montserrat, sans-serif; letter-spacing: .01em; text-transform: none; white-space: nowrap;
+  cursor: pointer; transition: background-color .15s ease;
+}
+.tz-contact .tz-contact__show:hover { background: rgb(255 255 255 / .14); color: inherit; }
+.tz-contact .tz-contact__show:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.tz-contact .tz-contact__show[aria-disabled="true"] { opacity: .75; cursor: progress; }
+/* Footer (every page): white on the dark blue, the pill after the value or, in the narrow column, under it. */
+.tz-contact--footer { color: #fff; }
+/* Contact page: the bold dark-blue value, a solid dark-blue pill centred under it. */
+.tz-contact--card .tz-contact__show {
+  display: table; min-height: 40px; margin: 10px auto 0; padding: 8px 22px;
+  border-color: var(--wp--preset--color--dark-blue, #1e61a1);
+  background: var(--wp--preset--color--dark-blue, #1e61a1); color: #fff; font-size: 15px;
+}
+.tz-contact--card .tz-contact__show:hover { background: #174d80; border-color: #174d80; color: #fff; }
+.tz-contact--card .tz-contact__show:focus-visible { outline-color: var(--wp--preset--color--dark-blue, #1e61a1); }
+.tz-contact--card .tz-contact__check { display: flex; justify-content: center; }
+/* In a sentence (privacy notice, speaking paragraph, article): a small pill in the sentence's colour. */
+.tz-contact--inline .tz-contact__show { min-height: 26px; margin-left: 6px; padding: 2px 10px; font-size: 12px; }
+.tz-legal .tz-contact--inline .tz-contact__value { color: var(--wp--preset--color--dark-blue, #1e61a1); font-weight: 600; }
