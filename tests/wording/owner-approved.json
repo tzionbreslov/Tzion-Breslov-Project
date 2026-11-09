@@ -1,0 +1,24 @@
+{
+  "about": "Wording changes the owner asked for. scripts/check-wording.mjs applies them to checkpoint-001.json (never edited) before it compares: on each listed route, the one baseline text node that is exactly `text` becomes `to`, or is removed when `to` is null. An entry that is not used (its text is not on a route), that would reach more than its own node, or that has no date or no owner's words fails the check. Add an entry only with the owner's own words (README, Wording check).",
+  "changes": [
+    {
+      "date": "2026-11-08",
+      "owner": [
+        "1. remove \"site by esti wolo\"",
+        "The controller's summary of the owner's answer to a question (2026-11-08), not the owner's own words: also fix the \"Tzion Beslov\" typo, which becomes \"Tzion Breslov\""
+      ],
+      "what": "The footer's last line on every page: \"© 2026 Tzion Beslov | Site by\" before the linked name becomes \"© 2026 Tzion Breslov\", in the same paragraph.",
+      "text": "© 2026 Tzion Beslov | Site by",
+      "to": "© 2026 Tzion Breslov",
+      "routes": ["/", "/about-us/", "/contact/", "/donate/", "/parashas-beshalach-jan-15th-2022/", "/parashas-bo-jan-7th-8th-2022/", "/parashas-mikeitz-dec-3rd-4th-2021/", "/parashas-mishpatim-jan-29nd-2022/", "/parashas-shemos-dec-24th-25th-2021/", "/parashas-terumah-feb-5th-29nd-2022/", "/parashas-tetzaveh-feb-12th-2022/", "/parashas-vaeira-dec-31st-jan-1-2022/", "/parashas-vayechi-dec-17th-18th-2021/", "/parashas-vayeishev-nov-26th-27th-2021/", "/parashas-vayeitzei-nov-12th-13th-2021/", "/parashas-vayigash-dec10th-11th-2021/", "/parashas-vayishlach-nov-19th-20th-2021/", "/parashas-yisro-jan-22nd-2022/", "/parshas-toldos-nov-5-6-2021/", "/parshat-chayei-sarah-oct-29-30-2021/", "/parshat-lech-lecha-october-15-16-2021/", "/parshat-noach-october-8-9-2021/", "/404/"]
+    },
+    {
+      "date": "2026-11-08",
+      "owner": ["1. remove \"site by esti wolo\""],
+      "what": "The linked name at the end of the footer's last line on every page (it linked to estiwolo.com).",
+      "text": "Esti Wolo",
+      "to": null,
+      "routes": ["/", "/about-us/", "/contact/", "/donate/", "/parashas-beshalach-jan-15th-2022/", "/parashas-bo-jan-7th-8th-2022/", "/parashas-mikeitz-dec-3rd-4th-2021/", "/parashas-mishpatim-jan-29nd-2022/", "/parashas-shemos-dec-24th-25th-2021/", "/parashas-terumah-feb-5th-29nd-2022/", "/parashas-tetzaveh-feb-12th-2022/", "/parashas-vaeira-dec-31st-jan-1-2022/", "/parashas-vayechi-dec-17th-18th-2021/", "/parashas-vayeishev-nov-26th-27th-2021/", "/parashas-vayeitzei-nov-12th-13th-2021/", "/parashas-vayigash-dec10th-11th-2021/", "/parashas-vayishlach-nov-19th-20th-2021/", "/parashas-yisro-jan-22nd-2022/", "/parshas-toldos-nov-5-6-2021/", "/parshat-chayei-sarah-oct-29-30-2021/", "/parshat-lech-lecha-october-15-16-2021/", "/parshat-noach-october-8-9-2021/", "/404/"]
+    }
+  ]
+}

@@ -122,6 +122,17 @@ Left by Group 6 itself (review fix round 1 of PR #33), each rare or a judgment c
     1440×900, and its click scrolls the page to 165 px. If such a test flakes, `scrollIntoViewAndSettle` is the remedy.
   - Fixing the page itself (keeping the header's place) would change how the theme behaves, so it needs the owner's
     go-ahead.
+- **Footer Quick Links: "Taste a Class" on two lines in the four-column footer** (owner edits, 2026-11-08). The list is
+  in two columns at every width. From 960px, where the footer has four columns, "Taste a Class" wraps between words
+  ("Taste a" / "Class") until the list is about 206px wide (between 1600 and 1920px): its column is 87-100px wide.
+  It is not a mid-word break, but it is visible. Keeping it on one line would need a wider Quick Links column still
+  (taking more from the sign-up column, whose line "Find out about what's happening" needs 283px), so it is left for
+  the owner.
+- **The fixed header in full-page captures.** Desktop full-page screenshots (`scripts/visual-diff.mjs`) paint the
+  fixed header part-way down the page, where it depends on the page's height. A change that only shortens the footer
+  therefore shows up above it as two 75px header bands, moved by the footer's change (owner edits, 2026-11-08:
+  0.25-3.63% with `--crop-footer`, 0.00% with `--mask-nav`). Compare such changes with `--mask-nav`, and the header
+  separately.
 - **Menu: on iOS, a sticky `:hover` before the scripts load.** Left as it is by Group 7 (2026-11-08): a
   `@media (hover: hover)` guard on the no-JS `:hover` rule keeps the keyboard path (`:focus-within`), but iPad Safari
   doesn't focus a tapped `<button>`, so on a 12.9"/13" iPad Pro in landscape (1366 px, the desktop menu) without

@@ -14,16 +14,24 @@
 //   node scripts/check-wording.mjs --write-baseline .tmp/baseline/checkpoint-001/out .tmp/wording
 // The pages are the baseline's own: `npm run baseline` writes the checkpoint's
 // content/routes.json beside its out/ (.tmp/baseline/checkpoint-001/routes.json).
+//
+// The only exceptions are the changes the owner asked for, each listed with the owner's
+// words in tests/wording/owner-approved.json and applied to the wording baseline before it
+// is compared (applyApprovedChanges in scripts/lib/wording.mjs): an entry that is no longer
+// used, or that would reach more than its own text node, fails the check.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRemovedPath } from "../config/site-structure.mjs";
-import { extractPlaceholders, extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
+import { applyApprovedChanges, extractPlaceholders, extractWording, isOrderedSubsequence } from "./lib/wording.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const NOT_FOUND = "/404/";
 const CHECKS = [
-  { name: "Wording", file: path.join(root, "tests", "wording", "checkpoint-001.json"), extract: extractWording, what: "wording", ok: "still say everything they said" },
+  {
+    name: "Wording", file: path.join(root, "tests", "wording", "checkpoint-001.json"), extract: extractWording, what: "wording", ok: "still say everything they said",
+    approved: path.join(root, "tests", "wording", "owner-approved.json")
+  },
   { name: "Placeholders", file: path.join(root, "tests", "wording", "checkpoint-001-placeholders.json"), extract: extractPlaceholders, what: "placeholders", ok: "still have every placeholder they had" }
 ];
 
@@ -80,7 +88,19 @@ if (!fs.existsSync(outDir)) {
 }
 let failed = false;
 for (const check of CHECKS) {
-  const baseline = JSON.parse(fs.readFileSync(check.file, "utf8"));
+  let baseline = JSON.parse(fs.readFileSync(check.file, "utf8"));
+  let approvedNote = "";
+  if (check.approved) {
+    const { changes } = JSON.parse(fs.readFileSync(check.approved, "utf8"));
+    const applied = applyApprovedChanges(baseline, changes, (route) => !isRemovedPath(route));
+    if (applied.problems.length) {
+      failed = true;
+      console.error(`${check.name} check failed: ${relative(check.approved)} doesn't fit checkpoint-001.\n  ${applied.problems.join("\n  ")}`);
+      continue;
+    }
+    baseline = applied.baseline;
+    approvedNote = ` (with the ${changes.length} owner-approved changes in ${relative(check.approved)})`;
+  }
   const failures = [];
   let checked = 0;
   for (const [route, expected] of Object.entries(baseline)) {
@@ -101,7 +121,7 @@ for (const check of CHECKS) {
     failed = true;
     console.error(`${check.name} check failed: ${failures.length} page(s) changed ${check.what} from checkpoint-001.\n  ${failures.join("\n  ")}`);
   } else {
-    console.log(`${check.name} OK: ${checked} pages ${check.ok} at checkpoint-001.`);
+    console.log(`${check.name} OK: ${checked} pages ${check.ok} at checkpoint-001${approvedNote}.`);
   }
 }
 if (failed) process.exit(1);

@@ -8,6 +8,9 @@
 // compares only the part above the reference page's footer widgets — for
 // structure work, where the menu and footer links change on purpose.
 //
+// --crop-footer compares only the part above the reference page's footer widgets,
+// hiding nothing (the header is compared) — for work that changes the footer alone.
+//
 // A page that is new (404 on REF, 200 on NEXT) is listed as "no reference" and
 // left out of the worst mismatch; a page that is 404 on both sides is compared.
 //
@@ -23,6 +26,7 @@ const NEXT = process.env.NEXT ?? "http://localhost:3100";
 const OUT = path.resolve(".tmp/visual");
 const args = process.argv.slice(2);
 const MASK_NAV = args.includes("--mask-nav");
+const CROP_FOOTER = MASK_NAV || args.includes("--crop-footer");
 const pageArgs = args.filter((arg) => !arg.startsWith("--"));
 const NAV_SELECTORS = ["header.site-header", ".mobile-menu-wrap", "#genesis-footer-widgets"];
 // Each container and everything in it: a descendant with its own `visibility: visible` (an
@@ -71,8 +75,8 @@ async function capture(page, url) {
   // Third-party embeds and the feed thumbnails render differently per load.
   await page.addStyleTag({ content: "iframe{visibility:hidden!important}" });
   let footerTop = null;
-  if (MASK_NAV) {
-    await page.addStyleTag({ content: NAV_MASK });
+  if (MASK_NAV) await page.addStyleTag({ content: NAV_MASK });
+  if (CROP_FOOTER) {
     // Where the footer widgets start, in page coordinates (null if the page has none).
     footerTop = await page.evaluate(() => {
       const footer = document.querySelector("#genesis-footer-widgets");
@@ -122,8 +126,8 @@ for (const [vpName, viewport] of Object.entries(VIEWPORTS)) {
     for (let attempt = 0; attempt < 3 && !(best && best.ratio < 0.0005); attempt++) {
       const refShot = await capture(page, REF + p);
       const nextShot = await capture(page, NEXT + p);
-      // With --mask-nav both sides stop where the reference page's footer widgets start.
-      const clip = MASK_NAV ? refShot.footerTop : null;
+      // With --mask-nav or --crop-footer both sides stop where the reference page's footer widgets start.
+      const clip = CROP_FOOTER ? refShot.footerTop : null;
       const ref = cropTo(refShot.png, clip);
       const next = cropTo(nextShot.png, clip);
       const result = { ref, next, ...compare(ref, next) };

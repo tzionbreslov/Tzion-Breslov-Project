@@ -4,6 +4,7 @@ import { stripRemovedUrls } from "@/config/site-structure.mjs";
 import { renderNavigation, rewriteLinks } from "@/lib/navigation.mjs";
 import { expandTokens } from "@/lib/youtube-feed";
 import { insertContactMap } from "@/lib/pages/contact-map";
+import { editArticleAuthor, editFooterCredit } from "@/lib/pages/edits.mjs";
 import { rebaseCss, rebaseHtml, withBase } from "@/lib/base-path";
 import { SITE_URL, toSiteUrl } from "@/lib/site-url";
 import { Enhancers } from "@/components/enhancers";
@@ -72,7 +73,8 @@ export function SiteDocument({ page, children }: { page: PageContent; children: 
       <head>
         <meta charSet="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        {page.head.map(headItem)}
+        {/* The Parasha articles name Tzion Breslov as their author (owner, 2026-11-08: lib/pages/edits.mjs). */}
+        {editArticleAuthor(page.head).map(headItem)}
       </head>
       <body className={page.bodyClass} suppressHydrationWarning>
         {children}
@@ -91,7 +93,8 @@ export function SiteBody({ page }: { page: PageContent }) {
     page.skipLinks && readShared(page.skipLinks),
     page.header && renderNavigation(readShared(page.header), currentPath),
     rewriteLinks(expandTokens(main)),
-    page.footer && renderNavigation(readShared(page.footer), currentPath),
+    // Every footer's last line reads "© 2026 Tzion Breslov" (owner, 2026-11-08: lib/pages/edits.mjs).
+    page.footer && renderNavigation(editFooterCredit(readShared(page.footer)), currentPath),
     page.footerExtra
   ].filter(Boolean).join("");
   const rebased = rebaseHtml(html);

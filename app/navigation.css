@@ -126,6 +126,33 @@
 .mobile-menu .tz-sub-menu > .menu-item:last-child { margin-bottom: 0; }
 
 /* ------------------------------------------------------------ Footer Quick Links */
+/* Side by side, so the footer is shorter (owner, 2026-11-08): two columns, read down the first, then the second, in
+ * the menu's order; Resources stays in one column with its two pages. A column is never narrower than the list's
+ * widest word, "Resources" (82.4px; 84px in Chromium on Linux), so no label overflows or breaks mid-word: where the
+ * list has no room for two such columns (176px) it stays one. The gap is small (6px); the labels are short and
+ * left-aligned, so the second column still starts well clear of the first's words. Only the layout changes: the
+ * links keep the theme's look (e2e/navigation.spec.ts). */
+.footer-widgets #menu-mobile-menu-1 { column-count: 2; column-width: 8.5rem; column-gap: .6rem; }
+.footer-widgets #menu-mobile-menu-1 > li { break-inside: avoid; }
+/* Room for the two columns in the four-column footer (from 960px). The import gives the Quick Links column 16% (an
+ * inline flex-basis), only 129-177px below about 1280px. These bases give it 19.2rem instead until 16% is wider
+ * (about 1325px), and take the room from the sign-up column (40%). Below about 1020px the sign-up column keeps a
+ * 32rem basis, so that its "Find out about what's happening" line (283px; 284px on Linux) and its Submit button
+ * (141-142px, in half the form) still fit on one line each; the rest comes from the contact column there. Measured
+ * widths, Windows and Linux alike: the list 179.6-183.1px from 960px to 1320px, the sign-up column at least 299px,
+ * the contact column at least 185px. From about 1325px the bases are the import's own (16%, 40%, 26%), so nothing
+ * changes there. Browsers without :has() keep the import's widths, and one column below about 1280px. */
+@media only screen and (min-width: 960px) {
+  .footer-widgets .wp-block-columns {
+    --tz-quick-links: max(16%, 19.2rem);
+    --tz-sign-up: max(56% - var(--tz-quick-links), 32rem);
+  }
+  .footer-widgets .wp-block-column:has(#menu-mobile-menu-1) { flex-basis: var(--tz-quick-links) !important; }
+  .footer-widgets .wp-block-column:has([data-tz-form="signup"]) { flex-basis: var(--tz-sign-up) !important; }
+  .footer-widgets .wp-block-column:has(a[href^="mailto:"]) {
+    flex-basis: calc(82% - var(--tz-quick-links) - var(--tz-sign-up)) !important;
+  }
+}
 /* Resources heads its two pages, styled like the links around it. */
 .footer-widgets .tz-menu-group > .tz-menu-group-label {
   display: block;
