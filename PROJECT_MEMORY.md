@@ -56,7 +56,7 @@
     the number is available to the elderly human."
   - The owner's choices (2026-11-08/09):
     - **The look:** Option A. The phone and email are partly covered, with "Show" buttons. "when one is virified,
-      they all show". They stay shown for the rest of the visit.
+      they all show".
     - **Hidden in:** the footer of every page, the Contact page cards, the privacy notice, the "Live Speaking
       Engagements" paragraph on Classes and Articles, and the article "Parshas Toldos" (Nov 5–6, 2021).
     - **Kept written out:** the Events messages and the forms' error messages (the email). The Contact page's
@@ -68,7 +68,7 @@
   - **Controller's calls, approved with the design (2026-11-09):**
     - the check is Cloudflare Turnstile, verified by the forms Worker (usually invisible, never a puzzle);
     - the new number lives only in the Worker's private settings, set on switch day;
-    - the details stay shown for the rest of the visit;
+    - the details stay shown for the rest of the visit (the owner answered "approve" on 2026-11-08);
     - the Donate page's "email us" notice keeps the email written out;
     - the rest are listed in the design's "Controller's calls".
 

@@ -137,7 +137,7 @@ These edits are approved. The privacy notice as a whole, with its "Last updated"
 The reveal sends the visitor's IP address to the forms service and Turnstile. It keeps the same short-lived,
 scrambled rate-limit records the forms keep, and nothing else. It writes **no** request-log row (controller's call),
 so the "log of contact and sign-up requests" stays accurate. The browser keeps the revealed details for the tab.
-Proposed edits, before → after:
+The edits, before → after:
 
 1. **What you send us.**
    - Before: "Our forms service also receives your IP address with every form you send, when you open the link in a
@@ -223,7 +223,7 @@ Proposed edits, before → after:
 - **Privacy notice:** the controller may propose edits to existing sentences. They were approved together with the
   new wording (2026-11-09).
 - **Approved with the design (2026-11-09):** the controller's proposals below, and keeping the details shown for the
-  visit. The owner answered "approve" to that playback on 2026-11-08.
+  visit. The owner answered "approve" to the controller's summary of it on 2026-11-08.
 
 ## Controller's calls (the owner can overrule)
 - **Turnstile through the existing Worker,** rather than any client-only trick, since only a server check stops a
