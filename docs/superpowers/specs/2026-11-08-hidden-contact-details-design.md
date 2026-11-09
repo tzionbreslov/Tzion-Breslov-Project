@@ -1,7 +1,8 @@
 # Hidden contact details: design (2026-11-08)
 
 Status: **approved by the owner on 2026-11-09** ("approve and record choices"), including the proposed wording and
-the privacy edits. Implementation plan: `docs/superpowers/plans/2026-11-09-hidden-contact-details.md`.
+the privacy edits. Implementation plan: `docs/superpowers/plans/2026-11-09-hidden-contact-details.md` (added with the
+implementation pull request).
 
 **This document must never contain the new phone number.** The repository is public, and the owner chose to keep the
 number out of GitHub.
@@ -21,11 +22,11 @@ service's private settings.
 
 ## Goals
 1. The real phone number, the WhatsApp link and the email address are in no file the site serves for the places in
-   scope: HTML, scripts, JSON, flight data, CSS, sitemap, structured data. The only exceptions are the sentences the
-   owner chose to keep (see "Where").
+   scope: HTML, scripts, JSON, flight data, CSS, sitemap, structured data. The exceptions are the sentences kept
+   written out (see "Where"). Scripts are narrowed further under "Found while planning".
 2. One tap on any "Show" button runs one human check. When it passes, **all** the details on the page appear at
    once: the phone (tap to call), the WhatsApp icon (opens a chat) and the email (tap to write). Owner: "when one is
-   verified, they all show."
+   virified [sic], they all show."
 3. The check is Cloudflare Turnstile, verified by the forms service (the Worker) on the server. It is usually
    invisible, at most a "Verify you are human" box to tick, and never a puzzle.
 4. It works for older visitors: the covered details still look like a phone number and an email, the buttons are
@@ -86,7 +87,7 @@ here.
   - **The Contact page's link-preview text** (`og:description` in `content/pages/contact.json`: "Questions? Comments?
     Try Us! (+972) 54-671-3013 tzionbreslovproject@gmail.com Beit Shemesh, Israel"). The owner said "leave as is"
     (2026-11-09), so it keeps the old number and the email. The `out/` guard needs an explicit exception for this
-    one tag.
+    one tag. It must match the tag as built, not this quote: the source has a non-breaking space before "Beit".
 - The builder confirms that nothing else shows the phone or the email. A builder check found the speaking paragraph,
   the Donate notice and the `og:description`; the guard must search for the plain text as well as links.
 
@@ -117,10 +118,10 @@ here.
 - **The check fails, or the Worker can't be reached:** the button comes back with a short message near it, and the
   visitor can try again.
 - **Rate-limited:** a short "try again in a minute" message.
-- **Existing wording:** reuse any existing form message that says the same thing (owner rule). New text is listed
-  below for approval.
+- **Existing wording:** reuse any existing form message that says the same thing (owner rule). The new text is
+  listed below.
 
-## New wording to approve (proposed; the owner approves or rewords)
+## New wording (approved by the owner on 2026-11-09)
 - **Buttons:** "Show number" and "Show email".
   - Their accessible names begin with the visible label, so voice control works (WCAG 2.5.3): "Show number (phone
     and WhatsApp)" and "Show email address".
@@ -129,7 +130,10 @@ here.
 - **If rate-limited:** "Too many tries. Please wait a minute and try again."
 - **The WhatsApp icon's accessible name:** "WhatsApp".
 
-## Privacy notice: proposed edits (the owner approves them with the rest of the notice)
+## Privacy notice edits (approved by the owner on 2026-11-09)
+These edits are approved. The privacy notice as a whole, with its "Last updated" date, is still open owner decision
+1 in PROJECT_MEMORY.md, to be approved before launch.
+
 The reveal sends the visitor's IP address to the forms service and Turnstile. It keeps the same short-lived,
 scrambled rate-limit records the forms keep, and nothing else. It writes **no** request-log row (controller's call),
 so the "log of contact and sign-up requests" stays accurate. The browser keeps the revealed details for the tab.
@@ -180,8 +184,9 @@ Proposed edits, before → after:
   - at step 11, once the forms are on, that the reveal returns the details on tzionbreslov.org.
 - The owner gives the number privately at that point. It goes only into `.env.worker` (git-ignored) or straight into
   `wrangler secret put`.
-- Until then the site shows the covered new number. The old number "(+972) 54-671-3013" leaves the site with this
-  change (owner: replace it).
+- Until then the site shows the covered new number. With this change the old number "(+972) 54-671-3013" leaves
+  every page's visible text (owner: replace it). It stays only in the Contact page's link-preview text, which the owner
+  said to "leave as is".
 
 ## Constraints
 - **Public repository:** the new number never appears in any commit, file, PR title, body or comment, test fixture
@@ -189,9 +194,9 @@ Proposed edits, before → after:
   - Tests use a fake number (e.g. a 555-01xx number).
   - Before every push and PR, a grep proves the real number is absent (the controller supplies the pattern
     privately).
-- **Owner wording rule:** text changes only as approved here, through the narrow owner-approved allow-list in the
-  wording check, which owner edits e1 is adding. `tests/wording/checkpoint-001.json` is never touched.
-- **Privacy notice:** pending the owner's approval; the new clause is part of that approval.
+- **Owner wording rule:** text changes only as approved here, through the narrow owner-approved allow-list
+  `tests/wording/owner-approved.json` (README → Wording check). `tests/wording/checkpoint-001.json` is never touched.
+- **Privacy notice:** the edits above are approved. The whole notice is still open owner decision 1.
 - **CSP:** Turnstile and the API are already allowed. `tel:`, `mailto:` and `wa.me` are links, not loaded resources.
   `node scripts/check-csp.mjs` stays green.
 - **Accessibility:**
@@ -204,18 +209,21 @@ Proposed edits, before → after:
 
 ## Decided by the owner
 - **The look:** Option A, partly covered with "Show" buttons.
-- **Reveal all at once:** "when one is verified, they all show".
-- **Where it's hidden:** the footer, the Contact page and the privacy notice; the Events and form messages keep the
-  email written out.
-- **The new phone number:** "(+1) …" format, tap to call plus a WhatsApp icon, and never in GitHub.
-- **Persistence:** the details stay shown for the visit. The owner approved this playback.
-
-- **Speaking paragraph** on Classes and Articles: hidden too (2026-11-09).
-- **The article "Parshas Toldos" (/parshas-toldos-nov-5-6-2021/):** its "Please email us at
-  TzionBreslovProject@gmail.com." is hidden the same way, as "Tzion••••••@gmail.com" with "Show email" (2026-11-09).
-- **The Contact page's link-preview text:** "leave as is" (2026-11-09).
-- **Privacy notice:** the controller may propose edits to existing sentences, approved together with the new
-  wording (2026-11-09).
+- **Reveal all at once:** "when one is virified [sic], they all show".
+- **Where it's hidden:**
+  - the footer, the Contact page and the privacy notice (2026-11-08);
+  - the speaking paragraph on Classes and Articles (2026-11-09);
+  - the article "Parshas Toldos" (/parshas-toldos-nov-5-6-2021/): its "Please email us at
+    TzionBreslovProject@gmail.com." is covered the same way, as "Tzion••••••@gmail.com" with "Show email"
+    (2026-11-09).
+- **Kept written out:** the Events and form messages keep the email (2026-11-08). The Contact page's link-preview
+  text: "leave as is" (2026-11-09).
+- **The new phone number:** "(+1) …" format, tap to call plus a WhatsApp icon. "Keep it out of GitHub" (2026-11-08).
+  Storing it only in the Worker's private settings is how the design meets that.
+- **Privacy notice:** the controller may propose edits to existing sentences. They were approved together with the
+  new wording (2026-11-09).
+- **Approved with the design (2026-11-09):** the controller's proposals below, and keeping the details shown for the
+  visit. The owner answered "approve" to that playback on 2026-11-08.
 
 ## Controller's calls (the owner can overrule)
 - **Turnstile through the existing Worker,** rather than any client-only trick, since only a server check stops a
@@ -239,7 +247,7 @@ Proposed edits, before → after:
 - **The wording check doesn't cover every page.** It reads only the pages that existed at checkpoint-001. It covers
   the footer and the Contact cards (through the owner-approved list), but not /privacy/, /classes/ or /articles/; their
   tests hold those texts.
-- **The switch-day check comes later than planned.** A real reveal works only on tzionbreslov.org with the forms on
+- **The live check of the reveal waits for step 11 on switch day.** A real reveal works only on tzionbreslov.org with the forms on
   (switch day, step 10). Step 4 can only check that the endpoint answers; the real check is step 11.
 
 ## Left to the builder

@@ -61,11 +61,16 @@
       Engagements" paragraph on Classes and Articles, and the article "Parshas Toldos" (Nov 5–6, 2021).
     - **Kept written out:** the Events messages and the forms' error messages (the email). The Contact page's
       link-preview text: "leave as is".
-    - **The new phone number,** "(+1) …" format, tap to call plus a WhatsApp icon. It is never in the public
-      repository: it lives only in the forms Worker's private settings and is set on switch day.
-    - **The check:** Cloudflare Turnstile, verified by the forms Worker (usually invisible, never a puzzle).
+    - **The new phone number:** "(+1) …" format, tap to call plus a WhatsApp icon. "Keep it out of GitHub": it is in
+      no commit, file or pull request.
     - **Wording and privacy:** the proposed wording (buttons, states) and the privacy notice edits are approved as in
-      the design.
+      the design. The notice as a whole is still open decision 1.
+  - **Controller's calls, approved with the design (2026-11-09):**
+    - the check is Cloudflare Turnstile, verified by the forms Worker (usually invisible, never a puzzle);
+    - the new number lives only in the Worker's private settings, set on switch day;
+    - the details stay shown for the rest of the visit;
+    - the Donate page's "email us" notice keeps the email written out;
+    - the rest are listed in the design's "Controller's calls".
 
 ## Cloudflare state (2026-11-06)
 
