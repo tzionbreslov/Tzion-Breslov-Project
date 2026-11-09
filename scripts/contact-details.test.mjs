@@ -181,6 +181,7 @@ test("the Contact page's phone and email cards are covered the same way, in the 
   }
   assert.throws(() => editContactCards(editContactCards(main, { formsOn: false }), { formsOn: false }), /marker not found: contact phone card/);
   assert.throws(() => editContactCards(main.replace(`<a href="mailto:${EMAIL}">`, '<a href="mailto:x@example.com">'), { formsOn: false }), /marker not found: contact email card/);
+  assert.throws(() => editContactCards(main + main, { formsOn: false }), /marker not unique: contact phone card/);
 });
 
 test("the speaking paragraph keeps \"please email us at\", its email covered in bold, with no mailto", () => {
@@ -199,6 +200,8 @@ test("the speaking paragraph keeps \"please email us at\", its email covered in 
     assert.equal(slot.find("button").length, formsOn ? 1 : 0);
   }
   assert.throws(() => editSpeakingEmail(editSpeakingEmail(main, { formsOn: false }), { formsOn: false }), /marker not found: speaking email/);
+  assert.throws(() => editSpeakingEmail(main.replace(`mailto:${EMAIL}`, "mailto:x@example.com"), { formsOn: false }), /marker not found: speaking email/);
+  assert.throws(() => editSpeakingEmail(main + main, { formsOn: false }), /marker not unique: speaking email/);
 });
 
 test("the article \"Parshas Toldos\" reads \"Please email us at Tzion••••••@gmail.com.\" with no address left", () => {
