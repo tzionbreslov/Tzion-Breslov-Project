@@ -144,7 +144,37 @@ async function open(page: Page, path: string) {
 const showButton = (scope: Locator, kind: "phone" | "email") =>
   scope.getByRole("button", { name: kind === "phone" ? TEXT.showNumberName : TEXT.showEmailName, exact: true });
 
+/**
+ * Waits until nothing around `target` is still lifted by the theme's entrance animation. The Contact page's form and
+ * cards row is `.animate` (global.js): GSAP sets each column to y: 45 and eases it to 0 over 2 s (expo, 0.25 s apart,
+ * once it scrolls into view), and the last part of that moves by fractions of a pixel, longer than
+ * scrollIntoViewAndSettle's 120 frames on a slow machine (CI). So first every ancestor's transform must have no
+ * vertical offset left (the target's own may move: the theme's
+ * `button:focus, button:hover` rule lifts every button by 0.3em).
+ */
+async function untilPlaced(target: Locator) {
+  await target.scrollIntoViewIfNeeded();
+  await target.evaluate((node) => new Promise<void>((resolve, reject) => {
+    const started = performance.now();
+    const lifted = () => {
+      for (let el = node.parentElement; el; el = el.parentElement) {
+        const transform = getComputedStyle(el).transform;
+        if (transform !== "none" && new DOMMatrixReadOnly(transform).m42 !== 0) return el;
+      }
+      return null;
+    };
+    const tick = () => {
+      const el = lifted();
+      if (!el) return resolve();
+      if (performance.now() - started > 15_000) return reject(new Error(`untilPlaced: ${el.className} is still lifted after 15 s`));
+      requestAnimationFrame(tick);
+    };
+    tick();
+  }));
+}
+
 async function tap(button: Locator) {
+  await untilPlaced(button);
   await scrollIntoViewAndSettle(button);
   await button.click();
 }
@@ -306,6 +336,7 @@ test.describe("with the forms API (TZ_E2E_EVENTS=1)", () => {
     });
     await open(page, "/contact/");
     const phone = showButton(page.locator(".box-shadow"), "phone");
+    await untilPlaced(phone);
     await scrollIntoViewAndSettle(phone);
     await phone.dblclick();
     // While it runs: the tapped button says Checking…, every button is disabled, and another tap does nothing.
