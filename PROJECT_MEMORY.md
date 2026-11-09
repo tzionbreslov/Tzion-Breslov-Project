@@ -49,7 +49,9 @@
   - Wording the owner changes is listed, with the owner's words, in `tests/wording/owner-approved.json` (README →
     Wording check); checkpoint-001's baseline stays as it is.
 - 2026-11-09 — **Hidden contact details: design approved** ("approve and record choices"):
-  `docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md`. Not built yet.
+  `docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md`; plan
+  `docs/superpowers/plans/2026-11-09-hidden-contact-details.md` (owner: "approved, begin"). Built and tested on
+  2026-11-09, **not deployed** (Status).
   - The owner's words: "conceal the phone number to check if the person requesting it is human or a bot. should be
     challenging enough that a bot can't figure it out. this would apply to the whatsapp icon as well and the email
     address." And: "we want to avoid spam calls, e-mails, and whatsapp messages, while still making it obvious that
@@ -202,6 +204,24 @@
   390 (was 1214); the Classes header shows the handle alone, with no video count; the 18 articles name Tzion Breslov
   as author in their page data; the theme stylesheet's header names no author. The new phone number and WhatsApp wait
   for the contact-hiding feature.
+- Hidden contact details (2026-11-09, one pull request; built and tested, **not deployed**: the Worker change ships
+  with the RSVP release at switch day, step 4, and the number is set at step 3):
+  - The phone number and email address show partly covered, "(+1) 347-•••-••••" and "tzion••••••@gmail.com", in every
+    footer, the Contact page's phone and email cards, the privacy notice's "write to", the "Live Speaking Engagements"
+    paragraph (/classes/, /articles/, /articles/page/2/) and the article "Parshas Toldos" ("Tzion••••••@gmail.com").
+    The old number "(+972) 54-671-3013" is left only in the Contact page's link-preview text (owner: "leave as is").
+  - With the forms on (switch day, step 10), each has a "Show" button: one Turnstile check (compact, action
+    `contact-details`), then the Worker's `POST /v1/contact-details` answers with the details and every covered place
+    on the page fills at once: the phone as a tap-to-call link with the WhatsApp icon, the email as a mailto link.
+    They are kept in `sessionStorage` for the tab. Without the forms, or without JavaScript, the details stay covered
+    with no button.
+  - The Worker: 10 requests per IP in 10 minutes (the forms' hashed buckets), no request-log row; the number is the
+    new secret `CONTACT_PHONE` (never in the repository; tests use a fake 555 number), the email the variable
+    `PUBLIC_CONTACT_EMAIL`.
+  - The privacy notice has the owner-approved edits 1–6, and its date is now November 9, 2026.
+  - Guards: `npm run check:static-export` fails on the old number, the address or a mailto:/tel:/wa.me link in any
+    page or RSC payload, except the Contact link-preview text and the Events page's kept lines; the wording list
+    (`tests/wording/owner-approved.json`) holds the three changes, with per-route counts.
 - **Site structure phase 1 is complete on the preview** (2026-11-07, Task 11). Everything in the design except
   translations is merged and live on the github.io preview. The live-service steps wait for the owner: README →
   Switch day is the one ordered runbook (pre-checks, D1 migration 0002, the Resend topic + secret, the Worker deploy,
@@ -277,8 +297,8 @@
     9. Donate: "Manage your monthly donation" → https://www.paypal.com/myaccount/autopay/ in a new tab.
 - WordPress reference content verified identical to live (text, images, links) on all 57 pages
   (`scripts/compare-live.mjs`).
-- Worker: 93 tests pass (`npm run test:worker` on 2026-11-08 at checkpoint-027 reports "93 passed (93)"; the
-  undeployed RSVP release and Group 6 included; 34 when it was first deployed). Deployed and smoke-tested live
+- Worker: 102 tests pass (`npm run test:worker` on 2026-11-09 with the contact details reports "102 passed (102)";
+  93 at checkpoint-027; the undeployed RSVP release and Group 6 included; 34 when it was first deployed). Deployed and smoke-tested live
   (health/D1, CORS, Turnstile, confirm redirect, webhook signature). A real email has not been sent yet (needs a
   Turnstile token from tzionbreslov.org, i.e. switch day).
 - Resend (owner's account): domain tzionbreslov.org verified; topic "Newsletter" 934b4bcd-a4a7-43ce-9310-8fac1cc4541c
@@ -302,8 +322,9 @@
 
 ## Owner decisions still open
 
-1. **Privacy text:** read and approve `/privacy/` before launch, i.e. before switch day, step 10. Approve with it the
-   four new sentences on Events (`content/copy/en.json`):
+1. **Privacy text:** read and approve `/privacy/` before launch, i.e. before switch day, step 10. Its "Last updated"
+   date is November 9, 2026, the day the contact-details edits were made; the owner approves the final date with the
+   text. Approve with it the four new sentences on Events (`content/copy/en.json`):
    - "To RSVP, email us at tzionbreslovproject@gmail.com." (no JavaScript)
    - "To get event announcements, email us at tzionbreslovproject@gmail.com." (no JavaScript)
    - "Sorry — only {remaining} places are left. Lower the number of guests, or email us at

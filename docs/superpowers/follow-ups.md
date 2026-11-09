@@ -52,6 +52,11 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
 - **`scripts/lib/youtube-feed.mjs` (`extractText`) escapes the tag name for a RegExp inline**, a third copy of
   `escapeRegExp` (found 2026-11-08, Group 4). Left as it is: it is a dependency-free parser for `sync:youtube`, and
   sharing the helper would make it import `config/site-structure.mjs` (and `site-url.mjs`) for one line.
+- **`lib/client/forms.ts` leaves Turnstile's load failure unobserved** (found 2026-11-09, hidden contact details).
+  With the forms on, the footer sign-up mounts Turnstile at once and reads its `ready` promise only on submit, so when
+  the Turnstile script can't load (blocked, offline), the page reports an uncaught `TURNSTILE_LOAD_FAILED`. Nothing
+  breaks: a submit then shows the failed message. `e2e/contact-details.spec.ts` (the script-load test) filters that one
+  error. A fix would observe it where it is mounted (`mountTurnstile` or `enhance`).
 
 ## Events and calendar
 

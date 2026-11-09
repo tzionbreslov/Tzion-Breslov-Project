@@ -61,6 +61,9 @@ WordPress backup (.wpress, private, not in git)
   React only adds the interactive pieces in `components/enhancers.tsx`:
   - the Resources dropdown in the header menus → `lib/client/menu.ts`
   - contact + footer signup forms → `lib/client/forms.ts` → Worker API (`lib/api-contract.ts`)
+  - the covered contact details' "Show number" / "Show email" → `lib/client/contact-details.ts` (one Turnstile check,
+    then `POST /v1/contact-details` fills every covered phone and email on the page, kept for the tab; see Editing
+    content)
   - Events page RSVPs (button per event, "This event is full", the RSVP form in `lib/client/dialog.ts`) →
     `lib/client/rsvp.ts`, and its "Get event announcements" signup → `lib/client/announcements.ts`; both send
     through `lib/client/submit.ts` like the other forms
@@ -169,6 +172,19 @@ fails the build if what it changes is missing or repeated, so editing those plac
 edit too. The importer copies the theme's `style.css` without its header's author lines
 (`scripts/lib/theme-header.mjs`).
 
+The phone number and email address are covered the same way (owner, 2026-11-08/09:
+`docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md`). `lib/contact-details.mjs` shows them as
+"(+1) 347-•••-••••" and "tzion••••••@gmail.com" in every footer, the Contact page's phone and email cards, the "Live
+Speaking Engagements" paragraph (/classes/, /articles/), the article "Parshas Toldos" and the privacy notice's "write
+to". With the forms on, each has a "Show" button: one Turnstile check, and the forms Worker's
+`POST /v1/contact-details` answers with the details, which fill every covered place on the page (the phone with a
+WhatsApp link) and are kept for the tab (`sessionStorage`). The new number is only in the Worker's secret
+`CONTACT_PHONE`, never in this repository; the tests use a fake 555 number. The old number "(+972) 54-671-3013"
+stays only in the Contact page's link-preview text (owner: "leave as is"), and the email stays written out in the
+Events messages, the forms' "temporarily unavailable" messages and the Donate notice. `npm run check:static-export`
+fails on any other mailto:, tel: or wa.me link, the old number or the address in a page or its RSC payloads
+(`contactDetailsProblems` in `scripts/lib/export-guard.mjs`).
+
 ## Wording check
 
 `npm run check:wording` (part of `npm run check`) holds every page to what it said at checkpoint-001: the same text,
@@ -178,9 +194,14 @@ in the same order, with new text allowed in between (`tests/wording/checkpoint-0
 The only exceptions are the changes the owner asked for, in `tests/wording/owner-approved.json`. Each entry gives its
 routes, the exact checkpoint-001 text node, its new text (or `null` when it is removed), the date and the owner's own
 words. The check applies them to the baseline before comparing, and fails on an entry that is no longer used, that
-would reach a second node on a route, or that has no date or owner's words. **Add an entry only with the owner's
-words.** A summary of an answer the owner gave to a question may sit beside them, labelled as the controller's
-summary, never as the owner's words. Today it holds the footer's credit line (2026-11-08).
+would reach a second node on a route, or that has no date or owner's words. An entry that changes the same text twice
+on one route says so in `counts` (`{"/contact/": 2}`), and must then match exactly that many nodes there. **Add an
+entry only with the owner's words.** A summary of an answer the owner gave to a question may sit beside them,
+labelled as the controller's summary, never as the owner's words. Today it holds the footer's credit line
+(2026-11-08) and the covered contact details (2026-11-09): the email address and the old phone number on every page
+(twice on /contact/, its card and its footer) and the article "Parshas Toldos"'s closing line. /privacy/, /classes/
+and /articles/ are not in the baseline; their tests hold their text (`e2e/privacy.spec.ts`,
+`e2e/contact-details.spec.ts`).
 
 ## Configuration (GitHub → Settings → Secrets and variables → Actions → **Variables**)
 
@@ -260,7 +281,7 @@ owner's go-ahead.
 
 1. **Bundle check:** `npx wrangler deploy --dry-run --outdir .tmp/worker-dry-run` bundles the Worker (with
    `lib/events.mjs` and its `content/copy/en.json` import) and checks `wrangler.jsonc`. It uploads nothing.
-   *Verify:* it lists the bindings (D1 `DB` and seven variables, `EVENTS_FEED_URL` among them) and ends with
+   *Verify:* it lists the bindings (D1 `DB` and eight variables, `EVENTS_FEED_URL` and `PUBLIC_CONTACT_EMAIL` among them) and ends with
    `--dry-run: exiting now.`
 2. **Worker version:** `npx wrangler deployments list`. Record the newest version id in the pull request ("before
    switch day").
@@ -322,14 +343,16 @@ from `rsvps`. *Owner's go-ahead.*
 - or `npx wrangler d1 time-travel restore tzion-breslov-production --bookmark=<bookmark>`. This restores the whole
   database to the bookmark and loses every contact, signup and RSVP row written since.
 
-#### 3. Resend: the "Event announcements" list
+#### 3. Resend: the "Event announcements" list, and the contact phone
 
 *Changes:*
 - Resend gains the topic "Event announcements". Its default is opt-out, so nobody is on it until they confirm, and
   that can't be changed later.
-- `.env.worker` gains `RESEND_EVENTS_TOPIC_ID`.
-- The Worker gets it as its 9th secret. `wrangler secret put` deploys a new Worker version at once: today's code
-  plus the secret, which that code ignores.
+- `.env.worker` gains `RESEND_EVENTS_TOPIC_ID` and `CONTACT_PHONE`, the new phone number the covered contact
+  details reveal (owner: "Keep it out of GitHub": it is only ever in `.env.worker`, which is git-ignored, and in
+  Cloudflare).
+- The Worker gets them as its 9th and 10th secrets. Each `wrangler secret put` deploys a new Worker version at once:
+  today's code plus the secret, which that code ignores.
 
 *Owner's go-ahead.*
 
@@ -342,14 +365,15 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
     `node -e "const fs = require('fs'); const vars = f => new Map(fs.readFileSync(f, 'utf8').split(/\r?\n/).map(l => l.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)/)).filter(Boolean).map(m => [m[1], m[2].trim()])); const a = vars('.env.worker'), b = vars('.env.worker.bak'); const show = x => x.join(' ') || '(none)'; console.log('only in .env.worker:', show([...a.keys()].filter(n => b.has(n) === false))); console.log('only in .env.worker.bak:', show([...b.keys()].filter(n => a.has(n) === false))); console.log('value changed:', show([...a.keys()].filter(n => b.has(n) && (a.get(n) === b.get(n)) === false))); console.log(fs.readFileSync('.env.worker').equals(fs.readFileSync('.env.worker.bak')) ? 'identical' : 'different')"`
   - **`identical`:** keep the backup.
   - **`different`, with `value changed: (none)`, `only in .env.worker.bak: (none)`, and nothing under "only in
-    .env.worker" but `RESEND_EVENTS_TOPIC_ID` (or nothing at all):** keep it. No variable was added, removed or
-    changed since that backup, apart from the line the earlier try at 3.1 wrote, so it is the older, clean copy.
+    .env.worker" but `RESEND_EVENTS_TOPIC_ID` or `CONTACT_PHONE` (or nothing at all):** keep it. No variable was
+    added, removed or changed since that backup, apart from the lines the earlier try at 3.1 and 3.3 wrote, so it is
+    the older, clean copy.
   - **Otherwise** (any name under `value changed`, e.g. a rotated key; any name under "only in .env.worker.bak"; any
     other name under "only in .env.worker"; or you can't tell): `.env.worker` was changed since that backup, on
     purpose or by an earlier try, and the check can't tell which. Treat the backup as stale: restoring it could bring
     an old value back. Delete it and take a fresh copy:
-    1. If the comparison listed `RESEND_EVENTS_TOPIC_ID` under "only in .env.worker", remove that line from
-       `.env.worker` by hand (in an editor, never printed). 3.1 writes it again.
+    1. If the comparison listed `RESEND_EVENTS_TOPIC_ID` or `CONTACT_PHONE` under "only in .env.worker", remove
+       that line from `.env.worker` by hand (in an editor, never printed). 3.1 and 3.3 write them again.
     2. `node -e "require('fs').rmSync('.env.worker.bak')"` (both shells).
     3. The copy line above again. It must not stop with `EEXIST` this time.
 - `git check-ignore -v .env.worker.bak` must print `.gitignore:3:.env.*` and the file name: the backup is
@@ -381,15 +405,26 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
      webhooks. Don't follow the message's advice on switch day: a new webhook means a new secret for the Worker. The
      owner decides first.
 2. `npx wrangler secret put RESEND_EVENTS_TOPIC_ID`, and paste the `<topic-id>` from step 3.1 when it asks.
+3. **The contact phone** (the covered contact details' "Show number"; `worker/src/contact-details.ts`). The owner gives
+   the new number at this point, privately. It never goes into a commit, a pull request, a chat or a terminal's
+   output.
+   - The format is E.164: `+1` and the 10 digits, with no spaces or dashes (as the tests' fake `+15555550123`).
+     The Worker answers 503 `SERVICE_NOT_CONFIGURED` for anything else.
+   - In an editor, add the line `CONTACT_PHONE=<the number>` to `.env.worker` (git-ignored; never printed).
+   - `npx wrangler secret put CONTACT_PHONE`, and the owner types (or pastes) the same number when it asks.
 
 *Verify:*
-- `npx wrangler secret list` shows nine names, `RESEND_EVENTS_TOPIC_ID` among them.
+- `npx wrangler secret list` shows ten names, `RESEND_EVENTS_TOPIC_ID` and `CONTACT_PHONE` among them. It lists
+  names only, never a value.
+- `git status --short` lists neither `.env.worker` nor `.env.worker.bak` (both git-ignored).
 - `TURNSTILE_SECRET_KEY` exists **only** in Cloudflare. Never put it in `.env.worker`, or a `--secrets-file` upload
   would overwrite it.
 - In Resend → Audience → Topics, "Event announcements" is listed.
 
-*Undo (if step 4 ran, only after its undo; the new Worker needs both):*
+*Undo (if step 4 ran, only after its undo; the new Worker needs them):*
 - `npx wrangler secret delete RESEND_EVENTS_TOPIC_ID`.
+- `npx wrangler secret delete CONTACT_PHONE`. The Worker of today never reads it, and the site shows the details
+  covered either way.
 - Delete the topic in Resend: Audience → Topics, or `DELETE https://api.resend.com/topics/<topic-id>` with the
   full-access key.
   - **Once step 10 has run, people have confirmed that they want Event announcements.** Deleting the topic silently
@@ -398,13 +433,15 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
 - Restore `.env.worker` from the backup made before 3.1:
   `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells). That removes the
   `RESEND_EVENTS_TOPIC_ID` line, and any webhook secret or key that 3.1 wrote. If `.env.worker` was changed on
-  purpose since the backup (e.g. a rotated key), remove the lines by hand instead: the `RESEND_EVENTS_TOPIC_ID=`
-  line, and any webhook secret or key line that 3.1 wrote.
+  purpose since the backup (e.g. a rotated key), remove the lines by hand instead: the `RESEND_EVENTS_TOPIC_ID=` and
+  `CONTACT_PHONE=` lines, and any webhook secret or key line that 3.1 wrote.
 
 #### 4. Worker deploy: RSVPs, announcements, Workers Logs
 
 *Changes:* the forms Worker `tzion-breslov-api` gains:
 - `POST /v1/rsvp` and `GET /v1/rsvp/availability`;
+- `POST /v1/contact-details`, the covered contact details' "Show" (one Turnstile check, 10 per IP in 10 minutes, no
+  request log), with the variable `PUBLIC_CONTACT_EMAIL` and the secret `CONTACT_PHONE`;
 - lists (`topics`) on `/v1/subscribe`;
 - the RSVP clean-up in its daily cron (03:17 UTC);
 - the variable `EVENTS_FEED_URL`;
@@ -412,11 +449,11 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
 
 The site's forms stay off until step 10, so no visitor reaches the new routes yet. *Owner's go-ahead.*
 
-**Before:** `npx wrangler deployments list`. Record the newest version id in the pull request: the version step 3
-made, today's code with the new secret. This is the rollback target. The deploy needs migration 0002 (step 2) and the
-secret (step 3) first. Deployed earlier, it would break the newsletter signup and the daily clean-up. Because
-`secrets.required` lists the secret in `wrangler.jsonc`, wrangler refuses to deploy while `RESEND_EVENTS_TOPIC_ID` is
-missing.
+**Before:** `npx wrangler deployments list`. Record the newest version id in the pull request: the last version step
+3 made, today's code with the new secrets. This is the rollback target. The deploy needs migration 0002 (step 2) and
+the secrets (step 3) first. Deployed earlier, it would break the newsletter signup and the daily clean-up. Because
+`secrets.required` lists the secrets in `wrangler.jsonc`, wrangler refuses to deploy while `RESEND_EVENTS_TOPIC_ID` or
+`CONTACT_PHONE` is missing.
 
 **Deploy:** `npm run worker:deploy`. The variable `EVENTS_FEED_URL` ships with it, and so do Workers Logs:
 - **Invocation logs stay off** (`"invocation_logs": false`). They would store every request's URL (confirmation
@@ -442,6 +479,14 @@ missing.
   - Before the deploy, the same request answers 404, because the old Worker has no `/v1/rsvp`. So a 204 proves the
     new code is live.
   - With `-H "Origin: https://example.com"` instead, it answers 403 `ORIGIN_NOT_ALLOWED`.
+- **Contact details preflight:**
+  `curl -si -X OPTIONS "https://api.tzionbreslov.org/v1/contact-details" -H "Origin: https://tzionbreslov.org" -H "Access-Control-Request-Method: POST" -H "Access-Control-Request-Headers: content-type"`
+  → status 204, `Access-Control-Allow-Origin: https://tzionbreslov.org`. Before the deploy it answers 404.
+- **Contact details, no token:**
+  `curl -s -X POST "https://api.tzionbreslov.org/v1/contact-details" -H "Origin: https://tzionbreslov.org" -H "Content-Type: application/json" -d "{}"`
+  → `{"ok":false,"error":"INVALID_INPUT","correlationId":"…","field":"requestId"}` (400). It answers with nothing
+  else, and uses up no rate limit: the details come only after a real Turnstile check, which needs the site on
+  tzionbreslov.org with the forms on (step 11).
 - **Availability:** `curl -s "https://api.tzionbreslov.org/v1/rsvp/availability"` →
   `{"ok":false,"error":"EVENTS_UNAVAILABLE","correlationId":"…"}` (503) **until go-live**. The Worker reads
   `https://tzionbreslov.org/events.json` without following redirects, and .org still answers it with a 302 to .com.
@@ -817,6 +862,9 @@ don't exist.
 - the Events page's RSVP buttons;
 - "Get event announcements".
 
+The covered contact details get their "Show number" / "Show email" buttons too (every footer, the Contact cards, the
+privacy notice, the speaking paragraph, the article "Parshas Toldos"), on the same two variables.
+
 **How the code decides:** it is decided at build time from two repository variables that the deploy's Build step
 passes in (`lib/client/config.ts`).
 - A form is live only when **both** `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` are set
@@ -843,7 +891,7 @@ passes in (`lib/client/config.ts`).
 - `/contact/` shows the Turnstile check under the form.
 - Step 11's test sign-ups go through.
 
-*Undo:* the forms go back to "temporarily unavailable".
+*Undo:* the forms go back to "temporarily unavailable", and the "Show" buttons go (the details stay covered).
 1. `gh variable delete NEXT_PUBLIC_API_BASE_URL`
 2. `gh variable delete NEXT_PUBLIC_TURNSTILE_SITE_KEY`
 3. `gh workflow run deploy-github-pages.yml --ref main`
@@ -881,9 +929,18 @@ passes in (`lib/client/config.ts`).
      - It counts toward a limit. It is deleted with the event's other RSVPs once the event is over. To remove it at
        once:
        `npx wrangler d1 execute tzion-breslov-production --remote --command "DELETE FROM rsvps WHERE email = lower('<test-address>');"`
-7. **Log probe again:** with real traffic flowing, repeat step 4's log-probe check (a new probe string). Any stored
+7. **Contact details:** in a private window, open `https://tzionbreslov.org/contact/` and tap "Show number" in the
+   footer.
+   - At most a "Verify you are human" box appears, then every covered detail on the page shows: the owner's new number
+     as "(+1) …" in the footer and on the phone card, each with the green WhatsApp icon, and
+     `tzionbreslovproject@gmail.com` in the footer and on the email card.
+   - Tapping the number offers to call it; the WhatsApp icon opens a chat with the same number.
+   - Open `/privacy/`: the address shows at once, with no check (kept for the tab).
+   - If the tap ends in "We couldn’t check that you’re a person" every time, look at the POST in the browser's network
+     tools: a 503 `SERVICE_NOT_CONFIGURED` means `CONTACT_PHONE` is missing or malformed (step 3.3).
+8. **Log probe again:** with real traffic flowing, repeat step 4's log-probe check (a new probe string). Any stored
    line from the test sign-ups must hold only the Worker's own fields.
-8. **`RSVP_CLEANUP_FEED_UNAVAILABLE`:** expected every day only between step 4 and go-live.
+9. **`RSVP_CLEANUP_FEED_UNAVAILABLE`:** expected every day only between step 4 and go-live.
    - From the first clean-up after step 9 (03:17 UTC), Observability shows no new line with that code.
    - If it still appears, `https://tzionbreslov.org/events.json` isn't a plain 200. Check with
      `curl -sI "https://tzionbreslov.org/events.json"`.
@@ -908,15 +965,16 @@ switch day (step 5, which also drops `https://www.youtube.com`).
    `RESEND_TRANSACTIONAL_API_KEY` (the owner's full-access key is `RESEND_CONTACTS_API_KEY`, needed for Contacts).
    Still to do by hand in Resend: set Reply-To `tzionbreslovproject@gmail.com` in broadcast settings (the domain has no
    MX by choice; the Worker already sets it on confirmation emails).
-2. ✅ **Worker deployed** (2026-11-06) at `https://api.tzionbreslov.org` with all 8 secrets and the daily cleanup cron;
+2. ✅ **Worker deployed** (2026-11-06) at `https://api.tzionbreslov.org` with the 8 secrets it had then and the daily cleanup cron;
    smoke-tested live (health, CORS allow/deny, Turnstile rejects fake tokens, confirm link redirects, unsigned webhook
    refused). Secrets persist across deploys, so later code changes need only `npm run worker:deploy`. The secrets live
    in the git-ignored `.env.worker` (owner's machine) and in Cloudflare; `TURNSTILE_SECRET_KEY` exists **only** in
    Cloudflare (copied from the widget) — never put it in `.env.worker`, or `--secrets-file` would overwrite it.
    To rotate a value: `npx wrangler secret put NAME`.
-   **Except the RSVP release (Task 8, not deployed yet):** its code needs migration 0002 and the secret
-   `RESEND_EVENTS_TOPIC_ID` *before* `npm run worker:deploy` (deployed first, it would break the newsletter signup and the
-   daily cleanup). Follow Switch day, steps 1–4.
+   **Except the RSVP release (Task 8) and the contact details (2026-11-09), not deployed yet:** their code needs
+   migration 0002 and the secrets `RESEND_EVENTS_TOPIC_ID` and `CONTACT_PHONE` *before* `npm run worker:deploy`
+   (deployed first, it would break the newsletter signup and the daily cleanup; wrangler refuses while a required
+   secret is missing). That makes 10 secrets. Follow Switch day, steps 1–4.
 3. **Turn the forms on only on switch day** (Switch day, step 10). The Worker accepts requests from
    `https://tzionbreslov.org` (+www) only and Turnstile only runs there, so setting `NEXT_PUBLIC_API_BASE_URL` +
    `NEXT_PUBLIC_TURNSTILE_SITE_KEY` while the site is still served from github.io would break the forms on the only live
