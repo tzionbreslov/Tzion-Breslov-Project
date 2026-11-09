@@ -432,9 +432,9 @@ upload can't push a deleted webhook's secret or a revoked key. It holds secrets:
     go, first save the list of its subscribers from Resend, so they can be asked again.
 - Restore `.env.worker` from the backup made before 3.1:
   `node -e "require('fs').copyFileSync('.env.worker.bak', '.env.worker')"` (both shells). That removes the
-  `RESEND_EVENTS_TOPIC_ID` line, and any webhook secret or key that 3.1 wrote. If `.env.worker` was changed on
-  purpose since the backup (e.g. a rotated key), remove the lines by hand instead: the `RESEND_EVENTS_TOPIC_ID=` and
-  `CONTACT_PHONE=` lines, and any webhook secret or key line that 3.1 wrote.
+  `RESEND_EVENTS_TOPIC_ID` and `CONTACT_PHONE` lines, and any webhook secret or key that 3.1 wrote. If
+  `.env.worker` was changed on purpose since the backup (e.g. a rotated key), remove the lines by hand instead: the
+  `RESEND_EVENTS_TOPIC_ID=` and `CONTACT_PHONE=` lines, and any webhook secret or key line that 3.1 wrote.
 
 #### 4. Worker deploy: RSVPs, announcements, Workers Logs
 

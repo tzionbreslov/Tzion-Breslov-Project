@@ -30,6 +30,11 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
     the `'` and fails as `/video`: this fails safe, and the text scan needs that cut-off for single-quoted attributes;
   - after the switch, an old-domain link outside an Events card gives two messages (the text one and the link one):
     noise only, since the deploy fails either way.
+- **The browser tests' Turnstile and forms-API stubs are copied per spec** (found 2026-11-09, PR #41 review):
+  `turnstileStub`, `cors`, `reply` and the Google map stub in `e2e/contact-details.spec.ts`; `TURNSTILE`, `cors` and
+  `reply` in `e2e/rsvp.spec.ts`; the map stub in `e2e/contact.spec.ts`. Left as they are in PR #41, which is the hidden
+  contact details only. A later change could move a configurable Turnstile stub, `cors` and `reply` (and the map stub)
+  into `e2e/helpers.ts`.
 - **Per-text-node wording check.** It compares each text node separately, so splitting or merging an existing text
   node fails loudly. Never "fix" that by regenerating the baseline (`tests/wording/checkpoint-001.json` is never
   regenerated).
@@ -57,6 +62,12 @@ Owner decisions are not here; they live in `PROJECT_MEMORY.md` → "Owner decisi
   the Turnstile script can't load (blocked, offline), the page reports an uncaught `TURNSTILE_LOAD_FAILED`. Nothing
   breaks: a submit then shows the failed message. `e2e/contact-details.spec.ts` (the script-load test) filters that one
   error. A fix would observe it where it is mounted (`mountTurnstile` or `enhance`).
+- **After a failed Turnstile load, the forms that mount once need a reload** (found 2026-11-09, PR #41 review).
+  `lib/client/turnstile.ts` no longer keeps a failed load: the next `mountTurnstile` loads Turnstile again. The
+  contact details' "Show" mounts again on its next tap, and an RSVP dialog does when it is opened again. The footer
+  sign-up and the contact form (`forms.ts`) and the announcements form (`announcements.ts`) mount once, when the page
+  loads, and keep that widget, so after a brief network drop their submit shows the failed message until the page is
+  reloaded. A fix would mount again on submit when the widget's load failed.
 
 ## Events and calendar
 
