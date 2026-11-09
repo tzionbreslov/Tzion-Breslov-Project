@@ -35,7 +35,7 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
   // A fixed date (Ruling R38), never the build date.
   const legal = page.locator(".tz-legal");
   await expect(legal).toHaveCount(1);
-  await expect(legal.locator(".tz-legal__updated")).toHaveText("Last updated November 7, 2026");
+  await expect(legal.locator(".tz-legal__updated")).toHaveText("Last updated November 9, 2026");
   await expect(legal.locator(".tz-legal__intro")).not.toBeEmpty();
   const heroBox = (await hero.boundingBox())!;
   expect((await legal.boundingBox())!.y).toBeGreaterThan(heroBox.y + heroBox.height);
@@ -59,12 +59,61 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
   await expect(keep.locator("p").filter({ hasText: /^RSVPs / })).toHaveText(
     "RSVPs are kept by the forms service until its daily clean-up after the event ends, normally within a day, then deleted. Each RSVP is also emailed to our inbox."
   );
-  // Requests go to the inbox the site already names (Contact page, form messages).
-  const email = sections.last().getByRole("link", { name: "tzionbreslovproject@gmail.com", exact: true });
-  await expect(email).toHaveAttribute("href", "mailto:tzionbreslovproject@gmail.com");
+  // Requests go to the inbox the site already names (Contact page, form messages), shown covered as everywhere else
+  // (lib/contact-details.mjs): no address or mailto link in the page; "Show email" reveals it once the forms are on.
+  const choices = sections.last();
+  await expect(choices.locator("p").last()).toHaveText("To see, correct or delete the information you have sent us, write to tzion••••••@gmail.com.");
+  await expect(choices.locator('[data-tz-contact="email"] .tz-contact__value')).toHaveText("tzion••••••@gmail.com");
+  await expect(page.locator('.tz-legal a[href^="mailto:"]')).toHaveCount(0);
+  expect(await legal.innerHTML()).not.toContain("tzionbreslovproject");
 
   // No closing sections: the notice ends the page.
   await expect(page.getByText("Live Speaking Engagements")).toHaveCount(0);
+  await expectClean(page, errors);
+});
+
+// The owner-approved edits for the covered contact details (2026-11-09: docs/superpowers/specs/2026-11-08-hidden-contact-details-design.md,
+// "Privacy notice edits" 1-5), each as the whole paragraph it is in. Every claim holds for the code as built: the
+// reveal (POST /v1/contact-details) sends the IP address to the forms service and Turnstile, keeps only the
+// short-lived hashed IP rate-limit record (no request log), and the browser keeps the details in sessionStorage.
+const CONTACT_DETAILS_EDITS = {
+  "What you send us": "Our forms service also receives your IP address with every form you send, when you open the link in a " +
+    "confirmation email and confirm your sign-up, and when you open the Events page while it lists events, because your " +
+    "browser then asks it which events are full, and when you tap “Show” next to our phone number or email address.",
+  "How we use it": "We also use it to protect the forms, and our phone number and email address, from spam and abuse. " +
+    "Cloudflare Turnstile checks that a person, not a program, is sending a form or asking to see them, and our forms " +
+    "service passes your IP address to it for that check. To limit repeated submissions and requests, the forms service " +
+    "keeps short-lived records of your IP address (and, for forms, your email address) in scrambled (salted and hashed) form.",
+  "Where it goes": "Our forms service also runs on Cloudflare: it receives what you send through the forms, keeps the records " +
+    "described below in Cloudflare’s database, and tells the Events page which events are full. Cloudflare Turnstile, which " +
+    "protects the forms and our contact details, loads on every page, because every page has the newsletter sign-up and our " +
+    "contact details in its footer. It receives your IP address and information about your browser and device, to tell " +
+    "people from programs.",
+  "How long we keep it": "Security records: a log of contact and sign-up requests (a reference number and whether it went " +
+    "through, not what you wrote) is kept for 30 days; the reports Resend sends us about email delivery and subscriptions " +
+    "(for example a bounce, a complaint or a change to your lists), which include the email address concerned and, for an " +
+    "email, its subject (for a contact message, the sender’s name, or their email address if they gave no name), for 90 " +
+    "days; the scrambled records that limit repeated submissions and requests to see our contact details until the next " +
+    "daily clean-up, at most about a day; and error records from the forms service, designed to contain no personal " +
+    "details, for up to 7 days.",
+  "Cookies and tracking": "When you tap “Show” next to our phone number or email address, your browser keeps them for that " +
+    "tab until you close it, so the next pages you open show them too."
+};
+
+test("the notice says what the contact details' \"Show\" does, in the owner-approved words", async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await page.goto("/privacy/");
+  const sections = page.locator(".tz-legal section.tz-legal__section");
+  for (const [heading, text] of Object.entries(CONTACT_DETAILS_EDITS)) {
+    const section = sections.filter({ has: page.getByRole("heading", { name: heading, exact: true }) });
+    await expect(section.locator("p").filter({ hasText: text }), heading).toHaveCount(1);
+    await expect(section.locator("p").filter({ hasText: text }), heading).toHaveText(text);
+  }
+  // The new sentence is its own paragraph, right after the one about services that store information in the browser.
+  const cookies = sections.filter({ has: page.getByRole("heading", { name: "Cookies and tracking", exact: true }) }).locator("p");
+  await expect(cookies).toHaveCount(3);
+  await expect(cookies.nth(1)).toHaveText(/^The services that load inside some of its pages/);
+  await expect(cookies.nth(2)).toHaveText(CONTACT_DETAILS_EDITS["Cookies and tracking"]);
   await expectClean(page, errors);
 });
 
