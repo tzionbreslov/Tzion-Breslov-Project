@@ -78,7 +78,7 @@ test("/privacy/ opens with its own hero (clouds-in-the-sky-1.png, \"Privacy noti
 // short-lived hashed IP rate-limit record (no request log), and the browser keeps the details in sessionStorage.
 const CONTACT_DETAILS_EDITS = {
   "What you send us": "Our forms service also receives your IP address with every form you send, when you open the link in a " +
-    "confirmation email and confirm your sign-up, and when you open the Events page while it lists events, because your " +
+    "confirmation email and confirm your sign-up, when you open the Events page while it lists events, because your " +
     "browser then asks it which events are full, and when you tap “Show” next to our phone number or email address.",
   "How we use it": "We also use it to protect the forms, and our phone number and email address, from spam and abuse. " +
     "Cloudflare Turnstile checks that a person, not a program, is sending a form or asking to see them, and our forms " +
